@@ -1,0 +1,39 @@
+# Bytecode / caches
+__pycache__/
+*.py[co]
+*.pyo
+*.pya
+*.pyd
+*.mpy
+
+# Editors / OS cruft
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Python envs
+.venv/
+venv/
+
+# Build outputs (native modules / firmware)
+build/
+dist/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.elf
+*.bin
+*.hex
+*.uf2
+*.map
+
+# Runtime logs and history on the SD layout
+sd/logs/
+sd/data/logs/
+sd/etc/history
+sd/etc/aliases
+sd/etc/color
