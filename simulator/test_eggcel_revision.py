@@ -79,6 +79,8 @@ def finish():
 def go(target):key(k.BUTTON_F7);text(target);key(k.BUTTON_CENTER)
 key(k.BUTTON_F1);assert ui.page=='file' and 'screenshot.bmp' not in shots
 key(k.BUTTON_ESCAPE)
+key(k.BUTTON_ALT_S);assert shots==['screenshot.bmp'] and ui.page=='grid' and vm.button==-1
+shots.clear()
 text('1');key(k.BUTTON_CENTER);key(k.BUTTON_DOWN);text('=A1+1');key(k.BUTTON_CENTER)
 key(k.BUTTON_F3);go('A200');assert ui.bounds==(1,0,199,0) and ui.anchor==(1,0)
 key(k.BUTTON_F2);assert ui.page=='actions';key(k.BUTTON_CENTER);finish()
@@ -165,5 +167,6 @@ ui.resume();ui.safe_draw()
 key(k.BUTTON_ESCAPE);assert ui.page=='confirm'
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
 assert vm.current_view.name=='parent' and app._active is None and vm.draw.screenshot is capture
-key(k.BUTTON_F1);assert 'screenshot.bmp' in shots
-print('PASS: remapped keys/F1 lifecycle, Range-Go/fill, async conversion, categorical charts and resource/drawing recovery')
+shots.clear();key(k.BUTTON_F1);assert not shots
+key(k.BUTTON_ALT_S);assert shots==['screenshot.bmp']
+print('PASS: remapped keys/F1 and Alt+S lifecycle, Range-Go/fill, async conversion, categorical charts and resource/drawing recovery')

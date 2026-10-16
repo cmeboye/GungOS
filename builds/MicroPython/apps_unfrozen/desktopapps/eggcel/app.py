@@ -41,43 +41,24 @@ class Spreadsheet:
         self.suspended,self._keep_on_stop=False,False
         self.job=None;self.job_kind='';self.calc_paused=False;self.progress=0
         self.text_clipboard=None;self._safe_mode=False;self.last_diagnostic=''
-        self._capture_previous=self._capture_filter=None
 
     def start(self,vm):
         global _active
         self.vm,_active=vm,self
         self.suspended,self._keep_on_stop=False,False
         vm.input_manager.reset()
-        self.install_capture_filter()
         self.safe_draw()
         return True
 
     def stop(self,vm):
         global _active
-        self.cancel_job();self.restore_capture_filter()
+        self.cancel_job()
         if self._keep_on_stop:
             self._keep_on_stop,self.suspended=False,True
             return
         self.suspended=False
         self.sheet,self.clipboard,self.vm=None,None,None
         _active=None
-
-    def install_capture_filter(self):
-        # v2.2 forwards F1 after its screenshot call. Filter only that call,
-        # only on this draw instance and while this exact view owns the screen.
-        self.restore_capture_filter()
-        draw=self.vm.draw;view=self.vm.current_view;previous=draw.screenshot
-        def capture(path):
-            if path=='screenshot.bmp' and self.vm is not None and self.vm.current_view is view and self.vm.button==k.BUTTON_F1:
-                return False
-            return previous(path)
-        self._capture_previous,self._capture_filter=previous,capture
-        draw.screenshot=capture
-
-    def restore_capture_filter(self):
-        if self._capture_filter is not None and self.vm is not None:
-            if self.vm.draw.screenshot is self._capture_filter:self.vm.draw.screenshot=self._capture_previous
-        self._capture_previous=self._capture_filter=None
 
     def cancel_job(self):
         job,self.job=self.job,None

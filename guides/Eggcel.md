@@ -31,8 +31,7 @@ and accent colours, reserving the top 18 pixels for system indicators.
 On PicoCalc, F6–F10 are Shift+F1–F5. While entering text, F4 copies the
 whole entry and F5 inserts it at the cursor. Prefilled dialogs select their
 contents for replacement: type to replace, or use arrows to edit. F9 help starts
-hidden. Eggcel suppresses the firmware F1 screenshot only while its sheet
-view owns the screen, and restores it on exit or when opening a chart.
+hidden. F1 is Eggcel's File key; the system screenshot shortcut is Alt+S.
 
 The current keyboard transport does not distinguish Shift-Tab. Ctrl-Up provides
 the previous-column action. Firmware Home/reset/power-off shortcuts bypass the

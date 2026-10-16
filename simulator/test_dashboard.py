@@ -36,8 +36,12 @@ key(k.BUTTON_RIGHT); assert home.category==1
 key(k.BUTTON_DOWN); assert home.indices[1]==1 and home.category==1
 key(k.BUTTON_LEFT); assert home.category==0
 key(k.BUTTON_RIGHT); assert home.indices[1]==1
+shots=[];native_capture=vm.draw.screenshot
+vm.draw.screenshot=lambda path:shots.append(path)
 key(k.BUTTON_F1); assert home.focus=='info'
-assert not vm.storage.exists('screenshot.bmp'), 'F1 took a screenshot instead of focusing Box 1'
+assert not shots, 'F1 took a screenshot instead of focusing Box 1'
+key(k.BUTTON_ALT_S); assert shots==['screenshot.bmp'] and home.focus=='info', 'Alt+S must capture without changing focus'
+vm.draw.screenshot=native_capture
 old_category=home.category
 for _ in range(8): key(k.BUTTON_DOWN)
 assert home.scroll==8 and home.category==old_category

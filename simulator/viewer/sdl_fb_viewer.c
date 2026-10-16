@@ -585,6 +585,8 @@ int main(int argc, char **argv)
                     code = 0xC2;
                 else if ((event.key.keysym.mod & KMOD_CTRL) && event.key.keysym.sym == SDLK_DOWN)
                     code = 0xC3;
+                else if ((event.key.keysym.mod & KMOD_ALT) && event.key.keysym.sym >= SDLK_a && event.key.keysym.sym <= SDLK_z)
+                    code = 0xE1 + (event.key.keysym.sym - SDLK_a); // PicoCalc Alt+letter
                 if (code >= 32 && code < 127 && !(event.key.keysym.mod & (KMOD_CTRL | KMOD_GUI)))
                 {
                     pending_text_scancode = scancode;

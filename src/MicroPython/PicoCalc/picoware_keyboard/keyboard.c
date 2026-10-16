@@ -80,7 +80,12 @@ void keyboard_poll()
                 // If a key is released, we return the key code
                 // This allows us to handle the key release in the main loop
                 uint8_t ch = key_code;
-                if (ch >= 'a' && ch <= 'z') // Ctrl and Shift handling
+                if (key_alt && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')))
+                {
+                    // Alt+letter is a distinct system/app shortcut code
+                    ch = KEY_ALT_A + ((ch | 0x20) - 'a');
+                }
+                else if (ch >= 'a' && ch <= 'z') // Ctrl and Shift handling
                 {
                     if (key_control)
                     {
@@ -124,6 +129,10 @@ void keyboard_poll()
             else if (key_code == KEY_MOD_SHL || key_code == KEY_MOD_SHR)
             {
                 key_shift = false;
+            }
+            else if (key_code == KEY_MOD_ALT)
+            {
+                key_alt = false;
             }
         }
     }

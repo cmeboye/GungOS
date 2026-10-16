@@ -135,6 +135,7 @@ KEY_NAMES = {
     "f9": 0x89,
     "f10": 0x90,
 }
+KEY_NAMES.update({"alt-" + chr(97 + i): 0xE1 + i for i in range(26)})
 
 LIBRARY_ITEMS = {"apps": 0, "applications": 0, "system": 1, "comms": 2, "utils": 3, "utilities": 3}
 APPLICATION_ITEMS = {"graph": 0, "graph3d": 1, "picolab": 2, "games": 3, "screensavers": 4}

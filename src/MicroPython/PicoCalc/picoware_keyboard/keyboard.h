@@ -57,6 +57,9 @@ Source: https://github.com/BlairLeduc/picocalc-text-starter
 
 #define KEY_POWER (0x91)
 
+// Alt+A..Alt+Z are reported as KEY_ALT_A..KEY_ALT_A+25 (0xE1..0xFA)
+#define KEY_ALT_A (0xE1)
+
 // Keyboard defaults
 #define KBD_BUFFER_SIZE (32)
 #define KEYBOARD_POLL_MS (50) // poll keyboard every 50 ms

@@ -88,6 +88,7 @@ audible helper for checks. See [Tetris audio](TetrisAudio.md).
 | `Ctrl+Q` | Quit |
 | `Ctrl+D` | Toggle debug HUD |
 | `Ctrl+S` | Save BMP screenshot |
+| `Alt+A..Z` | PicoCalc Alt+letter (Alt+S takes a device screenshot) |
 | `Ctrl+M` | Toggle audio mute |
 | `Ctrl+R` | Restart simulator |
 | `Ctrl+Shift+R` | Reset SD card and restart |

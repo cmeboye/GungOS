@@ -1,5 +1,7 @@
 """ViewManager - Manage views and navigation."""
 
+from picoware.system.buttons import BUTTON_ALT_S, BUTTON_HOME
+
 class ViewManager:
     """Manage multiple views and provide navigation capabilities."""
 
@@ -765,14 +767,17 @@ class ViewManager:
         """Run the current view."""
         button = self._input_manager.normalize_button(self._input_manager.button)
         self._button = button
-        if button == 80:  # BUTTON_HOME
+        if button == BUTTON_HOME:
             while self._stack_depth > 0:
                 if self._stack_depth == 1:
                     self.back(should_clear=True, should_start=True)
                 else:
                     self.back(should_clear=False, should_start=False)
-        elif button == 87 and (self._current_view is None or self._current_view.name not in ('desktop_view','desktop')):  # BUTTON_F1: home uses resource focus
+        elif button == BUTTON_ALT_S:
+            # System shortcut: capture the screen and keep the key from the view.
             self._draw.screenshot("screenshot.bmp")
+            self._input_manager.reset()
+            button = self._button = -1
 
         if self._wifi is not None:
             self._wifi.poll()

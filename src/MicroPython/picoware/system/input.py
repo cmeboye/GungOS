@@ -361,6 +361,8 @@ class Input:
                     buttons.KEY_CTRL_DOWN: buttons.BUTTON_CTRL_DOWN,
                 }
             )
+            for offset in range(26):
+                self._button_map[buttons.KEY_ALT_A + offset] = buttons.BUTTON_ALT_A + offset
 
         self._character_map = {
             buttons.BUTTON_A: "a",

@@ -34,7 +34,7 @@ for the Statistics table, summaries, regression and explicit CSV save/load.
 | F7 | Mathematical template catalogue |
 | F9 | Show/hide shortcut bars and editing explanations |
 
-F1 remains the firmware screenshot shortcut and Home remains its home shortcut.
+Alt+S is the system screenshot shortcut and Home remains its home shortcut.
 The current keyboard transport does not distinguish Shift-Tab, so Ctrl-Up is
 the previous-slot shortcut in this preview. Shift-minus enters `_` normally.
 

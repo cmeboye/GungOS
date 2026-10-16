@@ -27,9 +27,9 @@ previews them before a build. The home geometry remains unchanged in v2.2.
 Back and Del both erase before the cursor and never navigate away.
 F6–F10 require Shift+F1–F5 on the PicoCalc.
 
-Opening a full-screen app and returning preserves the menu selection. F1
-continues to take screenshots inside full-screen apps; its desktop action is
-reserved for system information.
+Opening a full-screen app and returning preserves the menu selection. Alt+S
+saves a screenshot to `screenshot.bmp` on the SD card from any screen; the key
+is not passed to the app. F1 and the other function keys belong to the app.
 
 The footer shows only `H: Help   I: Info`. The help panel describes the desktop
 controls. Info is also available through **System → About**; Up/Down scrolls

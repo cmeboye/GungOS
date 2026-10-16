@@ -731,7 +731,11 @@ class LCD:
                 raise SystemExit
             if event_type == 0x300:
                 sym = ustruct.unpack_from("i", self._event, 20)[0]
-                key = self._map_sdl_key(sym)
+                mod = ustruct.unpack_from("H", self._event, 24)[0]
+                if mod & 0x0300 and 97 <= sym <= 122:  # KMOD_ALT: PicoCalc Alt+letter
+                    key = 0xE1 + sym - 97
+                else:
+                    key = self._map_sdl_key(sym)
                 if key is not None:
                     sim_runtime.push_key(key)
 

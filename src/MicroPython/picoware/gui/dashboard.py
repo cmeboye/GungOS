@@ -130,7 +130,7 @@ class Dashboard:
             help_lines=('GungOS CONTROLS','Left/Right: choose category','Up/Down: choose menu item','Enter: open the selected item',
                         'Esc: return; root resets Apps','F1: focus system info; arrows scroll','F3: send input to the widget',
                         'Widget Esc returns to the menu','Settings > Screensaver selects widget',
-                        'I: version, features and credits',
+                        'I: version, features and credits','Alt+S: save a screenshot to SD',
                         'H or Esc closes help')
             for i,text in enumerate(help_lines): draw._text(18,124+i*11,text[:47],fg,FONT_XTRA_SMALL)
         draw.swap(); self.dirty=False

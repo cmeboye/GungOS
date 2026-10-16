@@ -54,7 +54,7 @@ headless checks use `--headless --network offline --audio silent`.
 ## Controls and documentation
 
 Escape returns/cancels. Back and Del erase before the cursor. F6–F10 use
-Shift+F1–F5 on PicoCalc. Menus and app chrome follow the system accent.
+Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot from any screen. Menus and app chrome follow the system accent.
 
 [Desktop](guides/Desktop.md) · [Eggcel](guides/Eggcel.md) ·
 [Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
