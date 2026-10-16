@@ -1,0 +1,16 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "pico_test",
+    testonly = True,
+    hdrs = [
+        "include/pico/test.h",
+        "include/pico/test/xrand.h",
+    ],
+    includes = ["include"],
+    deps = [
+        "//src:pico_platform",
+    ],
+)

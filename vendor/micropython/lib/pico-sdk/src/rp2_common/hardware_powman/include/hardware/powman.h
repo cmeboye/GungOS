@@ -1,0 +1,360 @@
+/*
+ * Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
+#ifndef _HARDWARE_POWMAN_H
+#define _HARDWARE_POWMAN_H
+
+#include "pico.h"
+#include "hardware/structs/powman.h"
+#include "pico/util/fixed_bitset.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** \file hardware/powman.h
+ *  \defgroup hardware_powman hardware_powman
+ *
+ * \brief Power Management API
+ *
+ */
+
+// PICO_CONFIG: PARAM_ASSERTIONS_ENABLED_HARDWARE_POWMAN, Enable/disable hardware_powman assertions, type=bool, default=0, group=hardware_powman
+#ifndef PARAM_ASSERTIONS_ENABLED_HARDWARE_POWMAN
+#define PARAM_ASSERTIONS_ENABLED_HARDWARE_POWMAN 0
+#endif
+
+// PICO_CONFIG: PICO_POWMAN_CALIBRATE_LPOSC_FROM_OTP, Use the OTP calibration value for the low power oscillator frequency, type=bool, default=1, group=hardware_powman
+#ifndef PICO_POWMAN_CALIBRATE_LPOSC_FROM_OTP
+#define PICO_POWMAN_CALIBRATE_LPOSC_FROM_OTP 1
+#endif
+
+/*! \brief Get the calibrated frequency of the low power oscillator
+ *  \ingroup hardware_powman
+ *
+ * The frequency returned is the value stored in the OTP, or 0 if there is no OTP value
+ * set, the OTP value is out of range, or PICO_POWMAN_CALIBRATE_LPOSC_FROM_OTP is 0
+ *
+ * \note This is a weak function, so can be overriden to provide a custom calibration
+ * method (for example using \ref frequency_count_khz)
+ *
+ * \return The LPOSC frequency, or 0 if unknown
+ */
+uint32_t powman_timer_get_lposc_calib_freq(void);
+
+/*! \brief Use the ~32KHz low power oscillator as the powman timer source
+ *  \ingroup hardware_powman
+ *
+ * \note The frequency is set to the value returned by \ref powman_timer_get_lposc_calib_freq
+ */
+void powman_timer_set_1khz_tick_source_lposc(void);
+
+/*! \brief Use the low power oscillator (specifying frequency) as the powman timer source
+ *  \ingroup hardware_powman
+ *  \param lposc_freq_hz specify an exact lposc freq to trim it, or 0 to use the existing value
+ */
+void powman_timer_set_1khz_tick_source_lposc_with_hz(uint32_t lposc_freq_hz);
+
+/*! \brief Use the crystal oscillator as the powman timer source
+ *  \ingroup hardware_powman
+ *
+ * \note The frequency is set to the value of XOSC_HZ
+ */
+void powman_timer_set_1khz_tick_source_xosc(void);
+
+/*! \brief Use the crystal oscillator (specifying frequency) as the powman timer source
+ *  \ingroup hardware_powman
+ *  \param xosc_freq_hz specify a crystal frequency
+ */
+void powman_timer_set_1khz_tick_source_xosc_with_hz(uint32_t xosc_freq_hz);
+
+/*! \brief Use a 1KHz external tick as the powman timer source
+ *  \ingroup hardware_powman
+ *  \param gpio the gpio to use. must be 12, 14, 20, 22
+ */
+void powman_timer_set_1khz_tick_source_gpio(uint32_t gpio);
+
+/*! \brief Use a 1Hz external signal as the powman timer source for seconds only
+ *  \ingroup hardware_powman
+ *
+ * Use a 1hz sync signal, such as from a gps for the seconds component of the timer.
+ * The milliseconds will still come from another configured source such as xosc or lposc
+ *
+ * \param gpio the gpio to use. must be 12, 14, 20, 22
+ */
+void powman_timer_enable_gpio_1hz_sync(uint32_t gpio);
+
+/*! \brief Stop using 1Hz external signal as the powman timer source for seconds
+ *  \ingroup hardware_powman
+ */
+void powman_timer_disable_gpio_1hz_sync(void);
+
+/*! \brief Returns current time in ms
+ *  \ingroup hardware_powman
+ */
+uint64_t powman_timer_get_ms(void);
+
+/*! \brief Set current time in ms
+ *  \ingroup hardware_powman
+ *
+ * \param time_ms Current time in ms
+ */
+void powman_timer_set_ms(uint64_t time_ms);
+
+/*! \brief Set an alarm at an absolute time in ms
+ *  \ingroup hardware_powman
+ *
+ * Note, the alarm is disabled and then re-enabled as part of this function. This only controls the alarm;
+ * if you want to use the alarm to wake up powman then you should use \ref powman_enable_alarm_wakeup_at_ms
+ *
+ * \param alarm_time_ms time at which the alarm will fire
+ */
+void powman_timer_enable_alarm_at_ms(uint64_t alarm_time_ms);
+
+/*! \brief Disable the alarm
+ *  \ingroup hardware_powman
+ *
+ * Once an alarm has fired it must be disabled to stop firing as the alarm
+ * comparison is alarm = alarm_time >= current_time
+ */
+void powman_timer_disable_alarm(void);
+
+/*! \brief hw_set_bits helper function
+ *  \ingroup hardware_powman
+ *
+ * \param reg register to set
+ * \param bits bits of register to set
+ * Powman needs a password for writes, to prevent accidentally writing to it.
+ * This function implements hw_set_bits with an appropriate password.
+ */
+static inline void powman_set_bits(volatile uint32_t *reg, uint32_t bits) {
+    invalid_params_if(HARDWARE_POWMAN, bits >> 16);
+    hw_set_bits(reg, POWMAN_PASSWORD_BITS | bits);
+}
+
+/*! \brief hw_clear_bits helper function
+ *  \ingroup hardware_powman
+ *
+ * Powman needs a password for writes, to prevent accidentally writing to it.
+ * This function implements hw_clear_bits with an appropriate password.
+ *
+ * \param reg register to clear
+ * \param bits bits of register to clear
+ */
+static inline void powman_clear_bits(volatile uint32_t *reg, uint32_t bits) {
+    invalid_params_if(HARDWARE_POWMAN, bits >> 16);
+    hw_clear_bits(reg, POWMAN_PASSWORD_BITS | bits);
+}
+
+/*! \brief Determine if the powman timer is running
+ *  \ingroup hardware_powman
+ */
+static inline bool powman_timer_is_running(void) {
+    return powman_hw->timer & POWMAN_TIMER_RUN_BITS;
+}
+
+/*! \brief Stop the powman timer
+ * \ingroup hardware_powman
+ * \note On the next start, the timer will resume from the last set time,
+ * so if you want to pause the timer and resume from the current time, you
+ * should use \ref powman_timer_pause
+ */
+static inline void powman_timer_stop(void) {
+    powman_clear_bits(&powman_hw->timer, POWMAN_TIMER_RUN_BITS);
+}
+
+/*! \brief Pause the powman timer
+ * \ingroup hardware_powman
+ */
+static inline void powman_timer_pause(void) {
+    powman_clear_bits(&powman_hw->timer, POWMAN_TIMER_RUN_BITS);
+    powman_timer_set_ms(powman_timer_get_ms());
+}
+
+/*! \brief Start the powman timer
+ * \ingroup hardware_powman
+ */
+static inline void powman_timer_start(void) {
+    powman_set_bits(&powman_hw->timer, POWMAN_TIMER_RUN_BITS);
+}
+
+/*! \brief Clears the powman alarm
+ * \ingroup hardware_powman
+ *
+ * Note, the alarm must be disabled (see \ref powman_timer_disable_alarm) before clearing the alarm, as the alarm fires if
+ * the time is greater than equal to the target, so once the time has passed the alarm will always fire while enabled.
+ */
+static inline void powman_clear_alarm(void) {
+    powman_clear_bits(&powman_hw->timer, POWMAN_TIMER_ALARM_BITS);
+}
+
+/*! \brief Power domains of powman
+ *  \ingroup hardware_powman
+ */
+enum powman_power_domains {
+    POWMAN_POWER_DOMAIN_SRAM_BANK1 = 0,    ///< bank1 includes the top 256K of sram plus sram 8 and 9 (scratch x and scratch y)
+    POWMAN_POWER_DOMAIN_SRAM_BANK0 = 1,    ///< bank0 is bottom 256K of sSRAM
+    POWMAN_POWER_DOMAIN_XIP_CACHE = 2,     ///< XIP cache is 2x8K instances
+    POWMAN_POWER_DOMAIN_SWITCHED_CORE = 3, ///< Switched core logic (processors, busfabric, peris etc)
+    POWMAN_POWER_DOMAIN_COUNT = 4,
+};
+typedef enum powman_power_domains powman_power_domain_t;
+
+typedef uint32_t powman_power_state;
+
+typedef fixed_bitset_type(POWMAN_POWER_DOMAIN_COUNT) pstate_bitset_t;
+#define pstate_bitset_none() fixed_bitset_with_fill(pstate_bitset_t, POWMAN_POWER_DOMAIN_COUNT, 0)
+#define pstate_bitset_all() fixed_bitset_with_fill(pstate_bitset_t, POWMAN_POWER_DOMAIN_COUNT, 1)
+
+static inline pstate_bitset_t *pstate_bitset_remove_all(pstate_bitset_t *domains) {
+    fixed_bitset_clear_all(&domains->bitset);
+    return domains;
+}
+
+static inline pstate_bitset_t *pstate_bitset_add_all(pstate_bitset_t *domains) {
+    fixed_bitset_set_all(&domains->bitset);
+    return domains;
+}
+
+static inline pstate_bitset_t *pstate_bitset_add(pstate_bitset_t *domains, powman_power_domain_t domain) {
+    fixed_bitset_set(&domains->bitset, domain);
+    return domains;
+}
+
+static inline pstate_bitset_t *pstate_bitset_remove(pstate_bitset_t *domains, powman_power_domain_t domain) {
+    fixed_bitset_clear(&domains->bitset, domain);
+    return domains;
+}
+
+static inline bool pstate_bitset_is_set(pstate_bitset_t *domains, powman_power_domain_t domain) {
+    return fixed_bitset_get(&domains->bitset, domain);
+}
+
+static inline bool pstate_bitset_none_set(pstate_bitset_t *domains) {
+    return fixed_bitset_is_empty(&domains->bitset);
+}
+
+static inline pstate_bitset_t *pstate_bitset_from_powman_power_state(pstate_bitset_t *domains, powman_power_state pstate) {
+    static_assert(sizeof(powman_power_state) <= sizeof(uint32_t), "");
+    fixed_bitset_write_word(&domains->bitset, 0, pstate);
+    return domains;
+}
+
+static inline powman_power_state pstate_bitset_to_powman_power_state(pstate_bitset_t *domains) {
+    return fixed_bitset_read_word(&domains->bitset, 0);
+}
+
+/*! \brief Get the current power state
+ *  \ingroup hardware_powman
+ */
+powman_power_state powman_get_power_state(void);
+
+/*! \brief Set the power state
+ * \ingroup hardware_powman
+ *
+ * Check the desired state is valid. Powman will go to the state if it is valid and there are no pending power up requests.
+ *
+ * Note that if you are turning off the switched core then you need to call __wfi() after this function returns, otherwise
+ * the transition will not take place.
+ *
+ * \param state the power state to go to
+ * \returns PICO_OK if the state is valid. Misc PICO_ERRORs are returned if not
+ */
+int powman_set_power_state(powman_power_state state);
+
+#define POWMAN_POWER_STATE_NONE 0
+
+/*! \brief Helper function modify a powman_power_state to turn a domain on
+ * \ingroup hardware_powman
+ * \param orig original state
+ * \param domain domain to turn on
+ */
+static inline powman_power_state powman_power_state_with_domain_on(powman_power_state orig, enum powman_power_domains domain) {
+    invalid_params_if(HARDWARE_POWMAN, domain >= POWMAN_POWER_DOMAIN_COUNT);
+    return orig | (1u << domain);
+}
+
+/*! \brief Helper function modify a powman_power_state to turn a domain off
+ * \ingroup hardware_powman
+ * \param orig original state
+ * \param domain domain to turn off
+ */
+static inline powman_power_state powman_power_state_with_domain_off(powman_power_state orig, enum powman_power_domains domain) {
+    invalid_params_if(HARDWARE_POWMAN, domain >= POWMAN_POWER_DOMAIN_COUNT);
+    return orig &= ~(1u << domain);
+}
+
+/*! \brief Helper function to check if a domain is on in a given powman_power_state
+ * \ingroup hardware_powman
+ * \param state powman_power_state
+ * \param domain domain to check is on
+ */
+static inline bool powman_power_state_is_domain_on(powman_power_state state, enum powman_power_domains domain) {
+    invalid_params_if(HARDWARE_POWMAN, domain >= POWMAN_POWER_DOMAIN_COUNT);
+    return state & (1u << domain);
+}
+
+/*! \brief Wake up from an alarm at a given time
+ * \ingroup hardware_powman
+ * \param alarm_time_ms time to wake up in ms
+ */
+void powman_enable_alarm_wakeup_at_ms(uint64_t alarm_time_ms);
+
+/*! \brief Wake up from a gpio
+ * \ingroup hardware_powman
+ * \param gpio_wakeup_num hardware wakeup instance to use (0-3)
+ * \param gpio gpio to wake up from (0-47)
+ * \param edge true for edge sensitive, false for level sensitive
+ * \param high true for active high, false active low
+ */
+void powman_enable_gpio_wakeup(uint gpio_wakeup_num, uint32_t gpio, bool edge, bool high);
+
+/*! \brief Disable waking up from alarm
+ *  \ingroup hardware_powman
+ */
+void powman_disable_alarm_wakeup(void);
+
+/*! \brief Disable wake up from a gpio
+ * \ingroup hardware_powman
+ * \param gpio_wakeup_num hardware wakeup instance to use (0-3)
+ */
+void powman_disable_gpio_wakeup(uint gpio_wakeup_num);
+
+/*! \brief Disable all wakeup sources
+ *  \ingroup hardware_powman
+ */
+void powman_disable_all_wakeups(void);
+
+/*! \brief Configure sleep state and wakeup state
+ * \ingroup hardware_powman
+ * \param sleep_state power state powman will go to when sleeping, used to validate the wakeup state
+ * \param wakeup_state power state powman will go to when waking up. Note switched core and xip always power up. SRAM bank0 and bank1 can be left powered off
+ * \returns true if the state is valid, false if not
+ */
+bool powman_configure_wakeup_state(powman_power_state sleep_state, powman_power_state wakeup_state);
+
+/*! \brief Ignore wake up when the debugger is attached
+ *  \ingroup hardware_powman
+ *
+ * Typically, when a debugger is attached it will assert the pwrupreq signal. OpenOCD does not clear this signal, even when you quit.
+ * This means once you have attached a debugger powman will never go to sleep. This function lets you ignore the debugger
+ * pwrupreq which means you can go to sleep with a debugger attached. The debugger will error out if you go to turn off the switch core with it attached,
+ * as the processors have been powered off.
+ *
+ * \param ignored should the debugger power up request be ignored
+ */
+static inline void powman_set_debug_power_request_ignored(bool ignored) {
+    if (ignored)
+        powman_set_bits(&powman_hw->dbg_pwrcfg, 1);
+    else
+        powman_clear_bits(&powman_hw->dbg_pwrcfg, 1);
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

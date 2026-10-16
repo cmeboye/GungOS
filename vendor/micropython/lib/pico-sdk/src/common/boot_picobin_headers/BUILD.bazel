@@ -1,0 +1,12 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "boot_picobin_headers",
+    hdrs = ["include/boot/picobin.h"],
+    includes = ["include"],
+    deps = [
+        "//src:pico_platform_internal",
+    ],
+)

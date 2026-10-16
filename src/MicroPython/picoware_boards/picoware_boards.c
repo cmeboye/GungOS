@@ -1,0 +1,577 @@
+#include "picoware_boards.h"
+#include <stdio.h>
+#include <math.h>
+
+#if defined(CARDPUTER) || defined(CROWPANEL_WATCH_2_01) || defined(WAVESHARE_2_06) || defined(WAVESHARE_C6_2_06) || defined(PANCAKE) || defined(V8) || defined(FLIPPER_ZERO) || defined(POOM)
+#include "../lcd/lcd_config.h"
+#elif defined(PICOCALC) || defined(PIMORONI_PICO_PLUS2W_RP2350) || defined(PICO_DUO)
+#include "../../lcd/lcd_config.h"
+#elif defined(WAVESHARE_1_28) || defined(WAVESHARE_1_43) || defined(WAVESHARE_1_69) || defined(WAVESHARE_3_49)
+#include "../../../lcd/lcd_config.h"
+#endif
+
+#ifdef LCD_INCLUDE
+#include LCD_INCLUDE
+#endif
+
+mp_obj_t picoware_boards_get_current_display_size(void)
+{
+    mp_obj_t tuple[2];
+#if defined LCD_MP_WIDTH && defined LCD_MP_HEIGHT
+    tuple[0] = mp_obj_new_int(LCD_MP_WIDTH);
+    tuple[1] = mp_obj_new_int(LCD_MP_HEIGHT);
+#else
+    tuple[0] = mp_obj_new_int(0);
+    tuple[1] = mp_obj_new_int(0);
+#endif
+    return mp_obj_new_tuple(2, tuple);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(picoware_boards_get_current_display_size_obj, picoware_boards_get_current_display_size);
+
+mp_obj_t picoware_boards_get_current_name(void)
+{
+#ifdef DESKTOP
+    return mp_obj_new_str("Desktop", strlen("Desktop"));
+#elif defined(WAVESHARE_1_28)
+    return mp_obj_new_str("Waveshare 1.28", strlen("Waveshare 1.28"));
+#elif defined(WAVESHARE_1_43)
+    return mp_obj_new_str("Waveshare 1.43", strlen("Waveshare 1.43"));
+#elif defined(WAVESHARE_1_69)
+    return mp_obj_new_str("Waveshare 1.69", strlen("Waveshare 1.69"));
+#elif defined(WAVESHARE_3_49)
+    return mp_obj_new_str("Waveshare 3.49", strlen("Waveshare 3.49"));
+#elif defined(CARDPUTER)
+    return mp_obj_new_str("Cardputer", strlen("Cardputer"));
+#elif defined(WAVESHARE_C6_2_06)
+    return mp_obj_new_str("Waveshare C6 2.06", strlen("Waveshare C6 2.06"));
+#elif defined(CROWPANEL_WATCH_2_01)
+    return mp_obj_new_str("CrowPanel Watch 2.01", strlen("CrowPanel Watch 2.01"));
+#elif defined(WAVESHARE_2_06)
+    return mp_obj_new_str("Waveshare 2.06", strlen("Waveshare 2.06"));
+#elif defined(PANCAKE)
+    return mp_obj_new_str("Pancake", strlen("Pancake"));
+#elif defined(V8)
+    return mp_obj_new_str("V8", strlen("V8"));
+#elif defined(POOM)
+    return mp_obj_new_str("Poom", strlen("Poom"));
+#elif defined(FLIPPER_ZERO)
+    return mp_obj_new_str("Flipper Zero", strlen("Flipper Zero"));
+#elif defined(CROWPANEL_10_1)
+    return mp_obj_new_str("CrowPanel 10.1", strlen("CrowPanel 10.1"));
+#elif defined(PIMORONI_PICO_PLUS2W_RP2350)
+    // PicoCalc - Pimoroni 2 W
+    return mp_obj_new_str("PicoCalc - Pimoroni", strlen("PicoCalc - Pimoroni"));
+#elif defined(PICO_DUO)
+    // PicoDuo
+    return mp_obj_new_str("PicoDuo", strlen("PicoDuo"));
+#elif defined(CYW43_WL_GPIO_LED_PIN)
+#ifdef PICO_RP2040
+    // PicoCalc - Pico W
+    return mp_obj_new_str("PicoCalc - Pico W", strlen("PicoCalc - Pico W"));
+#elif defined(PICO_RP2350)
+    // PicoCalc - Pico 2W
+    return mp_obj_new_str("PicoCalc - Pico 2W", strlen("PicoCalc - Pico 2W"));
+#endif
+#else
+#ifdef PICO_RP2040
+    // PicoCalc - Pico
+    return mp_obj_new_str("PicoCalc - Pico", strlen("PicoCalc - Pico"));
+#elif defined(PICO_RP2350)
+    // PicoCalc - Pico 2
+    return mp_obj_new_str("PicoCalc - Pico 2", strlen("PicoCalc - Pico 2"));
+#endif
+#endif
+
+    return mp_obj_new_str("Unknown Board", strlen("Unknown Board"));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(picoware_boards_get_current_name_obj, picoware_boards_get_current_name);
+
+mp_obj_t picoware_boards_get_device_name(void)
+{
+#ifdef DESKTOP
+    return mp_obj_new_str("Unix Desktop", strlen("Unix Desktop"));
+#elif defined(FLIPPER_ZERO)
+    return mp_obj_new_str("Flipper Zero STM32WB55RG", strlen("Flipper Zero STM32WB55RG"));
+#elif defined(CROWPANEL_10_1)
+    return mp_obj_new_str("CrowPanel 10.1 ESP32-P4", strlen("CrowPanel 10.1 ESP32-P4"));
+#elif defined(CROWPANEL_WATCH_2_01)
+    return mp_obj_new_str("ESP32-S3", strlen("ESP32-S3"));
+#elif defined(PANCAKE)
+    return mp_obj_new_str("ESP32-C5", strlen("ESP32-C5"));
+#elif defined(V8)
+    return mp_obj_new_str("ESP32-C5", strlen("ESP32-C5"));
+#elif defined(POOM)
+    return mp_obj_new_str("ESP32-C5", strlen("ESP32-C5"));
+#elif defined(WAVESHARE_C6_2_06)
+    return mp_obj_new_str("ESP32-C6", strlen("ESP32-C6"));
+#elif defined(CARDPUTER) || defined(WAVESHARE_2_06)
+    return mp_obj_new_str("ESP32-S3", strlen("ESP32-S3"));
+#elif defined(PICO_DUO)
+    return mp_obj_new_str("Raspberry Pi Pico 2W", strlen("Raspberry Pi Pico 2W"));
+#elif defined(CYW43_WL_GPIO_LED_PIN)
+#ifdef PICO_RP2040
+    return mp_obj_new_str("Raspberry Pi Pico W", strlen("Raspberry Pi Pico W"));
+#elif defined(PICO_RP2350)
+    return mp_obj_new_str("Raspberry Pi Pico 2W", strlen("Raspberry Pi Pico 2 W"));
+#endif
+#else
+#ifdef PICO_RP2040
+    return mp_obj_new_str("Raspberry Pi Pico", strlen("Raspberry Pi Pico"));
+#elif defined(PICO_RP2350)
+    return mp_obj_new_str("Raspberry Pi Pico 2", strlen("Raspberry Pi Pico 2"));
+#endif
+#endif
+
+    return mp_obj_new_str("Unknown Device", strlen("Unknown Device"));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(picoware_boards_get_device_name_obj, picoware_boards_get_device_name);
+
+mp_obj_t picoware_boards_get_name(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    char board_name[32];
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICO:
+        snprintf(board_name, sizeof(board_name), "PicoCalc - Pico");
+        break;
+    case BOARD_PICOCALC_PICOW:
+        snprintf(board_name, sizeof(board_name), "PicoCalc - Pico W");
+        break;
+    case BOARD_PICOCALC_PICO_2:
+        snprintf(board_name, sizeof(board_name), "PicoCalc - Pico 2");
+        break;
+    case BOARD_PICOCALC_PICO_2W:
+        snprintf(board_name, sizeof(board_name), "PicoCalc - Pico 2 W");
+        break;
+    case BOARD_WAVESHARE_1_28_RP2350:
+        snprintf(board_name, sizeof(board_name), "Waveshare 1.28");
+        break;
+    case BOARD_WAVESHARE_1_43_RP2350:
+        snprintf(board_name, sizeof(board_name), "Waveshare 1.43");
+        break;
+    case BOARD_WAVESHARE_1_69_RP2350:
+        snprintf(board_name, sizeof(board_name), "Waveshare 1.69");
+        break;
+    case BOARD_WAVESHARE_3_49_RP2350:
+        snprintf(board_name, sizeof(board_name), "Waveshare 3.49");
+        break;
+    case BOARD_PICOCALC_PIMORONI_2W:
+        snprintf(board_name, sizeof(board_name), "PicoCalc - Pimoroni 2 W");
+        break;
+    case BOARD_CROWPANEL_10_1:
+        snprintf(board_name, sizeof(board_name), "CrowPanel 10.1");
+        break;
+    case BOARD_CROWPANEL_WATCH_2_01:
+        snprintf(board_name, sizeof(board_name), "CrowPanel Watch 2.01");
+        break;
+    case BOARD_CARDPUTER:
+        snprintf(board_name, sizeof(board_name), "Cardputer");
+        break;
+    case BOARD_WAVESHARE_2_06:
+        snprintf(board_name, sizeof(board_name), "Waveshare S3 2.06");
+        break;
+    case BOARD_WAVESHARE_C6_2_06:
+        snprintf(board_name, sizeof(board_name), "Waveshare C6 2.06");
+        break;
+    case BOARD_PANCAKE:
+        snprintf(board_name, sizeof(board_name), "Pancake");
+        break;
+    case BOARD_V8:
+        snprintf(board_name, sizeof(board_name), "V8");
+        break;
+    case BOARD_POOM:
+        snprintf(board_name, sizeof(board_name), "Poom");
+        break;
+    case BOARD_FLIPPER_ZERO:
+        snprintf(board_name, sizeof(board_name), "Flipper Zero");
+        break;
+    case BOARD_DESKTOP:
+        snprintf(board_name, sizeof(board_name), "Desktop");
+        break;
+    case BOARD_PICO_DUO:
+        snprintf(board_name, sizeof(board_name), "PicoDuo");
+        break;
+    default:
+        snprintf(board_name, sizeof(board_name), "Unknown Board");
+        break;
+    }
+
+    return mp_obj_new_str(board_name, strlen(board_name));
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_get_name_obj, picoware_boards_get_name);
+
+mp_obj_t picoware_boards_get_display_size(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    int width = 0;
+    int height = 0;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICO:
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2:
+    case BOARD_PICOCALC_PICO_2W:
+    case BOARD_PICOCALC_PIMORONI_2W:
+        width = 320;
+        height = 320;
+        break;
+    case BOARD_WAVESHARE_1_28_RP2350:
+        width = 240;
+        height = 240;
+        break;
+    case BOARD_WAVESHARE_1_43_RP2350:
+        width = 466;
+        height = 466;
+        break;
+    case BOARD_WAVESHARE_1_69_RP2350:
+        width = 240;
+        height = 280;
+        break;
+    case BOARD_WAVESHARE_3_49_RP2350:
+        width = 172;
+        height = 640;
+        break;
+    case BOARD_CROWPANEL_10_1:
+        width = 1024;
+        height = 600;
+        break;
+    case BOARD_CROWPANEL_WATCH_2_01:
+        width = 240;
+        height = 296;
+        break;
+    case BOARD_PANCAKE:
+        width = 320;
+        height = 480;
+        break;
+    case BOARD_V8:
+    case BOARD_PICO_DUO:
+        width = 240;
+        height = 320;
+        break;
+    case BOARD_POOM:
+        width = 128;
+        height = 64;
+        break;
+    case BOARD_FLIPPER_ZERO:
+        width = 128;
+        height = 64;
+        break;
+    case BOARD_CARDPUTER:
+        width = 240;
+        height = 135;
+        break;
+    case BOARD_WAVESHARE_2_06:
+    case BOARD_WAVESHARE_C6_2_06:
+        width = 410;
+        height = 502;
+        break;
+    case BOARD_DESKTOP:
+        width = 320;
+        height = 320;
+        break;
+    default:
+        width = 0;
+        height = 0;
+        break;
+    }
+    mp_obj_t tuple[2];
+    tuple[0] = mp_obj_new_int(width);
+    tuple[1] = mp_obj_new_int(height);
+    return mp_obj_new_tuple(2, tuple);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_get_display_size_obj, picoware_boards_get_display_size);
+
+mp_obj_t picoware_boards_has_psram(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_psram = false;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICO:
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2:
+    case BOARD_PICOCALC_PICO_2W:
+    case BOARD_PICOCALC_PIMORONI_2W:
+        has_psram = true;
+        break;
+    default:
+        break;
+    }
+
+    return mp_obj_new_bool(has_psram);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_psram_obj, picoware_boards_has_psram);
+
+mp_obj_t picoware_boards_has_sd_card(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_sd_card = false;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICO:
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2:
+    case BOARD_PICOCALC_PICO_2W:
+    case BOARD_WAVESHARE_1_43_RP2350:
+    case BOARD_WAVESHARE_3_49_RP2350:
+    case BOARD_PICOCALC_PIMORONI_2W:
+    case BOARD_CARDPUTER:
+    case BOARD_WAVESHARE_2_06:
+    case BOARD_PANCAKE:
+    case BOARD_V8:
+    case BOARD_FLIPPER_ZERO:
+    case BOARD_DESKTOP:
+        has_sd_card = true;
+        break;
+    case BOARD_POOM:
+        has_sd_card = true;
+        break;
+    default:
+        has_sd_card = false;
+        break;
+    }
+
+    return mp_obj_new_bool(has_sd_card);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_sd_card_obj, picoware_boards_has_sd_card);
+
+mp_obj_t picoware_boards_has_touch(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_touch = false;
+
+    switch (board_id)
+    {
+    case BOARD_WAVESHARE_1_28_RP2350:
+    case BOARD_WAVESHARE_1_43_RP2350:
+    case BOARD_WAVESHARE_1_69_RP2350:
+    case BOARD_WAVESHARE_3_49_RP2350:
+    case BOARD_WAVESHARE_2_06:
+    case BOARD_CROWPANEL_10_1:
+    case BOARD_CROWPANEL_WATCH_2_01:
+    case BOARD_WAVESHARE_C6_2_06:
+    case BOARD_PANCAKE:
+    case BOARD_V8:
+        has_touch = true;
+        break;
+    default:
+        has_touch = false;
+        break;
+    }
+
+    return mp_obj_new_bool(has_touch);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_touch_obj, picoware_boards_has_touch);
+
+mp_obj_t picoware_boards_has_wifi(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_wifi = false;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2W:
+    case BOARD_PICOCALC_PIMORONI_2W:
+    case BOARD_CARDPUTER:
+    case BOARD_WAVESHARE_2_06:
+    case BOARD_CROWPANEL_WATCH_2_01:
+    case BOARD_WAVESHARE_C6_2_06:
+    case BOARD_PANCAKE:
+    case BOARD_V8:
+    case BOARD_FLIPPER_ZERO:
+    case BOARD_PICO_DUO:
+        has_wifi = true;
+        break;
+    case BOARD_POOM:
+        has_wifi = true;
+        break;
+    default:
+        has_wifi = false;
+        break;
+    }
+
+    return mp_obj_new_bool(has_wifi);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_wifi_obj, picoware_boards_has_wifi);
+
+mp_obj_t picoware_boards_has_audio(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_audio = false;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2W:
+    case BOARD_PICOCALC_PIMORONI_2W:
+    case BOARD_DESKTOP:
+        has_audio = true;
+        break;
+    default:
+        has_audio = false;
+        break;
+    }
+
+    return mp_obj_new_bool(has_audio);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_audio_obj, picoware_boards_has_audio);
+
+mp_obj_t picoware_boards_has_bluetooth(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_bluetooth = false;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2W:
+    case BOARD_PICOCALC_PIMORONI_2W:
+    case BOARD_CARDPUTER:
+    case BOARD_WAVESHARE_2_06:
+    case BOARD_CROWPANEL_WATCH_2_01:
+    case BOARD_WAVESHARE_C6_2_06:
+    case BOARD_PANCAKE:
+    case BOARD_V8:
+    case BOARD_FLIPPER_ZERO:
+    case BOARD_PICO_DUO:
+        has_bluetooth = true;
+        break;
+    case BOARD_POOM:
+        has_bluetooth = true;
+        break;
+    default:
+        has_bluetooth = false;
+        break;
+    }
+
+    return mp_obj_new_bool(has_bluetooth);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_bluetooth_obj, picoware_boards_has_bluetooth);
+
+mp_obj_t picoware_boards_has_ir(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_ir = board_id == BOARD_CARDPUTER || board_id == BOARD_FLIPPER_ZERO || board_id == BOARD_POOM;
+    return mp_obj_new_bool(has_ir);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_ir_obj, picoware_boards_has_ir);
+
+mp_obj_t picoware_boards_has_ir_rx(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    return mp_obj_new_bool(board_id == BOARD_FLIPPER_ZERO || board_id == BOARD_POOM);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_ir_rx_obj, picoware_boards_has_ir_rx);
+
+mp_obj_t picoware_boards_has_keyboard(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool has_keyboard = false;
+
+    switch (board_id)
+    {
+    case BOARD_PICOCALC_PICO:
+    case BOARD_PICOCALC_PICOW:
+    case BOARD_PICOCALC_PICO_2:
+    case BOARD_PICOCALC_PIMORONI_2W:
+    case BOARD_CARDPUTER:
+        has_keyboard = true;
+        break;
+    default:
+        has_keyboard = false;
+        break;
+    }
+
+    return mp_obj_new_bool(has_keyboard);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_has_keyboard_obj, picoware_boards_has_keyboard);
+
+mp_obj_t picoware_boards_is_circular(mp_obj_t board_id_obj)
+{
+    int board_id = mp_obj_get_int(board_id_obj);
+    bool is_circular = false;
+
+    switch (board_id)
+    {
+    case BOARD_WAVESHARE_1_28_RP2350:
+    case BOARD_WAVESHARE_1_43_RP2350:
+    case BOARD_WAVESHARE_2_06:
+    case BOARD_WAVESHARE_C6_2_06:
+    case BOARD_CROWPANEL_WATCH_2_01:
+        is_circular = true;
+        break;
+    default:
+        is_circular = false;
+        break;
+    }
+
+    return mp_obj_new_bool(is_circular);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(picoware_boards_is_circular_obj, picoware_boards_is_circular);
+
+// Define module globals
+static const mp_rom_map_elem_t picoware_boards_module_globals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_get_current_display_size), MP_ROM_PTR(&picoware_boards_get_current_display_size_obj)},
+    {MP_ROM_QSTR(MP_QSTR_get_current_name), MP_ROM_PTR(&picoware_boards_get_current_name_obj)},
+    {MP_ROM_QSTR(MP_QSTR_get_device_name), MP_ROM_PTR(&picoware_boards_get_device_name_obj)},
+    {MP_ROM_QSTR(MP_QSTR_get_name), MP_ROM_PTR(&picoware_boards_get_name_obj)},
+    {MP_ROM_QSTR(MP_QSTR_get_display_size), MP_ROM_PTR(&picoware_boards_get_display_size_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_psram), MP_ROM_PTR(&picoware_boards_has_psram_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_sd_card), MP_ROM_PTR(&picoware_boards_has_sd_card_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_touch), MP_ROM_PTR(&picoware_boards_has_touch_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_wifi), MP_ROM_PTR(&picoware_boards_has_wifi_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_audio), MP_ROM_PTR(&picoware_boards_has_audio_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_bluetooth), MP_ROM_PTR(&picoware_boards_has_bluetooth_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_ir), MP_ROM_PTR(&picoware_boards_has_ir_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_ir_rx), MP_ROM_PTR(&picoware_boards_has_ir_rx_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_keyboard), MP_ROM_PTR(&picoware_boards_has_keyboard_obj)},
+    {MP_ROM_QSTR(MP_QSTR_is_circular), MP_ROM_PTR(&picoware_boards_is_circular_obj)},
+    //
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PICOCALC_PICO), MP_ROM_INT(BOARD_PICOCALC_PICO)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PICOCALC_PICOW), MP_ROM_INT(BOARD_PICOCALC_PICOW)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PICOCALC_PICO_2), MP_ROM_INT(BOARD_PICOCALC_PICO_2)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PICOCALC_PICO_2W), MP_ROM_INT(BOARD_PICOCALC_PICO_2W)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_WAVESHARE_1_28_RP2350), MP_ROM_INT(BOARD_WAVESHARE_1_28_RP2350)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_WAVESHARE_1_43_RP2350), MP_ROM_INT(BOARD_WAVESHARE_1_43_RP2350)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_WAVESHARE_3_49_RP2350), MP_ROM_INT(BOARD_WAVESHARE_3_49_RP2350)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PICOCALC_PIMORONI_2W), MP_ROM_INT(BOARD_PICOCALC_PIMORONI_2W)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_CROWPANEL_10_1), MP_ROM_INT(BOARD_CROWPANEL_10_1)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_CROWPANEL_WATCH_2_01), MP_ROM_INT(BOARD_CROWPANEL_WATCH_2_01)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_CARDPUTER), MP_ROM_INT(BOARD_CARDPUTER)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_WAVESHARE_2_06), MP_ROM_INT(BOARD_WAVESHARE_2_06)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_WAVESHARE_C6_2_06), MP_ROM_INT(BOARD_WAVESHARE_C6_2_06)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PANCAKE), MP_ROM_INT(BOARD_PANCAKE)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_V8), MP_ROM_INT(BOARD_V8)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_FLIPPER_ZERO), MP_ROM_INT(BOARD_FLIPPER_ZERO)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_WAVESHARE_1_69_RP2350), MP_ROM_INT(BOARD_WAVESHARE_1_69_RP2350)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_DESKTOP), MP_ROM_INT(BOARD_DESKTOP)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_PICO_DUO), MP_ROM_INT(BOARD_PICO_DUO)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_POOM), MP_ROM_INT(BOARD_POOM)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_PSRAM), MP_ROM_INT(BOARD_HAS_PSRAM)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_SD), MP_ROM_INT(BOARD_HAS_SD)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_TOUCH), MP_ROM_INT(BOARD_HAS_TOUCH)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_ID), MP_ROM_INT(BOARD_ID)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_WIFI), MP_ROM_INT(BOARD_HAS_WIFI)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_AUDIO), MP_ROM_INT(BOARD_HAS_AUDIO)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_BLUETOOTH), MP_ROM_INT(BOARD_HAS_BLUETOOTH)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_IR), MP_ROM_INT(BOARD_HAS_IR)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_IR_RX), MP_ROM_INT(BOARD_HAS_IR_RX)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_KEYBOARD), MP_ROM_INT(BOARD_HAS_KEYBOARD)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_RP2040), MP_ROM_INT(BOARD_HAS_RP2040)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_RP2350), MP_ROM_INT(BOARD_HAS_RP2350)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_ESP32), MP_ROM_INT(BOARD_HAS_ESP32)},
+    {MP_ROM_QSTR(MP_QSTR_BOARD_HAS_PICOCALC), MP_ROM_INT(BOARD_HAS_PICOCALC)},
+};
+static MP_DEFINE_CONST_DICT(picoware_boards_module_globals, picoware_boards_module_globals_table);
+
+const mp_obj_module_t picoware_boards_user_cmodule = {
+    .base = {&mp_type_module},
+    .globals = (mp_obj_dict_t *)&picoware_boards_module_globals,
+};
+MP_REGISTER_MODULE(MP_QSTR_picoware_boards, picoware_boards_user_cmodule);

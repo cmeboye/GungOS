@@ -1,0 +1,16 @@
+* text=auto
+*.py text eol=lf
+*.sh text eol=lf
+*.command text eol=lf
+*.md text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.cmake text eol=lf
+*.png binary
+*.bmp binary
+*.wav binary
+*.uf2 binary
+*.mpy binary
+
+# Pinned upstream sources are stored byte-for-byte
+vendor/** -text

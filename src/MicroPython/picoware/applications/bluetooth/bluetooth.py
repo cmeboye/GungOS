@@ -1,0 +1,181 @@
+"""Bluetooth Apps Menu - Central hub for all Bluetooth applications"""
+
+_bluetooth = None
+_bluetooth_index = 0
+
+
+def start(view_manager) -> bool:
+    """Start the app and build the Bluetooth menu.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+
+    Returns:
+        bool: True if the app started, False if Bluetooth is unavailable.
+    """
+    if not view_manager.has_bluetooth:
+        view_manager.alert("Bluetooth not available....")
+        return False
+
+    from picoware.gui.menu import Menu
+
+    # create bluetooth folder
+    view_manager.storage.mkdir("picoware/bluetooth")
+
+    global _bluetooth
+
+    if _bluetooth is None:
+        _bluetooth = Menu(
+            view_manager.draw,
+            "Bluetooth",
+            0,
+            view_manager.draw.size.y,
+            view_manager.foreground_color,
+            view_manager.background_color,
+            view_manager.selected_color,
+            view_manager.foreground_color,
+            2,
+        )
+        _bluetooth.add_item("Scan Devices")
+        _bluetooth.add_item("Advertise")
+        _bluetooth.add_item("Pair Device")
+        _bluetooth.add_item("UART Chat")
+        _bluetooth.add_item("Beacon")
+        _bluetooth.add_item("RSSI Monitor")
+        _bluetooth.set_selected(_bluetooth_index)
+
+        _bluetooth.draw()
+    return True
+
+
+def run(view_manager) -> None:
+    """Run the app and handle menu navigation.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+    """
+    from picoware.system.view import View
+    from picoware.system.buttons import (
+        BUTTON_ESCAPE,
+        BUTTON_UP,
+        BUTTON_DOWN,
+        BUTTON_LEFT,
+        BUTTON_CENTER,
+        BUTTON_RIGHT,
+    )
+
+    if not _bluetooth:
+        return
+
+    global _bluetooth_index
+
+    button: int = view_manager.button
+
+    if button in (BUTTON_UP, BUTTON_LEFT):
+        _bluetooth.scroll_up()
+    elif button in (BUTTON_DOWN, BUTTON_RIGHT):
+        _bluetooth.scroll_down()
+    elif button == BUTTON_ESCAPE:
+        _bluetooth_index = 0
+        view_manager.back()
+    elif button == BUTTON_CENTER:
+        _bluetooth_index = _bluetooth.selected_index
+
+        if _bluetooth_index == 0:
+            # Scan Devices
+            from picoware.applications.bluetooth import scan
+
+            view_manager.add(
+                View(
+                    "bluetooth_scan",
+                    scan.run,
+                    scan.start,
+                    scan.stop,
+                )
+            )
+            view_manager.switch_to("bluetooth_scan")
+
+        elif _bluetooth_index == 1:
+            # Advertise
+            from picoware.applications.bluetooth import advertise
+
+            view_manager.add(
+                View(
+                    "bluetooth_advertise",
+                    advertise.run,
+                    advertise.start,
+                    advertise.stop,
+                )
+            )
+            view_manager.switch_to("bluetooth_advertise")
+
+        elif _bluetooth_index == 2:
+            # Pair Device
+            from picoware.applications.bluetooth import pair
+
+            view_manager.add(
+                View(
+                    "bluetooth_pair",
+                    pair.run,
+                    pair.start,
+                    pair.stop,
+                )
+            )
+            view_manager.switch_to("bluetooth_pair")
+
+        elif _bluetooth_index == 3:
+            # UART Chat
+            from picoware.applications.bluetooth import uart_chat
+
+            view_manager.add(
+                View(
+                    "bluetooth_uart_chat",
+                    uart_chat.run,
+                    uart_chat.start,
+                    uart_chat.stop,
+                )
+            )
+            view_manager.switch_to("bluetooth_uart_chat")
+
+        elif _bluetooth_index == 4:
+            # Beacon
+            from picoware.applications.bluetooth import beacon
+
+            view_manager.add(
+                View(
+                    "bluetooth_beacon",
+                    beacon.run,
+                    beacon.start,
+                    beacon.stop,
+                )
+            )
+            view_manager.switch_to("bluetooth_beacon")
+
+        elif _bluetooth_index == 5:
+            # RSSI Monitor
+            from picoware.applications.bluetooth import rssi_monitor
+
+            view_manager.add(
+                View(
+                    "bluetooth_rssi_monitor",
+                    rssi_monitor.run,
+                    rssi_monitor.start,
+                    rssi_monitor.stop,
+                )
+            )
+            view_manager.switch_to("bluetooth_rssi_monitor")
+
+
+def stop(view_manager) -> None:
+    """Stop the app and clean up the menu.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+    """
+    from gc import collect
+
+    global _bluetooth
+    if _bluetooth is not None:
+        del _bluetooth
+        _bluetooth = None
+    collect()

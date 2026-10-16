@@ -1,0 +1,134 @@
+"""WiFi Apps Menu - Central hub for WiFi applications"""
+
+_wifi = None
+_wifi_index = 0
+
+
+def start(view_manager) -> bool:
+    """Start the app and build the WiFi menu.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+
+    Returns:
+        bool: True if the app started, False if WiFi is unavailable.
+    """
+
+    if not view_manager.has_wifi:
+        view_manager.alert("WiFi not available....")
+        return False
+
+    from picoware.gui.menu import Menu
+
+    # create wifi folder
+    view_manager.storage.mkdir("picoware/wifi")
+
+    global _wifi
+
+    if _wifi is None:
+        _wifi = Menu(
+            view_manager.draw,
+            "WiFi",
+            0,
+            view_manager.draw.size.y,
+            view_manager.foreground_color,
+            view_manager.background_color,
+            view_manager.selected_color,
+            view_manager.foreground_color,
+            2,
+        )
+        _wifi.add_item("Connect")
+        _wifi.add_item("RSSI Monitor")
+        _wifi.add_item("Scan")
+        _wifi.add_item("Server")
+        _wifi.add_item("Settings")
+        _wifi.set_selected(_wifi_index)
+
+        _wifi.draw()
+    return True
+
+
+def run(view_manager) -> None:
+    """Run the app and handle menu navigation.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+    """
+    from picoware.system.view import View
+    from picoware.system.buttons import (
+        BUTTON_ESCAPE,
+        BUTTON_UP,
+        BUTTON_DOWN,
+        BUTTON_LEFT,
+        BUTTON_CENTER,
+        BUTTON_RIGHT,
+    )
+
+    if not _wifi:
+        return
+
+    global _wifi_index
+
+    button: int = view_manager.button
+
+    if button in (BUTTON_UP, BUTTON_LEFT):
+        _wifi.scroll_up()
+    elif button in (BUTTON_DOWN, BUTTON_RIGHT):
+        _wifi.scroll_down()
+    elif button == BUTTON_ESCAPE:
+        _wifi_index = 0
+        view_manager.back()
+    elif button == BUTTON_CENTER:
+        _wifi_index = _wifi.selected_index
+
+        if _wifi_index == 0:
+            from picoware.applications.wifi import connect
+
+            view_manager.add(
+                View("wifi_connect", connect.run, connect.start, connect.stop)
+            )
+            view_manager.switch_to("wifi_connect")
+        elif _wifi_index == 1:
+            from picoware.applications.wifi import rssi_monitor
+
+            view_manager.add(
+                View(
+                    "wifi_rssi_monitor",
+                    rssi_monitor.run,
+                    rssi_monitor.start,
+                    rssi_monitor.stop,
+                )
+            )
+            view_manager.switch_to("wifi_rssi_monitor")
+        elif _wifi_index == 2:
+            from picoware.applications.wifi import scan
+
+            view_manager.add(View("wifi_scan", scan.run, scan.start, scan.stop))
+            view_manager.switch_to("wifi_scan")
+        elif _wifi_index == 3:
+            from picoware.applications.wifi import server
+
+            view_manager.add(View("wifi_server", server.run, server.start, server.stop))
+            view_manager.switch_to("wifi_server")
+        elif _wifi_index == 4:
+            from picoware.applications.wifi import settings
+
+            view_manager.add(
+                View("wifi_settings", settings.run, settings.start, settings.stop)
+            )
+            view_manager.switch_to("wifi_settings")
+
+
+def stop(view_manager) -> None:
+    """Stop the app and clean up.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+    """
+    from gc import collect
+
+    global _wifi
+    if _wifi is not None:
+        del _wifi
+        _wifi = None
+    collect()

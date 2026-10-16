@@ -1,0 +1,61 @@
+/*
+Author: JBlanked
+License: GPL-3.0 License
+Source: https://github.com/jblanked/Picoware
+*/
+
+#pragma once
+#include "py/runtime.h"
+#include "py/obj.h"
+#include "py/objarray.h"
+#include "py/mphal.h"
+#include "lcd_config.h"
+
+typedef struct
+{
+    mp_obj_base_t base;
+    bool initialized;
+    uint16_t width;
+    uint16_t height;
+    float scale_x;
+    float scale_y;
+    bool scale_set;
+    bool scale_position;
+} lcd_mp_obj_t;
+
+void lcd_mp_set_usb_video_callback(bool (*cb)(void)); // Register USB video stream callback, NULL to disable
+
+void lcd_mp_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind);                    // print function for the LCD object
+mp_obj_t lcd_mp_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args); // constructor for the LCD object
+mp_obj_t lcd_mp_del(mp_obj_t self_in);                                                                 // destructor for the LCD object
+void lcd_mp_attr(mp_obj_t self_in, qstr attribute, mp_obj_t *destination);                             // attribute handler for the LCD object (e.g., to access properties like width and height
+
+mp_obj_t lcd_mp_bmp(size_t n_args, const mp_obj_t *args);                  // draw a bitmap on the LCD
+mp_obj_t lcd_mp_char(size_t n_args, const mp_obj_t *args);                 // draw a character on the LCD
+mp_obj_t lcd_mp_circle(size_t n_args, const mp_obj_t *args);               // draw a circle on the LCD
+mp_obj_t lcd_mp_clear(mp_obj_t self_in, mp_obj_t color);                   // clear the LCD framebuffer
+mp_obj_t lcd_mp_fill_circle(size_t n_args, const mp_obj_t *args);          // fill a circle on the LCD
+mp_obj_t lcd_mp_fill_polygon(size_t n_args, const mp_obj_t *args);         // fill a polygon on the LCD
+mp_obj_t lcd_mp_fill_polygon_alpha(size_t n_args, const mp_obj_t *args);   // fill a polygon with alpha blending
+mp_obj_t lcd_mp_fill_rectangle(size_t n_args, const mp_obj_t *args);       // fill a rectangle on the LCD
+mp_obj_t lcd_mp_fill_round_rectangle(size_t n_args, const mp_obj_t *args); // fill a rounded rectangle on the LCD
+mp_obj_t lcd_mp_fill_triangle(size_t n_args, const mp_obj_t *args);        // fill a triangle
+mp_obj_t lcd_mp_fill_triangle_alpha(size_t n_args, const mp_obj_t *args);  // fill a triangle with alpha blending
+mp_obj_t lcd_mp_image_bytearray(size_t n_args, const mp_obj_t *args);      // draw an image from a bytearray on the LCD
+mp_obj_t lcd_mp_line(size_t n_args, const mp_obj_t *args);                 // draw a line on the LCD
+mp_obj_t lcd_mp_pixel(size_t n_args, const mp_obj_t *args);                // draw a pixel on the LCD
+mp_obj_t lcd_mp_polygon(size_t n_args, const mp_obj_t *args);              // draw a polygon on the LCD
+mp_obj_t lcd_mp_psram(size_t n_args, const mp_obj_t *args);                // draw a buffer from PSRAM
+mp_obj_t lcd_mp_rectangle(size_t n_args, const mp_obj_t *args);            // draw a rectangle on the LCD
+mp_obj_t lcd_mp_scale(size_t n_args, const mp_obj_t *args);                // get a scaled value based on parameters
+mp_obj_t lcd_mp_scale_vector(size_t n_args, const mp_obj_t *args);         // get a scaled Vector value based on parameters
+mp_obj_t lcd_mp_scale_x(size_t n_args, const mp_obj_t *args);              // get a scaled X value based on parameters
+mp_obj_t lcd_mp_scale_y(size_t n_args, const mp_obj_t *args);              // get a scaled Y value based on parameters
+mp_obj_t lcd_mp_screenshot(mp_obj_t self_in, mp_obj_t file_path);          // take a screenshot of the LCD and save it to a file
+mp_obj_t lcd_mp_set_brightness(mp_obj_t self_in, mp_obj_t brightness);     // set the LCD backlight brightness
+mp_obj_t lcd_mp_set_rgb_led(size_t n_args, const mp_obj_t *args);          // set the RGB LED color (Flipper Zero, LP5562)
+mp_obj_t lcd_mp_set_mode(mp_obj_t self_in, mp_obj_t mode);                 // set the LCD mode (PSRAM or HEAP)
+mp_obj_t lcd_mp_set_scaling(size_t n_args, const mp_obj_t *args);          // set the LCD scaling parameters
+mp_obj_t lcd_mp_swap(mp_obj_t self_in);                                    // swap function to update the display with the current framebuffer contents
+mp_obj_t lcd_mp_text(size_t n_args, const mp_obj_t *args);                 // draw text on the LCD
+mp_obj_t lcd_mp_triangle(size_t n_args, const mp_obj_t *args);             // draw a triangle on the LCD

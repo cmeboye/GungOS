@@ -1,0 +1,1702 @@
+"""HTTP - HTTP client for Picoware."""
+
+from micropython import const
+from json import dumps
+
+try:
+    from utime import sleep_ms, ticks_ms, ticks_diff
+    import usocket
+    import tls
+except ImportError:
+    from time import sleep, time
+    import socket as usocket
+
+    def sleep_ms(ms):
+        """Sleep for a given number of milliseconds.
+
+        Args:
+            ms (int or float): Milliseconds to sleep.
+        """
+        sleep(ms / 1000)
+
+    def ticks_ms():
+        """Return the current time in milliseconds."""
+        return int(time() * 1000)
+
+    def ticks_diff(a, b):
+        """Return the difference between two tick values.
+
+        Args:
+            a (int): First tick value.
+            b (int): Second tick value.
+
+        Returns:
+            int: The difference in milliseconds.
+        """
+        return a - b
+
+
+from picoware.system.response import Response
+
+HTTP_IDLE = const(0)
+HTTP_LOADING = const(1)
+HTTP_ISSUE = const(2)
+
+
+class HTTP:
+    """HTTP class for making HTTP requests."""
+
+    __slots__ = [
+        "_is_flipper",
+        "_http_uart",
+        "_async_request_complete",
+        "_async_request_in_progress",
+        "_async_thread_id",
+        "_state",
+        "_async_error",
+        "_async_callback",
+        "_async_result",
+        "_lock",
+        "_running",
+        "_chunk_size",
+        "_thread_manager",
+        "_current_task",
+        "_content_length",
+        "_download_speed",
+        "_downloaded_bytes",
+        "_download_start_ticks",
+    ]
+
+    def __init__(self, chunk_size: int = (1024 * 4), thread_manager=None, view_manager=None) -> None:
+        """Initialize the HTTP class.
+
+        Args:
+            chunk_size (int): Transfer chunk size in bytes. Defaults to 4096.
+            thread_manager (ThreadManager): Manager for threaded requests. Defaults to None.
+            view_manager (ViewManager): The ViewManager instance. Defaults to None.
+        """
+        from picoware.system.boards import BOARD_ID, BOARD_FLIPPER_ZERO
+        self._is_flipper = (BOARD_ID == BOARD_FLIPPER_ZERO)
+        self._http_uart = None
+        self._lock = None
+        if not self._is_flipper:
+            try:
+                from _thread import allocate_lock
+                self._lock = allocate_lock()
+            except ImportError:
+                pass
+        else:
+            try:
+                self._http_uart = HTTPUART() if view_manager is None else HTTPUART(view_manager.uart)
+            except Exception as e:
+                self._http_uart = None
+                view_manager.log(f"Error initializing HTTPUART: {e}")
+        
+
+        self._async_request_complete = False
+        self._async_request_in_progress = False
+        self._async_thread_id = None
+        self._state = HTTP_IDLE
+        self._async_error = None
+        self._async_callback: callable = None
+        self._async_result: Response = None
+        self._running = False
+        self._chunk_size = chunk_size
+        self._thread_manager = None
+        if view_manager is not None:
+            self._thread_manager = view_manager.thread_manager
+        elif thread_manager is not None:
+            self._thread_manager = thread_manager
+        self._current_task = None
+        self._content_length = 0
+        self._download_speed = 0
+        self._downloaded_bytes = 0
+        self._download_start_ticks = 0
+
+    def __del__(self):
+        """Destructor to clean up resources."""
+        self.close()
+        self._lock = None
+
+    @property
+    def callback(self) -> callable:
+        """Get the async callback function."""
+        if self._lock is None:
+            return None
+        
+        with self._lock:
+            return self._async_callback
+
+    @callback.setter
+    def callback(self, value: callable):
+        """Set the async callback function.
+
+        The callback receives (response, state, error):
+        - response: The Response object or None if there was an error
+        - state: The current HTTP state (HTTP_IDLE, HTTP_LOADING, HTTP_ISSUE)
+        - error: The error message if any, otherwise None
+
+        Args:
+            value (callable): The callback function to set.
+        """
+        if self._lock is None:
+            return
+        with self._lock:
+            self._async_callback = value
+    
+    @property
+    def content_length(self) -> int:
+        """Get the content length of the current request."""
+        if self._lock is None:
+            return 0
+        with self._lock:
+            return self._content_length
+    
+    @property
+    def downloaded_bytes(self) -> int:
+        """Get the number of bytes downloaded so far."""
+        if self._lock is None:
+            return 0
+        with self._lock:
+            return self._downloaded_bytes
+
+    @property
+    def download_speed(self) -> int:
+        """Get the download speed of the current request."""
+        if self._lock is None:
+            return 0
+        with self._lock:
+            return self._download_speed
+
+    @property
+    def error(self):
+        """Get the async error message, if any."""
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.error
+            return ""
+        if self._lock is None:
+            return ""
+        with self._lock:
+            return self._async_error if self._async_error else ""
+
+    @property
+    def in_progress(self) -> bool:
+        """Check if the async request is in progress."""
+        if self._lock is None:
+            return False
+        with self._lock:
+            return self._async_request_in_progress
+
+    @property
+    def is_finished(self) -> bool:
+        """Check if the async request is finished."""
+        if self._is_flipper:
+            return True # synch
+        if self._lock is None:
+            return False
+        with self._lock:
+            return self._async_request_complete
+
+    @property
+    def is_successful(self) -> bool:
+        """Check if the async request was successful."""
+        if self._is_flipper:
+            return True # synch
+        if self._lock is None:
+            return False
+        with self._lock:
+            return self._async_request_complete and self._async_error is None
+
+    @property
+    def response(self):
+        """Get the async Response object."""
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.response
+            return None
+        if self._lock is None:
+            return None
+        with self._lock:
+            return self._async_result
+
+    @property
+    def state(self) -> int:
+        """Get the current HTTP state."""
+        if self._lock is None:
+            return HTTP_IDLE
+        with self._lock:
+            return self._state
+    
+    def _is_instance(self, obj) -> bool:
+        """Check if the object is an instance of str or bytes.
+
+        Args:
+            obj (object): The object to check.
+
+        Returns:
+            bool: True if the object is a str or bytes instance.
+        """
+        if obj is None:
+            return False
+        return isinstance(obj, (str, bytes))
+
+    def _should_continue(self) -> bool:
+        """Check if the request should continue running."""
+        if self._lock is None:
+            return False
+        with self._lock:
+            if self._thread_manager is not None and self._current_task is not None:
+                return self._running and not self._current_task.should_stop
+            return self._running
+
+    def _update_speed(self, bytes_downloaded: int) -> None:
+        """Update the download speed based on bytes downloaded and elapsed time.
+
+        Args:
+            bytes_downloaded (int): Number of bytes downloaded since the last update.
+        """
+        if self._lock is None:
+            return
+        with self._lock:
+            self._downloaded_bytes += bytes_downloaded
+            elapsed_time = ticks_diff(ticks_ms(), self._download_start_ticks)
+            if elapsed_time > 0:
+                self._download_speed = int(self._downloaded_bytes / (elapsed_time / 1000))
+
+    def close(self):
+        """Close the async thread, clear the async response, reset state."""
+        if self._is_flipper:
+            if self._http_uart is not None:
+                self._http_uart.close()
+            return
+        if self._current_task:
+            self._current_task.stop()
+            self._current_task = None
+
+        if self._lock is None:
+            return
+        
+        with self._lock:
+            self._running = False
+            if self._async_result is not None:
+                try:
+                    self._async_result.close()
+                except Exception:
+                    pass
+                finally:
+                    del self._async_result
+                    self._async_result = None
+            self._async_request_complete = False
+            self._async_request_in_progress = False
+            self._async_error = None
+            self._state = HTTP_IDLE
+            self._content_length = 0
+            self._download_speed = 0
+            self._downloaded_bytes = 0
+            self._download_start_ticks = 0
+
+    def delete(
+        self, url, headers=None, timeout: float = 10.0, save_to_file=None, storage=None
+    ) -> Response:
+        """Send a DELETE request and return a Response object.
+
+        Args:
+            url (str): URL to request.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request("DELETE", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
+            return None
+        return self.request(
+            "DELETE", url, headers=headers,timeout=timeout, save_to_file=save_to_file, storage=storage
+        )
+
+    def delete_async(
+        self, url, headers=None, timeout: float = 10.0, save_to_file=None, storage=None
+    ) -> bool:
+        """Send an async DELETE request.
+
+        Args:
+            url (str): URL to request.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async("DELETE", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
+            return False
+        return self.request_async(
+            "DELETE",
+            url,
+            headers=headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+        )
+
+    def get(
+        self, url, headers=None, timeout: float = 10.0, save_to_file=None, storage=None
+    ) -> Response:
+        """Send a GET request and return a Response object.
+
+        Args:
+            url (str): URL to request.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request("GET", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
+            return None
+        return self.request(
+            "GET", url=url, headers=headers,timeout=timeout, save_to_file=save_to_file, storage=storage
+        )
+
+    def get_async(
+        self, url, headers=None, timeout: float = 10.0, save_to_file=None, storage=None
+    ) -> bool:
+        """Send an async GET request.
+
+        Args:
+            url (str): URL to request.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async("GET", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
+            return False
+        return self.request_async(
+            "GET",
+            url,
+            headers=headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+        )
+
+    def head(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Send a HEAD request and return a Response object.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if payload is None:
+            raise ValueError("HEAD request requires a payload.")
+
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request("HEAD", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return None
+
+        is_instance = self._is_instance(payload)
+        return self.request(
+            "HEAD",
+            url,
+            payload if is_instance else None,
+            dumps(payload) if not is_instance else None,
+            headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+
+    def head_async(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> bool:
+        """Send an async HEAD request.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async("HEAD", url, payload=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return False
+        return self.request_async(
+            "HEAD",
+            url,
+            payload=payload,
+            headers=headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+
+    def is_request_complete(self) -> bool:
+        """Check if the async request is complete."""
+        if self._is_flipper:
+            return True
+        if self._lock is None:
+            return True
+        with self._lock:
+            return self._async_request_complete
+
+    def patch(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Send a PATCH request and return a Response object.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if payload is None:
+            raise ValueError("Payload cannot be None for PATCH request")
+
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request("PATCH", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return None
+        
+        is_instance = self._is_instance(payload)
+
+        return self.request(
+            "PATCH",
+            url,
+            payload if is_instance else None,
+            dumps(payload) if not is_instance else None,
+            headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+
+    def patch_async(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> bool:
+        """Send an async PATCH request.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async("PATCH", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return False
+        return self.request_async(
+            "PATCH",
+            url,
+            payload=payload,
+            headers=headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+
+    def post(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Send a POST request and return a Response object.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if payload is None and send_file is None:
+            raise ValueError("Payload cannot be None for POST request")
+        
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request("POST", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return None
+        
+        is_instance = self._is_instance(payload)
+        has_payload = payload is not None
+        
+        return self.request(
+                    "POST",
+                    url,
+                    payload if is_instance and has_payload else None,
+                    dumps(payload) if not is_instance and has_payload else None,
+                    headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                    send_file=send_file,
+                )
+
+    def post_async(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> bool:
+        """Send an async POST request.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async("POST", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return False
+        return self.request_async(
+            "POST",
+            url,
+            payload=payload,
+            headers=headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+
+    def put(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Send a PUT request and return a Response object.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if payload is None:
+            raise ValueError("Payload cannot be None for PUT request")
+        
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request("PUT", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return None
+        
+        is_instance = self._is_instance(payload)
+
+        return self.request(
+            "PUT",
+            url,
+            payload if is_instance else None,
+            dumps(payload) if not is_instance else None,
+            headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file,
+        )
+
+    def put_async(
+        self,
+        url,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> bool:
+        """Send an async PUT request.
+
+        Args:
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async("PUT", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return False
+        
+        return self.request_async(
+            "PUT",
+            url,
+            payload=payload,
+            headers=headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+
+    def read_chunked(
+        self, s, uart=None, method="GET", save_to_file=None, storage=None
+    ) -> bytes:
+        """Read a chunked HTTP response.
+
+        Args:
+            s (socket): Socket object.
+            uart (UART): UART object for writing output. Defaults to None.
+            method (str): HTTP method name. Defaults to "GET".
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+
+        Returns:
+            bytes: The response body.
+        """
+        if self._is_flipper:
+            return b""
+        
+        if uart:
+            uart.write(f"[{method}/SUCCESS] {method} request successful.\n")
+
+        body = b""
+        file = None
+
+        # Open file for writing if save_to_file is specified
+        if save_to_file and storage:
+            try:
+                file = storage.file_open(save_to_file)
+            except Exception as e:
+                storage.file_close(file)
+                raise RuntimeError(
+                    f"Failed to open file for writing: {save_to_file} - {e}"
+                ) from e
+
+        try:
+            while True:
+                if not self._should_continue():
+                    s.close()
+                    break
+                # Read the chunk size line
+                line = s.readline()
+                if not line:
+                    break
+                # Remove any CRLF and convert from hex
+                chunk_size_str = line.strip().split(b";")[0]  # Ignore chunk extensions
+                try:
+                    chunk_size = int(chunk_size_str, 16)
+                except ValueError as exc:
+                    raise ValueError("Invalid chunk size: %s" % chunk_size_str) from exc
+                if chunk_size == 0:
+                    # Read and discard trailer headers
+                    while True:
+                        trailer = s.readline()
+                        if (
+                            not trailer
+                            or trailer == b"\r\n"
+                            or not self._should_continue()
+                        ):
+                            break
+                    break
+                # Read the chunk data
+                chunk = s.read(chunk_size)
+                self._update_speed(len(chunk))
+                if uart:
+                    uart.write(chunk)
+                    uart.flush()
+                elif file:
+                    # Write directly to file with retry
+                    retries = 10
+                    while retries > 0:
+                        try:
+                            storage.file_write(file, chunk, "wb")
+                            break
+                        except OSError as e:
+                            retries -= 1
+                            if retries == 0:
+                                raise e
+                            sleep_ms(10)
+                else:
+                    body += chunk
+                # Read the trailing CRLF after the chunk
+                s.read(2)
+            if uart:
+                uart.flush()
+                uart.write("\n")
+                uart.write(f"[{method}/END]")
+        finally:
+            if file:
+                try:
+                    storage.file_close(file)
+                except Exception:
+                    pass
+
+        return body
+
+    def request(
+        self,
+        method,
+        url,
+        data=None,
+        json_data=None,
+        headers=None,
+        auth=None,
+        timeout=None,
+        parse_headers=True,
+        uart=None,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Make an HTTP request.
+
+        Args:
+            method (str): HTTP method (GET, POST, etc.).
+            url (str): URL to request.
+            data (str or bytes): Request body data. Defaults to None.
+            json_data (dict): JSON data to send (will be serialized). Defaults to None.
+            headers (dict): HTTP headers dict. Defaults to None.
+            auth (tuple): Authentication tuple (username, password). Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to None.
+            parse_headers (bool or callable): Whether to parse response headers. Defaults to True.
+            uart (UART): UART object for streaming output. Defaults to None.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request(method, url, data=data, json_data=json_data, headers=headers, auth=auth, timeout=timeout, parse_headers=parse_headers, uart=uart, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return None
+        
+        if self._lock is None:
+            return None
+        
+        with self._lock:
+            self._running = True
+
+        # Ensure headers is a dict
+        if headers is None:
+            headers = {}
+
+        redirect = None  # redirection url, None means no redirection
+        chunked_data = (
+            data
+            and getattr(data, "__next__", None)
+            and not getattr(data, "__len__", None)
+        )
+
+        if auth is not None:
+            import ubinascii
+
+            username, password = auth
+            formated = b"{}:{}".format(username, password)
+            formated = str(ubinascii.b2a_base64(formated)[:-1], "ascii")
+            headers["Authorization"] = "Basic {}".format(formated)
+
+        try:
+            proto, dummy, host, path = url.split("/", 3)
+        except ValueError:
+            proto, dummy, host = url.split("/", 2)
+            path = ""
+        if proto == "http:":
+            port = 80
+        elif proto == "https:":
+            port = 443
+        else:
+            raise ValueError("Unsupported protocol: " + proto)
+
+        if ":" in host:
+            host, port = host.split(":", 1)
+            port = int(port)
+
+        if not self._should_continue():
+            return
+
+        ai = usocket.getaddrinfo(host, port, 0, usocket.SOCK_STREAM)
+        ai = ai[0]
+
+        resp_d = {}
+        if parse_headers is False:
+            resp_d = None
+
+        if not self._should_continue():
+            return
+
+        s = usocket.socket(ai[0], usocket.SOCK_STREAM, ai[2])
+
+        if timeout is not None:
+            # Note: settimeout is not supported on all platforms, will raise
+            # an AttributeError if not available.
+            try:
+                s.settimeout(timeout)
+            except AttributeError:
+                pass
+
+        try:
+            if not self._should_continue():
+                s.close()
+                return
+            s.connect(ai[-1])
+            if proto == "https:":
+                _context = tls.SSLContext(tls.PROTOCOL_TLS_CLIENT)
+                _context.verify_mode = tls.CERT_NONE
+                s = _context.wrap_socket(s, server_hostname=host)
+            s.write(b"%s /%s HTTP/1.1\r\n" % (method, path))
+            if "Host" not in headers:
+                s.write(b"Host: %s\r\n" % host)
+            # Iterate over keys to avoid tuple alloc
+            for k in headers:
+                s.write(k)
+                s.write(b": ")
+                s.write(headers[k])
+                s.write(b"\r\n")
+            if json_data is not None:
+                assert data is None
+                data = json_data
+                if "Content-Type" not in headers:
+                    s.write(b"Content-Type: application/json\r\n")
+            # Normalize to bytes for non-chunked payloads
+            if data and not chunked_data and isinstance(data, str):
+                data = data.encode()
+            if data:
+                if chunked_data:
+                    s.write(b"Transfer-Encoding: chunked\r\n")
+                else:
+                    s.write(b"Content-Length: %d\r\n" % len(data))
+            elif send_file and storage:
+                s.write(b"Transfer-Encoding: chunked\r\n")
+            s.write(b"Connection: close\r\n\r\n")
+            if data:
+                if chunked_data:
+                    for chunk in data:
+                        s.write(b"%x\r\n" % len(chunk))
+                        s.write(chunk)
+                        s.write(b"\r\n")
+                    s.write(b"0\r\n\r\n")
+                else:
+                    _total = len(data)
+                    _sent = 0
+                    while _sent < _total:
+                        _n = s.write(data[_sent:_sent + self._chunk_size])
+                        if not _n:
+                            break
+                        _sent += _n
+            elif send_file and storage:
+                # Send file in chunks
+                file_obj = storage.file_open(send_file)
+                frame_buffer = bytearray(self._chunk_size)
+                try:
+                    while True:
+                        if not self._should_continue():
+                            s.close()
+                            return
+                        bytes_read = storage.file_readinto(file_obj, frame_buffer)
+                        if not bytes_read:
+                            break
+                        s.write(b"%x\r\n" % len(frame_buffer[:bytes_read]))
+                        s.write(frame_buffer[:bytes_read])
+                        s.write(b"\r\n")
+                    s.write(b"0\r\n\r\n")
+                finally:
+                    storage.file_close(file_obj)
+                    frame_buffer = None
+
+            # Read the status line
+            l = s.readline()
+            l = l.split(None, 2)
+            if len(l) < 2:
+                # Invalid response
+                raise ValueError("HTTP error: BadStatusLine:\n%s" % l)
+            status = int(l[1])
+            reason = ""
+            if len(l) > 2:
+                reason = l[2].rstrip()
+            transfer_encoding = None
+            self._content_length = None
+            while True:
+                if not self._should_continue():
+                    s.close()
+                    return
+                l = s.readline()
+                if not l or l == b"\r\n":
+                    break
+                if l.startswith(b"Transfer-Encoding:"):
+                    if b"chunked" in l:
+                        transfer_encoding = "chunked"
+                elif l.startswith(b"Content-Length:"):
+                    self._content_length = int(l.split(b":", 1)[1].strip())
+                elif l.startswith(b"Location:") and not 200 <= status <= 299:
+                    if status in [301, 302, 303, 307, 308]:
+                        redirect = str(l[10:-2], "utf-8")
+                    else:
+                        raise NotImplementedError(
+                            "Redirect %d not yet supported" % status
+                        )
+                if parse_headers is False:
+                    pass
+                elif parse_headers is True:
+                    l = str(l, "utf-8")
+                    k, v = l.split(":", 1)
+                    resp_d[k] = v.strip()
+                else:
+                    parse_headers(l, resp_d)
+
+            if not self._should_continue():
+                s.close()
+                return
+
+            # Read body
+            self._download_start_ticks = ticks_ms()
+            self._downloaded_bytes = 0
+            if not self._should_continue():
+                s.close()
+                return
+            if save_to_file and storage:
+                if storage.exists(save_to_file):
+                    storage.remove(save_to_file)
+            if transfer_encoding == "chunked":
+                body = self.read_chunked(s, uart, method, save_to_file, storage)
+            elif self._content_length is not None:
+                if not uart and not save_to_file:
+                    body = s.read(self._content_length)
+                    self._downloaded_bytes = len(body)
+                elif save_to_file and storage:
+                    # Save directly to file
+                    file = storage.file_open(save_to_file)
+                    content_length = self._content_length
+                    while content_length > 0:
+                        if not self._should_continue():
+                            s.close()
+                            return
+                        chunk_size = min(self._chunk_size, content_length)
+                        chunk = s.read(chunk_size)
+                        if not chunk:
+                            break
+                        # handle objects without __len__
+                        try:
+                            actual_len = len(chunk)
+                        except Exception:
+                            actual_len = chunk_size
+                        self._update_speed(actual_len)
+                        # Write with retry
+                        retries = 10
+                        while retries > 0:
+                            try:
+                                storage.file_write(file, chunk, "wb")
+                                break
+                            except OSError as e:
+                                retries -= 1
+                                if retries == 0:
+                                    raise e
+                                sleep_ms(10)
+                        content_length -= actual_len
+                    storage.file_close(file)
+
+                    body = b""
+                else:
+                    # Read and write in fixed-size chunks to UART
+                    uart.write(f"[{method}/SUCCESS] {method} request successful.\n")
+                    content_length = self._content_length
+                    while content_length > 0:
+                        if not self._should_continue():
+                            s.close()
+                            return
+                        chunk_size = min(self._chunk_size, content_length)
+                        chunk = s.read(chunk_size)
+                        if not chunk:
+                            break
+                        # handle objects without __len__
+                        try:
+                            actual_len = len(chunk)
+                        except Exception:
+                            actual_len = chunk_size
+                        self._update_speed(actual_len)
+                        uart.write(chunk)
+                        uart.flush()
+                        content_length -= actual_len
+                    uart.flush()
+                    uart.write("\n")
+                    uart.write(f"[{method}/END]")
+            else:
+                # Read until the socket is closed
+                if not uart and not save_to_file:
+                    body = s.read()
+                    self._downloaded_bytes = len(body)
+                elif save_to_file and storage:
+                    # Save directly to file
+                    file = storage.file_open(save_to_file)
+                    while True:
+                        if not self._should_continue():
+                            s.close()
+                            return
+                        chunk = s.read(self._chunk_size)
+                        if not chunk:
+                            break
+                        self._update_speed(len(chunk))
+                        # Write with retry
+                        retries = 10
+                        while retries > 0:
+                            try:
+                                storage.file_write(file, chunk, "wb")
+                                break
+                            except OSError as e:
+                                retries -= 1
+                                if retries == 0:
+                                    raise e
+                                sleep_ms(10)
+                    storage.file_close(file)
+                    body = b""
+                else:
+                    uart.write(f"[{method}/SUCCESS] {method} request successful.\n")
+                    while True:
+                        if not self._should_continue():
+                            s.close()
+                            return
+                        chunk = s.read(self._chunk_size)
+                        if not chunk:
+                            break
+                        self._update_speed(len(chunk))
+                        uart.write(chunk)
+                        uart.flush()
+                    uart.flush()
+                    uart.write("\n")
+                    uart.write(f"[{method}/END]")
+
+            self._update_speed(0)
+
+            if redirect:
+                s.close()
+                if status in [301, 302, 303]:
+                    return self.request(
+                        "GET",
+                        redirect,
+                        None,
+                        None,
+                        headers,
+                        auth,
+                        timeout,
+                        parse_headers,
+                        uart,
+                        save_to_file,
+                        storage,
+                        send_file
+                    )
+                return self.request(
+                    method,
+                    redirect,
+                    data,
+                    json_data,
+                    headers,
+                    auth,
+                    timeout,
+                    parse_headers,
+                    uart,
+                    save_to_file,
+                    storage,
+                    send_file
+                )
+            resp = Response(body)
+            resp.status_code = status
+            resp.reason = reason
+            if resp_d is not None:
+                resp.headers = resp_d
+            return resp
+
+        except OSError:
+            s.close()
+            raise
+        finally:
+            with self._lock:
+                self._running = False
+
+    def request_async(
+        self,
+        method,
+        url,
+        payload=None,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+        stack_size: int = 8 * 1024,
+    ) -> bool:
+        """Handle async requests.
+
+        Args:
+            method (str): HTTP method (GET, POST, etc.).
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload. Defaults to None.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request payload (requires storage). Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request_async(method, url, payload=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return False
+        
+        if self._async_request_in_progress:
+            return False  # Request already in progress
+
+        # Reset state
+        self.close()
+        self._async_request_in_progress = True
+        self._state = HTTP_LOADING
+
+        try:
+            if self._thread_manager:
+                # Use ThreadManager
+                from picoware.system.thread import ThreadTask
+
+                task = ThreadTask(
+                    "HTTP",
+                    function=self.__execute_request,
+                    args=(
+                        method,
+                        url,
+                        payload,
+                        headers,
+                        timeout,
+                        save_to_file,
+                        storage,
+                        send_file,
+                    ),
+                    timeout=0,
+                    stack_size=(
+                        stack_size
+                        if self._chunk_size < stack_size
+                        else self._chunk_size 
+                    ),
+                )
+                self._current_task = task
+                self._thread_manager.add_task(task)
+                return True
+            
+            if self._lock is None:
+                return False
+
+            import _thread
+
+            # Start the request in a separate thread
+            self._async_thread_id = _thread.start_new_thread(
+                self.__execute_request,
+                (method, url, payload, headers, timeout, save_to_file, storage, send_file),
+            )
+            return True
+        except Exception as e:
+            self._async_error = f"Thread creation failed: {e}"
+            self._async_request_complete = True
+            self._async_request_in_progress = False
+            self._state = HTTP_ISSUE
+            self._async_thread_id = None
+            self._running = False
+            return False
+
+    def __execute_request(
+        self,
+        method: str,
+        url: str,
+        payload,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Execute the actual HTTP request in a separate thread.
+
+        Args:
+            method (str): HTTP method (GET, POST, etc.).
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request payload (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if self._is_flipper:
+            if self._http_uart is not None:
+                return self._http_uart.request(method, url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
+            return None
+        
+        try:
+            result = None
+            method = method.upper()
+            is_instance = self._is_instance(payload)
+            has_payload = payload is not None
+            if method == "GET":
+                result = self.request(
+                    "GET",
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                )
+            elif method == "POST":
+                result = self.request(
+                    "POST",
+                    url,
+                    payload if is_instance and has_payload else None,
+                    dumps(payload) if not is_instance and has_payload else None,
+                    headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                    send_file=send_file
+                )
+            elif method == "PUT":
+                result = self.request(
+                    "PUT",
+                    url,
+                    payload if is_instance and has_payload else None,
+                    dumps(payload) if not is_instance and has_payload else None,
+                    headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                    send_file=send_file
+                )
+            elif method == "DELETE":
+                result = self.request(
+                    "DELETE",
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                )
+            elif method == "HEAD":
+                result = self.request(
+                    "HEAD",
+                    url,
+                    payload if is_instance and has_payload else None,
+                    dumps(payload) if not is_instance and has_payload else None,
+                    headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                    send_file=send_file
+                )
+            elif method == "PATCH":
+                result = self.request(
+                    "PATCH",
+                    url,
+                    payload if is_instance and has_payload else None,
+                    dumps(payload) if not is_instance and has_payload else None,
+                    headers,
+                    timeout=timeout,
+                    save_to_file=save_to_file,
+                    storage=storage,
+                    send_file=send_file
+                )
+
+            if self._lock is not None:
+                with self._lock:
+                    if result:
+                        self._async_result = result
+                        self._state = HTTP_IDLE
+                        self._async_error = None
+                    else:
+                        self._async_result = None
+                        self._state = HTTP_ISSUE
+
+            return result
+        except Exception as e:
+            if self._lock is not None:
+                with self._lock:
+                    self._async_error = None if e is None else str(e)
+                    self._async_result = None
+                    self._state = HTTP_ISSUE
+        finally:
+            if self._lock is not None:
+                with self._lock:
+                    self._async_request_complete = True
+                    self._async_request_in_progress = False
+                    self._async_thread_id = None
+                    self._running = False
+
+                if self._async_callback:
+                    try:
+                        self._async_callback(
+                            response=self._async_result,
+                            state=self._state,
+                            error=self._async_error,
+                        )
+                    except Exception:
+                        pass
+
+class HTTPUART:
+    """HTTPUART - Handle HTTP requests over UART."""
+
+    def __init__(self, uart=None, chunk_size: int = (1024 * 4), timeout_ms: int = 5000) -> None:
+        """Initialize the HTTP class.
+
+        Args:
+            uart (UART): The UART instance. Defaults to None.
+            chunk_size (int): Transfer chunk size in bytes. Defaults to 4096.
+            timeout_ms (int): The timeout for UART receiving in milliseconds. Defaults to 5000.
+        """
+        self.uart = None
+        if uart is None:
+            from picoware.system.uart import UART
+            self.uart = UART(timeout=timeout_ms)
+        else:
+            self.uart = uart
+        if self.uart and not self.ping():
+            print("FlipperHTTP board not connected...")
+            self.uart = None
+        self.chunk_size = chunk_size
+        self.timeout_ms = timeout_ms
+        self.error = None
+        self._response = None
+
+    @property
+    def response(self) -> Response:
+        """Get the latest HTTP response received from the UART.
+
+        Returns:
+            Response: The latest HTTP response received from the UART.
+        """
+        return self._response
+
+    def __send_and_wait(self, command, add_newline: bool = True) -> str:
+        """Send a command to the UART and wait for a response.
+
+        Args:
+            command (str/bytes): The command to send.
+
+        Returns: 
+            str: The response from the UART.
+        """
+        if not self.uart:
+            return ""
+        if add_newline:
+            self.uart.println(command)
+        else:
+            self.uart.write(command)
+        while self.uart.is_sending:
+            pass
+        data = self.uart.read_line()
+        if not data:
+            return "[ERROR] No data returned"
+        if "[ERROR]" in data:
+            self.error = data
+        return data
+
+    def close(self) -> None:
+        """Close the UART connection."""
+        self.error = None
+    
+    def ping(self) -> bool:
+        """Check for pong response"""
+        return "PONG" in self.__send_and_wait("[PING]")
+
+    def request(
+        self,
+        method,
+        url,
+        data=None,
+        json_data=None,
+        headers=None,
+        auth=None,
+        timeout=None,
+        parse_headers=True,
+        uart=None,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+    ) -> Response:
+        """Make an HTTP request.
+
+        Args:
+            method (str): HTTP method (GET, POST, etc.).
+            url (str): URL to request.
+            data (str or bytes): Request body data. Defaults to None.
+            json_data (dict): JSON data to send (will be serialized). Defaults to None.
+            headers (dict): HTTP headers dict. Defaults to None.
+            auth (tuple): Authentication tuple (username, password). Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to None.
+            parse_headers (bool or callable): Whether to parse response headers. Defaults to True.
+            uart (UART): UART object for streaming output. Defaults to None.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request body (requires storage). Defaults to None.
+
+        Returns:
+            Response: The HTTP response.
+        """
+        if not self.uart:
+            return None
+        _response_str = None
+        if method == "GET":
+            if headers is None:
+                _response_str = self.__send_and_wait(f"[GET]{url}")
+            else:
+                _response_str = self.__send_and_wait("[GET/HTTP]{\"url\":\"%s\",\"headers\":%s}" % (url, headers))
+        elif method == "POST":
+            if headers is None:
+                print("POST requires headers")
+                return None
+            if data is None and json_data is None and send_file is None:
+                print("POST requires data, json_data, or send_file")
+                return None
+            if storage is not None and send_file is not None:
+                _path = send_file 
+                if not storage.exists(send_file):
+                    if storage.exists(f"/sd/{send_file}"):
+                        _path = f"/sd/{send_file}"
+                    else:
+                        print("File not found in storage")
+                        return None
+                file_obj = storage.file_open(_path)
+                buffer = bytearray(self.chunk_size)
+                # write initial without payload
+                self.uart.write("[POST/HTTP]{\"url\":\"%s\",\"headers\":%s}" % (url, headers))
+                # send payload key and colon
+                self.uart.write("\"payload\":")
+                try:
+                    while True:
+                        bytes_read = storage.file_readinto(file_obj, buffer)
+                        if not bytes_read:
+                            break
+                        self.uart.write(buffer[:bytes_read])
+                finally:
+                    storage.file_close(file_obj)
+                    buffer = None
+                # add newline
+                self.uart.write("\n")
+            elif data is not None:
+                _response_str = self.__send_and_wait("[POST/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data))
+            elif json_data is not None:
+                _response_str = self.__send_and_wait("[POST/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, json_data))
+            else:
+                print("POST requires data, json_data, or send_file")
+                return None
+        elif method == "PUT":
+            if headers is None:
+                print("PUT requires headers")
+                return None
+            if data is None and json_data is None:
+                print("PUT requires data or json_data")
+                return None
+            if data is not None:
+                _response_str = self.__send_and_wait("[PUT/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data))
+            elif json_data is not None:
+                _response_str = self.__send_and_wait("[PUT/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, json_data))
+            else:
+                print("PUT requires data or json_data")
+                return None
+        elif method == "DELETE":
+            if headers is None:
+                print("DELETE requires headers")
+                return None
+            if data is None and json_data is None:
+                print("DELETE requires data or json_data")
+                return None
+            _response_str = self.__send_and_wait("[DELETE/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data if data is not None else json_data))
+        elif method == "PATCH":
+            if headers is None:
+                print("PATCH requires headers")
+                return None
+            if data is None and json_data is None:
+                print("PATCH requires data or json_data")
+                return None
+            if data is not None:
+                _response_str = self.__send_and_wait("[PATCH/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data))
+            elif json_data is not None:
+                _response_str = self.__send_and_wait("[PATCH/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, json_data))
+            else:
+                print("PATCH requires data or json_data")
+                return None
+        elif method == "HEAD":
+            if headers is None:
+                print("HEAD requires headers")
+                return None
+            _response_str = self.__send_and_wait("[HEAD/HTTP]{\"url\":\"%s\",\"headers\":%s}" % (url, headers))
+        else:
+            print("Unsupported HTTP method")
+            return None
+        if storage is not None and save_to_file is not None:
+            _path = save_to_file
+            if not storage.exists(save_to_file):
+                if storage.exists(f"/sd/{save_to_file}"):
+                    _path = f"/sd/{save_to_file}"
+                else:
+                    print("File not found in storage")
+                    return None
+            if not storage.write(_path, _response_str):
+                print("Failed to write response to storage")
+            return None
+        r = Response(_response_str)
+        if headers is not None:
+            r.headers = headers
+        return r
+
+
+    def request_async(
+        self,
+        method,
+        url,
+        payload=None,
+        headers=None,
+        timeout: float = 10.0,
+        save_to_file=None,
+        storage=None,
+        send_file=None,
+        stack_size: int = 8 * 1024,
+    ) -> bool:
+        """Handle async requests.
+
+        Args:
+            method (str): HTTP method (GET, POST, etc.).
+            url (str): URL to request.
+            payload (str, bytes, or dict): Request payload. Defaults to None.
+            headers (dict): HTTP headers dict. Defaults to None.
+            timeout (float): Request timeout in seconds. Defaults to 10.0.
+            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
+            storage (Storage): Storage object for file operations. Defaults to None.
+            send_file (str): File path to send as request payload (requires storage). Defaults to None.
+
+        Returns:
+            bool: True if the request was started.
+        """
+        if not self.uart:
+            return False
+        is_instance = isinstance(payload, (str, bytes))
+        self._response = self.request(
+            method,
+            url,
+            payload if is_instance else None,
+            None if is_instance else dumps(payload),
+            headers,
+            timeout=timeout,
+            save_to_file=save_to_file,
+            storage=storage,
+            send_file=send_file
+        )
+        return self._response is not None

@@ -1,0 +1,10 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# This is currently unused in Bazel.
+cc_binary(
+    name = "boot_stage2",
+    srcs = ["boot_stage2.c"],
+    target_compatible_with = ["//bazel/constraint:host"],
+)

@@ -1,0 +1,146 @@
+"""Screensavers - Collection of screensaver animations."""
+from picoware.system.decorator import storage_required
+_screensavers = None
+_screensavers_index = 0
+_app_loader = None
+_directories = {}
+
+
+@storage_required
+def start(view_manager) -> bool:
+    """Start the screensavers app.
+
+    Args:
+        view_manager (ViewManager): The view manager context.
+
+    Returns:
+        bool: True on success.
+    """
+    from picoware.gui.menu import Menu
+
+    # create screensavers folder if it doesn't exist
+    view_manager.storage.mkdir("picoware/apps/misc")
+    view_manager.storage.mkdir("picoware/apps/misc/screensavers")
+
+    global _screensavers
+    global _app_loader
+
+    if _screensavers:
+        del _screensavers
+        _screensavers = None
+
+    _screensavers = Menu(
+        view_manager.draw,
+        "Screensavers",
+        0,
+        view_manager.draw.size.y,
+        view_manager.foreground_color,
+        view_manager.background_color,
+        view_manager.selected_color,
+        view_manager.foreground_color,
+        2,
+    )
+    _app_loader = view_manager.app_loader
+
+    from picoware.system.features import RELEASE_SCREENSAVERS,SCREENSAVER_DIRECTORIES
+    global _directories
+    _directories={}
+    for directory in SCREENSAVER_DIRECTORIES:
+        for name in _app_loader.list_available_apps(directory):
+            if name not in _directories:_directories[name]=directory
+    for screensaver in sorted(_directories):
+        if screensaver in RELEASE_SCREENSAVERS:_screensavers.add_item(screensaver)
+
+    _screensavers.set_selected(_screensavers_index)
+
+    _screensavers.draw()
+    return True
+
+
+def run(view_manager) -> None:
+    """Run the screensavers app.
+
+    Args:
+        view_manager (ViewManager): The view manager context.
+    """
+    from picoware.system.view import View
+    from picoware.system.buttons import (
+        BUTTON_ESCAPE,
+        BUTTON_UP,
+        BUTTON_DOWN,
+        BUTTON_LEFT,
+        BUTTON_CENTER,
+        BUTTON_RIGHT,
+    )
+
+    global _screensavers_index
+
+    if not _screensavers:
+        return
+
+    button: int = view_manager.button
+
+    if button in (BUTTON_UP, BUTTON_LEFT):
+        _screensavers.scroll_up()
+    elif button in (BUTTON_DOWN, BUTTON_RIGHT):
+        _screensavers.scroll_down()
+    elif button == BUTTON_ESCAPE:
+        _screensavers_index = 0
+        view_manager.back()
+    elif button == BUTTON_CENTER:
+        _screensavers_index = _screensavers.selected_index
+
+        # Get the selected screensaver name
+        selected_screensaver = _screensavers.current_item
+
+        if selected_screensaver and _app_loader:
+            # Try to load the screensaver
+            screensaver_module = _app_loader.load_app(
+                selected_screensaver, _directories[selected_screensaver]
+            )
+            if screensaver_module is None:
+                view_manager.alert(
+                    f'Could not load: {_app_loader.error}'
+                )
+                return
+            from utime import ticks_ms
+
+            start_time = ticks_ms()
+
+            # Create a view for the screensaver and switch to it
+            screensaver_view_name = f"screensaver_{selected_screensaver}"
+
+            # Check if view already exists
+            if view_manager.get_view(screensaver_view_name) is None:
+                screensaver_view = View(
+                    screensaver_view_name,
+                    screensaver_module.run,
+                    screensaver_module.start,
+                    screensaver_module.stop,
+                )
+                view_manager.log(
+                    f"[Screensavers]: Created view for app {selected_screensaver} after {ticks_ms() - start_time} ms",
+                )
+                view_manager.add(screensaver_view)
+
+            view_manager.switch_to(screensaver_view_name)
+            view_manager.log(
+                f'[Screensavers]: Switched to view for app "{selected_screensaver}" after {ticks_ms() - start_time} ms',
+            )
+
+
+def stop(view_manager) -> None:
+    """Stop the screensavers app.
+
+    Args:
+        view_manager (ViewManager): The view manager context.
+    """
+    from gc import collect
+
+    global _screensavers
+    if _screensavers is not None:
+        del _screensavers
+        _screensavers = None
+    if _app_loader is not None:
+        _app_loader.cleanup_modules()
+    collect()

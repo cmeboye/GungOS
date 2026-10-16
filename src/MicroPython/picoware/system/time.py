@@ -1,0 +1,250 @@
+"""Time - Date and time handling."""
+
+class Time:
+    """Handles time-related functions."""
+
+    __slots__ = (
+        "_rtc",
+        "_is_set",
+        "_thread_manager",
+        "_current_task",
+        "_running",
+        "_lock",
+        "_requested",
+    )
+
+    def __init__(self, thread_manager=None):
+        """Initialize the time manager.
+
+        Args:
+            thread_manager (object or None): Manager for running the NTP fetch in a thread. Defaults to None.
+        """
+        from machine import RTC
+
+        self._lock = None
+        try:
+            from _thread import allocate_lock
+            self._lock = allocate_lock()
+        except ImportError:
+            pass
+
+        self._rtc = RTC()
+        self._is_set = bool(getattr(self._rtc, "is_valid", False))
+        self._thread_manager = thread_manager
+        self._current_task = None
+        self._running = False
+        self._requested = False
+
+    def __del__(self):
+        """Deinitialize the RTC and stop any running time task."""
+        self._rtc.deinit()
+        del self._rtc
+        self._rtc = None
+        self._is_set = False
+        if self._current_task:
+            self._current_task.stop()
+            self._current_task = None
+        self._lock = None
+
+    @property
+    def date(self) -> str:
+        """Return the current date only as string"""
+        if self._lock is None:
+            return ""
+        with self._lock:
+            date = self._rtc.datetime()
+            return f"{date[1]}/{date[2]}/{date[0]}"
+
+    @property
+    def datetime(self) -> str:
+        """Return the current time in the format "YYYY-MM-DD HH:MM:SS"""
+        if self._lock is None:
+            return ""
+        with self._lock:
+            current_time = self._rtc.datetime()
+            return f"{current_time[0]:04d}-{current_time[1]:02d}-{current_time[2]:02d} {current_time[4]:02d}:{current_time[5]:02d}:{current_time[6]:02d}"
+
+    @property
+    def is_fetching(self) -> bool:
+        """Return whether the time is currently being fetched."""
+        if self._lock is None:
+            return False
+        with self._lock:
+            return self._requested
+
+    @property
+    def is_running(self) -> bool:
+        """Return whether the time fetching process is currently running."""
+        if self._lock is None:
+            return False
+        with self._lock:
+            return self._running
+
+    @property
+    def is_set(self) -> bool:
+        """Return whether the time has been set."""
+        if self._lock is None:
+            return False
+        with self._lock:
+            return self._is_set
+
+    @property
+    def rtc(self):
+        """Return the RTC object."""
+        if self._lock is None:
+            return None
+        with self._lock:
+            return self._rtc
+
+    @property
+    def time(self) -> str:
+        """Return the current time only as string"""
+        if self._lock is None:
+            return ""
+        with self._lock:
+            date = self._rtc.datetime()
+            _seconds = date[6]
+            if _seconds < 10:
+                _seconds = f"0{_seconds}"
+            _minutes = date[5]
+            if _minutes < 10:
+                _minutes = f"0{_minutes}"
+            return f"{date[4]}:{_minutes}:{_seconds}"
+
+    def fetch(self, offset: int = 0) -> bool:
+        """Fetch the current date and time from NTP.
+
+        Originated from: https://github.com/micropython/micropython-lib/blob/master/micropython/net/ntptime/ntptime.py
+
+        Args:
+            offset (int): Timezone offset in hours to apply. Defaults to 0.
+
+        Returns:
+            bool: True if the fetch was started or time was already set, False otherwise.
+        """
+        if self._lock is None:
+            return False
+
+        try:
+            with self._lock:
+                if self._requested or self._running:
+                    return False
+                if self._is_set:
+                    return True
+
+            def fetch_ntp_time() -> None:
+                """Fetch the current time from an NTP server and set the RTC accordingly."""
+                from time import gmtime
+                import usocket as socket
+                import ustruct as struct
+
+                try:
+                    with self._lock:
+                        self._is_set = False
+                        self._running = True
+                    NTP_QUERY = bytearray(48)
+                    NTP_QUERY[0] = 0x1B
+                    host = "pool.ntp.org"
+                    timeout = 1
+                    addr = socket.getaddrinfo(host, 123)[0][-1]
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    try:
+                        s.settimeout(timeout)
+                        s.sendto(NTP_QUERY, addr)
+                        msg = s.recv(48)
+                    finally:
+                        s.close()
+                    val = struct.unpack("!I", msg[40:44])[0]
+
+                    # 2024-01-01 00:00:00 converted to an NTP timestamp
+                    MIN_NTP_TIMESTAMP = 3913056000
+                    if val < MIN_NTP_TIMESTAMP:
+                        val += 0x100000000
+
+                    # Convert timestamp from NTP format to our internal format
+                    EPOCH_YEAR = gmtime(0)[0]
+                    if EPOCH_YEAR == 2000:
+                        # (date(2000, 1, 1) - date(1900, 1, 1)).days * 24*60*60
+                        NTP_DELTA = 3155673600
+                    elif EPOCH_YEAR == 1970:
+                        # (date(1970, 1, 1) - date(1900, 1, 1)).days * 24*60*60
+                        NTP_DELTA = 2208988800
+                    else:
+                        print("Unsupported epoch: {}".format(EPOCH_YEAR))
+                        with self._lock:
+                            self._running = False
+                            self._is_set = False
+                            self._requested = False
+                        return
+
+                    t = val - NTP_DELTA + int(offset * 3600)  # Apply timezone offset
+                    tm = gmtime(t)
+                    with self._lock:
+                        self._rtc.datetime(
+                            (
+                                tm[0],  # year
+                                tm[1],  # month
+                                tm[2],  # day of the month
+                                tm[6] + 1,  # weekday
+                                tm[3],  # hour
+                                tm[4],  # minute
+                                tm[5],  # second
+                                0,  # subseconds
+                            )
+                        )
+                        self._is_set = True
+                        self._running = False
+                        self._requested = False
+                finally:
+                    with self._lock:
+                        self._running = False
+                        self._requested = False
+
+            with self._lock:
+                self._requested = True
+
+            if not self._thread_manager:
+                return fetch_ntp_time()
+
+            from picoware.system.thread import ThreadTask
+
+            task = ThreadTask("Time", function=fetch_ntp_time)
+            self._current_task = task
+            self._thread_manager.add_task(task)
+            return True
+        except Exception as e:
+            print(f"Failed to fetch time: {e}")
+            with self._lock:
+                self._running = False
+                self._is_set = False
+                self._requested = False
+            return False
+
+    def set(self, year, month, day, hour, minute, second) -> None:
+        """Set the current date and time.
+
+        Args:
+            year (int): Year.
+            month (int): Month.
+            day (int): Day of the month.
+            hour (int): Hour.
+            minute (int): Minute.
+            second (int): Second.
+        """
+        if self._lock is None:
+            return
+
+        with self._lock:
+            self._rtc.datetime(
+                (
+                    year,  # year
+                    month,  # month
+                    day,  # day of the month
+                    0,  # weekday
+                    hour,  # hour
+                    minute,  # minute
+                    second,  # second
+                    0,  # subseconds
+                )
+            )
+            self._is_set = True

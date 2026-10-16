@@ -1,0 +1,1849 @@
+"""FileBrowser - Browse and select files."""
+
+from micropython import const
+from picoware.system.features import EXTRA_LANGUAGES_ENABLED, MEDIA_ENABLED
+
+from picoware.system.buttons import (
+    BUTTON_NONE,
+    BUTTON_UP,
+    BUTTON_DOWN,
+    BUTTON_LEFT,
+    BUTTON_RIGHT,
+    BUTTON_CENTER,
+    BUTTON_ESCAPE,
+    BUTTON_BACKSPACE,
+    BUTTON_SPACE,
+    BUTTON_D,
+    BUTTON_H,
+    BUTTON_I,
+    BUTTON_M,
+    BUTTON_N,
+    BUTTON_O,
+    BUTTON_SHIFT,
+    BUTTON_CAPS_LOCK,
+    KEY_MOD_SHL,
+    KEY_MOD_SHR,
+    KEY_CAPS_LOCK,
+    BUTTON_CTRL_UP,
+    BUTTON_CTRL_DOWN,
+)
+
+FILE_BROWSER_VIEWER = const(0)
+FILE_BROWSER_MANAGER = const(1)
+FILE_BROWSER_SELECTOR = const(2)
+
+
+class FileBrowser:
+    """Class to handle file browsing, text editing, and image viewing within Picoware."""
+
+    TEXT_EDITABLE_EXTENSIONS = (
+        "txt",
+        "py",
+        "json",
+        "csv",
+        "md",
+        "ini",
+        "log",
+        "xml",
+        "html",
+        "conf",
+        "sh",
+        "bat",
+        "yml",
+        "yaml",
+        "toml",
+        "cfg",
+        "css",
+        "js",
+        "h",
+        "c",
+        "cpp",
+        "php",
+        "env",
+        "gitignore",
+        "lua",
+        "bas",
+        "",
+    )
+
+    PANE_LEFT = const(0)
+    PANE_RIGHT = const(1)
+
+    MODE_NONE = const(0)
+    MODE_MKDIR = const(1)
+    MODE_RENAME = const(2)
+    MODE_COPY_SAME = const(3)
+
+    ACT_NONE = const(0)
+    ACT_DELETE = const(1)
+    ACT_COPY = const(2)
+    ACT_MOVE = const(3)
+    ACT_RENAME = const(4)
+    ACT_FLASH = const(5)
+    ACT_AUDIO = const(6)
+    ACT_UNZIP = const(7)
+    ACT_VIDEO = const(8)
+
+    OPTIONS_LABELS = ("Hidden Files", "Dir Enter")
+
+    MODE_EDITING = 0
+    MODE_MENU = 1
+    MODE_EXIT = 2
+    MODE_SELECT = 3
+
+    def __init__(
+        self,
+        view_manager,
+        mode=FILE_BROWSER_SELECTOR,
+        start_directory="",
+        allowed_extensions=[],
+    ):
+        """Initialize the file browser.
+
+        Args:
+            view_manager (ViewManager): The view manager context.
+            mode (int): The browser mode. Defaults to FILE_BROWSER_SELECTOR.
+            start_directory (str): The starting directory path. Defaults to "".
+            allowed_extensions (list): Extensions of files to show. Defaults to [].
+        """
+        import json
+        from picoware.system.vector import Vector
+        from picoware.system.boards import BOARD_ID, BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_POOM
+
+        # Link to system managers
+        self._vm = view_manager
+        self._mode = mode
+
+        # State tracking and caching
+        self._stat_cache = {}
+        self._allowed_extensions = allowed_extensions
+
+        # UI overlays
+        self._loading = None
+        self._is_help_screen = False
+        self._show_options = False
+        self._show_info = False
+        self._needs_redraw = True
+        self._opt_idx = 0
+        self._info_data = []
+
+        self._context_menu = None
+        self._confirm_menu = None
+
+        # Input handling for renaming/creating folders
+        self._input_active = False
+        self._input_text = ""
+        self._input_cursor = 0
+        self._cursor_frame = 0
+        self._input_mode = self.MODE_NONE
+        self._context_target_path = ""
+        self._pending_action = self.ACT_NONE
+        self._pending_dest_path = ""
+
+        self._is_shift = False
+        self._is_caps = False
+
+        # Text Editor and Image Viewer state
+        self._is_editing = False
+        self._edit_file = ""
+        self._edit_unsaved = False
+        self._text_editor = None
+        self._editor_state = self.MODE_EDITING
+
+        self._is_viewing_image = False
+        self._is_viewing_text = False
+        self._text_viewer_box = None
+        self._image_load_state = 0
+        self._image_path = ""
+        self._jpeg_vec = Vector(0, 0)
+        self._info_box = None
+
+        draw = self._vm.draw
+        self._screen_w = draw.size.x
+        self._screen_h = draw.size.y
+        self._five = max(1, self._screen_h // 64)
+
+        self._add_info = BOARD_ID not in (BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_POOM)
+
+        self._is_flipper = BOARD_ID in (BOARD_FLIPPER_ZERO, BOARD_POOM)
+
+        _start = start_directory if start_directory else "/"
+
+        # Core application state to be saved/loaded
+        self._app_state = {
+            "left_path": _start,
+            "right_path": _start,
+            "left_files": [],
+            "right_files": [],
+            "left_index": 0,
+            "right_index": 0,
+            "left_top": 0,
+            "right_top": 0,
+            "active_pane": self.PANE_LEFT,
+            "show_hidden": False,
+            "dir_menu": False,
+            "marked": [],
+        }
+
+        # Load user settings if they exist
+        try:
+            data = self._vm.storage.read(
+                "picoware/settings/file_browser_state.json", "r"
+            )
+            if data:
+                loaded = json.loads(data)
+                self._app_state.update(
+                    {k: loaded.get(k, self._app_state[k]) for k in self._app_state}
+                )
+                del loaded
+            del data
+        except Exception as e:
+            self._vm.log(f"Failed to load settings: {e}", 2)
+
+        self._app_state["left_path"] = _start
+        self._app_state["right_path"] = _start
+
+        if mode in (FILE_BROWSER_VIEWER, FILE_BROWSER_SELECTOR):
+            self._app_state["dir_menu"] = False
+
+        self.__refresh_panes()
+        self._needs_redraw = True
+
+    def __del__(self):
+        """Cleanup resources to prevent RAM build-up."""
+        if self._loading:
+            self._loading.stop()
+            del self._loading
+            self._loading = None
+        if self._context_menu:
+            del self._context_menu
+            self._context_menu = None
+        if self._confirm_menu:
+            del self._confirm_menu
+            self._confirm_menu = None
+        if self._info_box:
+            del self._info_box
+            self._info_box = None
+        if self._text_viewer_box:
+            del self._text_viewer_box
+            self._text_viewer_box = None
+        if self._text_editor:
+            del self._text_editor
+            self._text_editor = None
+
+        self._app_state = None
+        self._stat_cache = None
+        self._edit_file = None
+        self._info_data = None
+
+        del self._jpeg_vec
+
+    @property
+    def directory(self) -> str:
+        """Get the current directory path."""
+        _dir = (
+            self._app_state["left_path"]
+            if self._app_state["active_pane"] == self.PANE_LEFT
+            else self._app_state["right_path"]
+        )
+        if _dir.startswith("/sd/"):
+            _dir = _dir[3:]
+        return _dir
+
+    @property
+    def mode(self) -> int:
+        """Get the current mode of the file browser."""
+        return self._mode
+
+    @property
+    def path(self) -> str:
+        """Get the current path."""
+        act = self._app_state["active_pane"]
+        p_dir = (
+            self._app_state["left_path"]
+            if act == self.PANE_LEFT
+            else self._app_state["right_path"]
+        )
+        f_lst = (
+            self._app_state["left_files"]
+            if act == self.PANE_LEFT
+            else self._app_state["right_files"]
+        )
+        idx = (
+            self._app_state["left_index"]
+            if act == self.PANE_LEFT
+            else self._app_state["right_index"]
+        )
+
+        if len(f_lst) == 0:
+            return p_dir
+
+        fname = f_lst[idx]
+        _path = f"/{fname}" if p_dir == "/" else f"{p_dir}/{fname}"
+
+        if _path.startswith("/sd/"):
+            _path = _path[3:]
+        return _path
+
+    @property
+    def stats(self) -> dict:
+        """Get statistics about the current file."""
+        _p = self.path
+        _storage = self._vm.storage
+        return {
+            "directory": self.directory,
+            "path": _p,
+            "size": _storage.size(_p),
+            "type": _p.split(".")[-1] if "." in _p else "unknown",
+        }
+
+    def __file_edit(self, path) -> bool:
+        """Start editing a text file.
+
+        Args:
+            path (str): The path to the text file to edit.
+
+        Returns:
+            bool: True if editing started, False otherwise.
+        """
+        ext = path.split(".")[-1].lower() if "." in path else ""
+        if ext not in self.TEXT_EDITABLE_EXTENSIONS:
+            self._vm.alert("Unsupported file format.")
+            self._needs_redraw = True
+            return False
+
+        self._edit_file = path
+        self._edit_unsaved = False
+        self._editor_state = self.MODE_EDITING
+        self._is_shift = False
+        self._is_caps = False
+        self._is_editing = True
+        self._needs_redraw = True
+
+        from picoware.gui.text_editor import TextEditor
+
+        self._text_editor = TextEditor(self._vm)
+        self._text_editor.load_file(path)
+
+        return True
+
+    def __file_view(self, path) -> None:
+        """View a file (image or text) based on its extension.
+
+        Args:
+            path (str): The path to the file to view.
+        """
+        ext = path.split(".")[-1].lower() if "." in path else ""
+        if ext in ("jpg", "jpeg", "bmp"):
+            self._is_viewing_image = True
+            self._image_load_state = 0
+            self._image_path = path
+            self._needs_redraw = True
+        elif ext in self.TEXT_EDITABLE_EXTENSIONS:
+            self._is_viewing_text = True
+            self._edit_file = path
+
+            from picoware.gui.textbox import TextBox
+
+            draw = self._vm.draw
+            self._text_viewer_box = TextBox(
+                draw,
+                0,
+                self._screen_h,
+                self._vm.foreground_color,
+                self._vm.background_color,
+            )
+            self._text_viewer_box.load_file(path)
+            self._text_viewer_box.refresh()
+
+            self._needs_redraw = True
+        else:
+            self._vm.alert("Unsupported file format.")
+            self._needs_redraw = True
+
+    def __file_watch(self, path) -> None:
+        """Watch a video."""
+        if not MEDIA_ENABLED:
+            self._vm.alert("Video playback is not included in this firmware.")
+            return
+        from picoware.system.video import Video
+
+        v = Video(path)
+
+        inp = self._vm.input_manager
+        inp.reset()
+        if v.start():
+            while v.run():
+                but = inp.button
+                if but in (
+                    BUTTON_ESCAPE,
+                    BUTTON_CENTER,
+                ):
+                    break
+            v.stop()
+        else:
+            self._vm.alert("Failed to start")
+
+        del v
+
+    def __zip_list(self, path) -> None:
+        """Show the names and sizes of files in a ZIP archive."""
+        try:
+            entries = []
+            for entry in self._vm.storage.listzip(path):
+                entries.append(f"{entry['filename']}  {entry['size_uncompressed']} bytes")
+
+            self._info_data = "\n".join(entries) if entries else "Archive is empty."
+            self._show_info = True
+            self._needs_redraw = True
+        except Exception as e:
+            self._vm.alert(f"Failed to list ZIP: {e}")
+            self._needs_redraw = True
+
+    def __zip_unzip(self, path) -> None:
+        """Extract a ZIP archive into its current directory."""
+        target_directory = path.rsplit("/", 1)[0] or "/"
+        try:
+            self.__loading_run("Unzipping...", 0.5)
+            if not self._vm.storage.unzip(path, target_directory):
+                self._vm.alert("Failed to unzip")
+                self._needs_redraw = True
+                return
+            self.__loading_run("Unzipped", 1.0)
+        except Exception as e:
+            self.__loading_run("", 1.0)
+            self._vm.alert(f"Failed to unzip: {e}")
+            self._needs_redraw = True
+
+    def __load_directory_contents(self, path):
+        """Load the contents of a directory.
+
+        Args:
+            path (str): The directory path to read.
+
+        Returns:
+            list: The sorted list of entry names.
+        """
+        items = []
+        show_hid = self._app_state.get("show_hidden", False)
+
+        try:
+            d_list = self._vm.storage.read_directory(path)
+            temp_list = []
+
+            for entry in d_list:
+                itm = entry["filename"]
+                if itm in (".", "..") or (not show_hid and itm.startswith(".")):
+                    continue
+
+                if self._allowed_extensions and not entry["is_directory"]:
+                    ext = itm.split(".")[-1].lower() if "." in itm else ""
+                    if ext not in self._allowed_extensions:
+                        continue
+
+                fp = f"/{itm}" if path == "/" else f"{path}/{itm}"
+                is_d = entry["is_directory"]
+                self._stat_cache[fp] = (is_d, -1)
+                temp_list.append((itm, is_d))
+
+            del d_list
+
+            # Sort by: Folders first, then name
+            temp_list.sort(key=lambda x: (not x[1], x[0].lower()))
+
+            items = [x[0] for x in temp_list]
+            del temp_list
+        except Exception as e:
+            self._vm.log(f"Error loading directory contents: {e}", 2)
+            items = ["<ERROR>"]
+
+        return [".."] + items if path != "/" else items
+
+    def __loading_run(self, title: str, percentage: float) -> None:
+        """Run a loading animation with a title and percentage completion.
+
+        Args:
+            title (str): The loading message to display.
+            percentage (float): Completion from 0.0 to 1.0.
+        """
+        if percentage >= 1.0:
+            if self._loading:
+                self._loading.stop()
+                del self._loading
+                self._loading = None
+            return
+
+        if not self._loading:
+            from picoware.gui.loading import Loading
+
+            self._loading = Loading(
+                self._vm.draw, self._vm.foreground_color, self._vm.background_color
+            )
+
+        self._loading.set_text(title)
+        self._loading.animate(swap=True)
+
+    def __menu_spawn(self, title: str, items: list):
+        """Construct a pop-up context menu overlaid on the main interface.
+
+        Args:
+            title (str): The menu title.
+            items (list): The menu item strings.
+
+        Returns:
+            Menu: The constructed Menu instance.
+        """
+        from picoware.gui.menu import Menu
+
+        fg = self._vm.foreground_color
+        bg = self._vm.background_color
+        sel = self._vm.selected_color
+        draw = self._vm.draw
+        m = Menu(draw, title, 0, self._screen_h, fg, bg, sel, bg)
+        for i in items:
+            m.add_item(i)
+        m.set_selected(0)
+        return m
+
+    def __refresh_panes(self) -> None:
+        """Refresh the file lists for both panes."""
+        self._stat_cache.clear()
+        self._app_state["left_files"].clear()
+        self._app_state["left_files"] = self.__load_directory_contents(
+            self._app_state["left_path"]
+        )
+        self._app_state["left_index"] = max(
+            0,
+            min(self._app_state["left_index"], len(self._app_state["left_files"]) - 1),
+        )
+        self._app_state["right_files"].clear()
+        self._app_state["right_files"] = self.__load_directory_contents(
+            self._app_state["right_path"]
+        )
+        self._app_state["right_index"] = max(
+            0,
+            min(
+                self._app_state["right_index"], len(self._app_state["right_files"]) - 1
+            ),
+        )
+
+    def __render(self) -> None:
+        """Draw the UI based on the current state."""
+        draw = self._vm.draw
+
+        sw, sh = self._screen_w, self._screen_h
+        mx = sw // 2
+        sx = self.__sx
+        sy = self.__sy
+
+        char_h = max(1, draw.font_size.y)
+
+        top_bar_h = max(char_h + sy(4), self._five * 2)
+        bottom_bar_h = top_bar_h
+        pane_header_h = top_bar_h
+        splitter_w = max(1, sx(1))
+        text_pad_x = sx(2)
+        text_line_y = max(0, (top_bar_h - char_h) // 2)
+        path_text_y = top_bar_h + max(0, (pane_header_h - char_h) // 2)
+        # Keep row spacing tied to current font height so visible rows scale by screen height.
+        row_h = max(char_h + sy(4), self._five * 2)
+        first_item_y = top_bar_h + pane_header_h + sy(2)
+
+        char_w = max(1, draw.font_size.x)
+        color_fg = self._vm.foreground_color
+        color_bg = self._vm.background_color
+        color_sel = self._vm.selected_color if not self._is_flipper else self._vm.background_color
+
+        # 1. Image Viewer Overlay (State Machine for Loading Animation)
+        if self._is_viewing_image:
+            if self._image_load_state < 5:
+                if not self._loading:
+                    from picoware.gui.loading import Loading
+
+                    self._loading = Loading(draw, color_fg, color_bg)
+                    self._loading.set_text("Loading Image...")
+
+                self._loading.animate(swap=True)
+                self._image_load_state += 1
+                self._needs_redraw = True
+                return
+
+            if self._image_load_state == 5:
+                if self._loading:
+                    self._loading.stop()
+                    del self._loading
+                    self._loading = None
+
+                draw.erase()
+
+                if self._image_path.lower().endswith("bmp"):
+                    draw.image_bmp(self._jpeg_vec, self._image_path)
+                else:
+                    if not draw.image_jpeg(
+                        self._jpeg_vec, self._image_path, self._vm.storage
+                    ):
+                        draw._text(sx(10), sy(30), "Format not supported", color_fg)
+                        draw._text(sx(10), sy(45), "or resolution too large.", color_fg)
+                        draw._text(sx(10), sy(60), "(Must be Baseline JPEG)", color_fg)
+                        draw._fill_rectangle(
+                            0, sh - bottom_bar_h, sw, bottom_bar_h, color_sel
+                        )
+                        draw._text(
+                            text_pad_x,
+                            sh - bottom_bar_h + text_line_y,
+                            "ESC : Close Image",
+                            color_bg,
+                        )
+
+                draw.swap()
+                self._image_load_state = 6
+                self._needs_redraw = False
+                return
+
+            self._needs_redraw = False
+            return
+
+        # 1.5 Text Viewer Overlay (Read-Only with Word Wrap)
+        if self._is_viewing_text:
+            viewer_bar_h = max(sy(20), self._five * 4)
+            draw._fill_rectangle(0, 0, sw, viewer_bar_h, color_sel)
+            draw._text(
+                sx(5), sy(4), f"View: {self._edit_file.split('/')[-1]}", color_fg
+            )
+            draw._fill_rectangle(0, sh - viewer_bar_h, sw, viewer_bar_h, color_sel)
+            draw._text(
+                sx(5),
+                sh - viewer_bar_h + sy(4),
+                "UP/DWN:Scroll   ESC:Close",
+                color_fg,
+            )
+
+            if self._text_viewer_box:
+                self._text_viewer_box.refresh()
+            else:
+                draw.swap()
+            self._needs_redraw = False
+            return
+
+        # 2. Text Editor Overlay
+        if self._is_editing:
+            if self._text_editor is not None:
+                if self._editor_state == self.MODE_MENU:
+                    self._context_menu.refresh()
+                else:
+                    self._text_editor.refresh()
+                self._needs_redraw = False
+                return
+
+        draw.erase()
+
+        # 3. Help Screen Overlay
+        if self._is_help_screen:
+            help_lines = (
+                ("--- FILE BROWSER SHORTCUTS ---", 5, color_sel),
+                ("[MAIN BROWSER]", 20, color_sel),
+                ("UP/DWN:Scroll   L/R:Switch Pane", 32, color_fg),
+                ("CENTER:Menu     ESC:Exit App", 44, color_fg),
+                ("SPACE:Mark/Sel  D:Delete Marked", 56, color_fg),
+                ("N:New Folder    I:File Info", 68, color_fg),
+                ("M:Dir Enter Mode", 80, color_fg),
+                ("O:Options       H:Toggle Help", 92, color_fg),
+                ("[TEXT EDITOR]", 108, color_sel),
+                ("Arrows:Cursor   CENTER:Newline", 120, color_fg),
+                ("SHF/CAPS:Upper  BSPC:Delete Char", 132, color_fg),
+                ("ESC:Menu (Save/Exit/Whitespace)", 144, color_fg),
+                ("[TEXT ENTRY & MENUS]", 160, color_sel),
+                ("SHF/CAPS:Case   L/R:Move Cursor", 172, color_fg),
+                ("CENTER:Confirm  ESC:Cancel", 184, color_fg),
+                ("[IMAGE & TEXT VIEWER]", 200, color_sel),
+                ("UP/DWN:Scroll   ESC: Close", 212, color_fg),
+            )
+            for text, y, color in help_lines:
+                draw._text(sx(10), sy(y), text, color)
+
+            draw.swap()
+            self._needs_redraw = False
+            return
+
+        # 4. File Info Window
+        if self._show_info:
+            if self._info_box is None:
+                from picoware.gui.textbox import TextBox
+
+                self._info_box = TextBox(draw, 0, sh, color_fg, color_bg)
+
+            self._info_box.set_text(self._info_data)
+            self._info_box.refresh()
+            self._needs_redraw = False
+            return
+
+        # 5. Options Menu
+        if self._show_options:
+            margin_x = sx(10)
+            margin_y = sy(10)
+            menu_x = margin_x
+            menu_y = margin_y
+            menu_w = sw - (margin_x * 2)
+            menu_h = sh - (margin_y * 2)
+            menu_header_h = max(sy(20), self._five * 4)
+            draw._fill_rectangle(menu_x, menu_y, menu_w, menu_h, color_bg)
+            draw._rectangle(menu_x, menu_y, menu_w, menu_h, color_sel)
+            draw._fill_rectangle(menu_x, menu_y, menu_w, menu_header_h, color_sel)
+            draw._text(menu_x + sx(5), menu_y + sy(4), "OPTIONS MENU", color_sel)
+            for i, l in enumerate(self.OPTIONS_LABELS):
+                yp = menu_y + sy(25) + (i * sy(15))
+                tc = color_sel if i == self._opt_idx else color_fg
+                if i == self._opt_idx:
+                    draw._fill_rectangle(
+                        menu_x + sx(2),
+                        yp - sy(2),
+                        menu_w - sx(4),
+                        max(sy(13), self._five * 2 + 1),
+                        color_bg,
+                    )
+                draw._text(menu_x + sx(10), yp, l + ":", tc)
+                v = ""
+                if i == 0:
+                    v = "Show" if self._app_state.get("show_hidden", False) else "Hide"
+                elif i == 1:
+                    v = "Menu" if self._app_state.get("dir_menu", True) else "Open"
+                draw._text(sx(130), yp, f"< {v} >", tc)
+            draw._fill_rectangle(menu_x, sh - sy(30), menu_w, menu_header_h, color_sel)
+            draw._text(
+                menu_x + sx(5),
+                sh - sy(26),
+                "[L/R] Edit   [ESC/ENT] Save",
+                color_bg,
+            )
+            draw.swap()
+            self._needs_redraw = False
+            return
+
+        # 6. Text Input Overlay (for renaming/creating)
+        if self._input_active:
+            box_h = sy(70)
+            box_x = sx(10)
+            box_y = (sh - box_h) // 2
+            box_w = sw - (box_x * 2)
+            title_h = sy(16)
+
+            draw._fill_rectangle(box_x, box_y, box_w, box_h, color_bg)
+            draw._rectangle(box_x, box_y, box_w, box_h, color_sel)
+            draw._fill_rectangle(box_x, box_y, box_w, title_h, color_sel)
+
+            ts = (
+                "RENAME"
+                if self._input_mode == self.MODE_RENAME
+                else "COPY AS" if self._input_mode == self.MODE_COPY_SAME else "NEW DIR"
+            )
+            ind = "A" if self._is_caps else ("^" if self._is_shift else "a")
+
+            input_x = box_x + sx(5)
+            draw._text(input_x, box_y + sy(2), "{} [{}]:".format(ts, ind), color_bg)
+            draw._text(input_x, box_y + sy(24), self._input_text, color_fg)
+
+            self._cursor_frame = (self._cursor_frame + 1) % 16
+            if self._cursor_frame < 8:
+                cursor_w = char_w
+                draw._fill_rectangle(
+                    input_x + (self._input_cursor * cursor_w),
+                    box_y + sy(35),
+                    cursor_w,
+                    max(1, sy(2)),
+                    color_fg,
+                )
+
+            self._needs_redraw = True
+            draw._text(input_x, box_y + sy(48), "ENT:Save ESC:Cancel", color_sel)
+            draw.swap()
+            return
+
+        # 7. Action Menus (Context and Confirmations)
+        if self._confirm_menu:
+            self._confirm_menu.refresh()
+            draw.swap()
+            self._needs_redraw = False
+            return
+
+        if self._context_menu:
+            self._context_menu.refresh()
+            draw.swap()
+            self._needs_redraw = False
+            return
+
+        # 8. Main Dual-Pane Browser View
+        draw._fill_rectangle(0, 0, sw, top_bar_h, color_sel)
+        dm = "Menu" if self._app_state.get("dir_menu", True) else "Open"
+
+        mk_len = len(self._app_state["marked"])
+        mk_str = f" [Sel:{mk_len}]" if mk_len > 0 else ""
+
+        if self._add_info:
+            draw._text(
+                text_pad_x, text_line_y, f"File Browser [Dir:{dm}]{mk_str}", color_fg
+            )
+        else:
+            draw._text(
+                text_pad_x, text_line_y, "File Browser", color_fg
+            )
+        draw._fill_rectangle(
+            mx,
+            top_bar_h,
+            splitter_w,
+            sh - (top_bar_h + bottom_bar_h),
+            color_sel,
+        )
+
+        c_lim = max(1, (mx - sx(8)) // char_w)
+        n_lim = max(1, c_lim - 6)
+        list_height = max(0, sh - first_item_y - bottom_bar_h)
+        m_itm = max(1, list_height // row_h)
+        ap = self._app_state["active_pane"]
+
+        storage = self._vm.storage
+        for pn in (self.PANE_LEFT, self.PANE_RIGHT):
+            il = pn == self.PANE_LEFT
+            xb = 0 if il else mx + splitter_w
+            pane_w = mx if il else sw - mx - splitter_w
+            ps = self._app_state["left_path"] if il else self._app_state["right_path"]
+            fl = self._app_state["left_files"] if il else self._app_state["right_files"]
+            ix = self._app_state["left_index"] if il else self._app_state["right_index"]
+
+            top_key = "left_top" if il else "right_top"
+            si = self._app_state.get(top_key, 0)
+
+            if ix < si:
+                si = ix
+            elif ix >= si + m_itm:
+                si = ix - m_itm + 1
+
+            self._app_state[top_key] = si
+
+            if ap == pn:
+                draw._fill_rectangle(xb, top_bar_h, pane_w, pane_header_h, color_sel)
+            draw._text(xb + text_pad_x, path_text_y, ps[:c_lim], color_fg)
+
+            yo = first_item_y
+            for i, fn in enumerate(fl[si : si + m_itm]):
+                ai = i + si
+                fp = f"/{fn}" if ps == "/" else f"{ps}/{fn}"
+
+                if fn == "..":
+                    isd, fz = True, 0
+                else:
+                    if fp in self._stat_cache:
+                        isd, fz = self._stat_cache[fp]
+                        if not isd and fz == -1:
+                            fz = storage.size(fp)
+                            self._stat_cache[fp] = (isd, fz)
+                    else:
+                        isd = storage.is_directory(fp)
+                        fz = storage.size(fp)
+                        self._stat_cache[fp] = (isd, fz)
+
+                sel = ap == pn and ai == ix
+                if sel:
+                    draw._fill_rectangle(
+                        xb + (0 if il else splitter_w),
+                        yo - sy(1),
+                        max(1, pane_w - sx(2)),
+                        max(1, row_h - sy(2)),
+                        color_fg if self._is_flipper else color_sel,
+                    )
+
+                szs = ""
+                if self._add_info:
+                    if isd:
+                        szs = "<DIR>"
+                    elif fz < 1024:
+                        szs = f"{fz}B"
+                    elif fz < 1048576:
+                        szs = f"{fz//1024}K"
+                    else:
+                        szs = f"{fz//1048576}M"
+
+                mk_char = "*" if fp in self._app_state["marked"] else ""
+                dn = f"{mk_char}/{fn}" if isd else f"{mk_char}{fn}"
+
+                pl = max(0, c_lim - len(dn[:n_lim]) - len(szs))
+                tc = color_bg if (self._is_flipper and sel) else color_fg
+                if self._add_info:
+                    draw._text(
+                        xb + text_pad_x, yo, dn[:n_lim] + (" " * pl) + szs, tc
+                    )
+                else:
+                    n_lim = min(c_lim, 14)
+                    draw._text(xb + text_pad_x, yo, dn[:n_lim], tc)
+                yo += row_h
+
+        draw._fill_rectangle(0, sh - bottom_bar_h, sw, bottom_bar_h, color_sel)
+        if self._add_info:
+            if self._mode == FILE_BROWSER_SELECTOR:
+                draw._text(
+                    text_pad_x,
+                    sh - bottom_bar_h + text_line_y,
+                    "ENT:Sel M:DirMode O:Opt",
+                    color_fg,
+                )
+            else:
+                draw._text(
+                    text_pad_x,
+                    sh - bottom_bar_h + text_line_y,
+                    "ENT:Menu SPC:Mark N:New M:DirMode O:Opt H:Help",
+                    color_fg,
+                )
+        draw.swap()
+        self._needs_redraw = False
+
+    def __save_settings(self) -> bool:
+        """Save user settings.
+
+        Returns:
+            bool: True on success, False on failure.
+        """
+        import json
+
+        try:
+            save_dict = {
+                k: self._app_state[k]
+                for k in [
+                    "left_path",
+                    "right_path",
+                    "active_pane",
+                    "show_hidden",
+                    "dir_menu",
+                    "left_top",
+                    "right_top",
+                ]
+            }
+            curr_j = json.dumps(save_dict)
+            self._vm.storage.write(
+                "picoware/settings/file_browser_state.json", curr_j, "w"
+            )
+            del curr_j
+            return True
+        except Exception as e:
+            self._vm.log(f"Failed to save settings: {e}", 2)
+            return False
+
+    def __sx(self, value: int) -> int:
+        """Scale a width/X coordinate.
+
+        Args:
+            value (int): The unscaled value.
+
+        Returns:
+            int: The scaled value.
+        """
+        if value == 0:
+            return 0
+        scaled = ((value) * self._screen_w) // 320
+        if scaled == 0:
+            scaled = 1
+        return -scaled if value < 0 else scaled
+
+    def __sy(self, value: int) -> int:
+        """Scale a height/Y coordinate.
+
+        Args:
+            value (int): The unscaled value.
+
+        Returns:
+            int: The scaled value.
+        """
+        if value == 0:
+            return 0
+        scaled = ((value) * self._screen_h) // 320
+        if scaled == 0:
+            scaled = 1
+        return -scaled if value < 0 else scaled
+
+    def run(self) -> bool:
+        """Run the app.
+
+        Returns:
+            bool: True to continue running, False to exit the app.
+        """
+
+        btn = self._vm.button
+
+        if btn is None or btn == BUTTON_NONE:
+            if self._needs_redraw:
+                self.__render()
+            return True
+
+        if self._is_viewing_image:
+            if btn in (BUTTON_ESCAPE, BUTTON_CENTER):
+                self._is_viewing_image = False
+                self._image_path = ""
+                self._needs_redraw = True
+
+        elif self._is_viewing_text:
+            if btn in (BUTTON_ESCAPE, BUTTON_CENTER):
+                self._is_viewing_text = False
+                if self._text_viewer_box:
+                    self._text_viewer_box.clear()
+                    del self._text_viewer_box
+                    self._text_viewer_box = None
+                self._needs_redraw = True
+            elif btn == BUTTON_UP:
+                if self._text_viewer_box:
+                    self._text_viewer_box.scroll_up()
+            elif btn == BUTTON_DOWN:
+                if self._text_viewer_box:
+                    self._text_viewer_box.scroll_down()
+            elif btn == BUTTON_CTRL_UP:
+                if self._text_viewer_box:
+                    self._text_viewer_box.jump_to_top()
+            elif btn == BUTTON_CTRL_DOWN:
+                if self._text_viewer_box:
+                    self._text_viewer_box.jump_to_bottom()
+
+        elif (
+            self._is_editing
+            and self._editor_state == self.MODE_EDITING
+            and self._confirm_menu is None
+        ):
+            if btn == BUTTON_ESCAPE:
+                menu_title = "Unsaved Changes!" if self._edit_unsaved else "Editor Menu"
+
+                self._context_menu = self.__menu_spawn(
+                    menu_title, ("Save", "Save & Exit", "Exit", "Cancel")
+                )
+                self._editor_state = self.MODE_MENU
+                self._needs_redraw = True
+            elif self._text_editor is not None:
+                prev_text_len = len(self._text_editor.current_text)
+                self._text_editor.run()
+                if len(self._text_editor.current_text) != prev_text_len:
+                    self._edit_unsaved = True
+
+        elif self._show_info:
+            if btn in (BUTTON_ESCAPE, BUTTON_CENTER):
+                self._show_info = False
+                self._info_data = ""
+                if self._info_box:
+                    del self._info_box
+                    self._info_box = None
+                self._needs_redraw = True
+            elif btn == BUTTON_UP:
+                if self._info_box:
+                    self._info_box.scroll_up()
+            elif btn == BUTTON_DOWN:
+                if self._info_box:
+                    self._info_box.scroll_down()
+
+        elif self._input_active:
+            if btn == BUTTON_ESCAPE:
+                self._input_active = False
+                self._is_shift = False
+                self._is_caps = False
+                self._needs_redraw = True
+            elif btn == BUTTON_CENTER:
+                new_name = self._input_text.strip()
+                rn = False
+
+                if new_name:
+                    td = (
+                        self._app_state["left_path"]
+                        if self._app_state["active_pane"] == self.PANE_LEFT
+                        else self._app_state["right_path"]
+                    )
+                    np = f"/{new_name}" if td == "/" else f"{td}/{new_name}"
+
+                    storage = self._vm.storage
+
+                    if (
+                        self._input_mode in (self.MODE_RENAME, self.MODE_COPY_SAME)
+                        and np != self._context_target_path
+                    ):
+                        if storage.exists(np):
+                            self._pending_dest_path = np
+                            self._pending_action = (
+                                self.ACT_RENAME
+                                if self._input_mode == self.MODE_RENAME
+                                else self.ACT_COPY
+                            )
+                            self._confirm_menu = self.__menu_spawn(
+                                "Overwrite?", ("No", "Yes")
+                            )
+                            self._input_active = False
+                            self._is_shift = False
+                            self._is_caps = False
+                            self._needs_redraw = True
+                            return True
+
+                        if self._input_mode == self.MODE_RENAME:
+                            self.__loading_run("Renaming...", 0.0)
+                            if storage.move(self._context_target_path, np):
+                                rn = True
+                            self.__loading_run("Renamed", 1.0)
+                        elif self._input_mode == self.MODE_COPY_SAME:
+                            self.__loading_run("Copying...", 0.0)
+                            if storage.copy(self._context_target_path, np):
+                                rn = True
+                            self.__loading_run("Copied", 1.0)
+                    elif self._input_mode == self.MODE_MKDIR:
+                        if not storage.exists(np):
+                            if storage.mkdir(np):
+                                rn = True
+                if rn:
+                    self.__refresh_panes()
+
+                if not self._confirm_menu:
+                    self._input_active = False
+                    self._is_shift = False
+                    self._is_caps = False
+                    self._context_target_path = ""
+                    self._needs_redraw = True
+            elif btn in (BUTTON_SHIFT, KEY_MOD_SHL, KEY_MOD_SHR):
+                self._is_shift = not self._is_shift
+                self._needs_redraw = True
+            elif btn in (BUTTON_CAPS_LOCK, KEY_CAPS_LOCK):
+                self._is_caps = not self._is_caps
+                self._is_shift = False
+                self._needs_redraw = True
+            elif btn == BUTTON_LEFT:
+                if self._input_cursor > 0:
+                    self._input_cursor -= 1
+                    self._needs_redraw = True
+            elif btn == BUTTON_RIGHT:
+                if self._input_cursor < len(self._input_text):
+                    self._input_cursor += 1
+                    self._needs_redraw = True
+            elif btn == BUTTON_BACKSPACE:
+                if self._input_cursor > 0:
+                    self._input_text = (
+                        self._input_text[: self._input_cursor - 1]
+                        + self._input_text[self._input_cursor :]
+                    )
+                    self._input_cursor -= 1
+                    self._needs_redraw = True
+            else:
+                c = self._vm.input_manager.button_to_char(btn)
+                max_input_chars = max(
+                    1,
+                    (self._screen_w - (self.__sx(20) + self.__sx(10)))
+                    // max(1, self._vm.draw.font_size.x),
+                )
+                if c and len(self._input_text) < max_input_chars:
+                    self._input_text = (
+                        self._input_text[: self._input_cursor]
+                        + c
+                        + self._input_text[self._input_cursor :]
+                    )
+                    self._input_cursor += 1
+                    self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_SPACE
+            and not self._is_help_screen
+            and not self._show_options
+            and self._confirm_menu is None
+            and self._context_menu is None
+            and not self._input_active
+            and not self._show_info
+        ):
+            if self._mode == FILE_BROWSER_MANAGER:
+                ap = self._app_state["active_pane"]
+                cp = (
+                    self._app_state["left_path"]
+                    if ap == self.PANE_LEFT
+                    else self._app_state["right_path"]
+                )
+                fl = (
+                    self._app_state["left_files"]
+                    if ap == self.PANE_LEFT
+                    else self._app_state["right_files"]
+                )
+                ix = (
+                    self._app_state["left_index"]
+                    if ap == self.PANE_LEFT
+                    else self._app_state["right_index"]
+                )
+
+                if len(fl) > 0:
+                    sf = fl[ix]
+                    if sf != "..":
+                        fp = f"/{sf}" if cp == "/" else f"{cp}/{sf}"
+                        if fp in self._app_state["marked"]:
+                            self._app_state["marked"].remove(fp)
+                        else:
+                            self._app_state["marked"].append(fp)
+
+                        if ap == self.PANE_LEFT:
+                            self._app_state["left_index"] = (ix + 1) % len(fl)
+                        else:
+                            self._app_state["right_index"] = (ix + 1) % len(fl)
+                        self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_M
+            and not self._is_help_screen
+            and not self._show_options
+            and self._confirm_menu is None
+            and self._context_menu is None
+            and not self._input_active
+        ):
+            self._app_state["dir_menu"] = not self._app_state.get("dir_menu", True)
+            self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_H
+            and self._confirm_menu is None
+            and self._context_menu is None
+            and not self._input_active
+            and not self._show_options
+        ):
+            self._is_help_screen = not self._is_help_screen
+            self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_O
+            and not self._is_help_screen
+            and self._confirm_menu is None
+            and self._context_menu is None
+            and not self._input_active
+        ):
+            self._show_options = True
+            self._opt_idx = 0
+            self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_N
+            and not self._is_help_screen
+            and not self._show_options
+            and self._confirm_menu is None
+            and self._context_menu is None
+        ):
+            if self._mode == FILE_BROWSER_MANAGER:
+                self._input_active = True
+                self._input_mode = self.MODE_MKDIR
+                self._input_text = ""
+                self._input_cursor = 0
+                self._is_shift = False
+                self._is_caps = False
+                self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_I
+            and not self._is_help_screen
+            and not self._show_options
+            and self._confirm_menu is None
+            and self._context_menu is None
+            and not self._show_info
+        ):
+            ap = self._app_state["active_pane"]
+            cp = (
+                self._app_state["left_path"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_path"]
+            )
+            fl = (
+                self._app_state["left_files"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_files"]
+            )
+            ix = (
+                self._app_state["left_index"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_index"]
+            )
+
+            if len(fl) > 0:
+                sf = fl[ix]
+                if sf != "..":
+                    storage = self._vm.storage
+                    fp = f"/{sf}" if cp == "/" else f"{cp}/{sf}"
+                    isd = False
+                    fz = 0
+                    if fp in self._stat_cache:
+                        isd = self._stat_cache[fp][0]
+                        fz = storage.size(fp)
+                    else:
+                        isd = storage.is_directory(fp)
+                        fz = storage.size(fp)
+
+                    self._info_data = (
+                        f"Name: {sf}\n"
+                        f"Type: {'Directory' if isd else 'File'}\n"
+                        f"Size: {fz} bytes"
+                    )
+                    self._show_info = True
+                    self._needs_redraw = True
+
+        elif (
+            btn == BUTTON_D
+            and not self._is_help_screen
+            and not self._show_options
+            and self._confirm_menu is None
+            and self._context_menu is None
+        ):
+            if self._mode == FILE_BROWSER_MANAGER:
+                mk = self._app_state["marked"]
+                if len(mk) > 0:
+                    self._pending_action = self.ACT_DELETE
+                    self._confirm_menu = self.__menu_spawn(
+                        f"Delete {len(mk)} items?", ("No", "Yes")
+                    )
+                else:
+                    ap = self._app_state["active_pane"]
+                    cp = (
+                        self._app_state["left_path"]
+                        if ap == self.PANE_LEFT
+                        else self._app_state["right_path"]
+                    )
+                    fl = (
+                        self._app_state["left_files"]
+                        if ap == self.PANE_LEFT
+                        else self._app_state["right_files"]
+                    )
+                    ix = (
+                        self._app_state["left_index"]
+                        if ap == self.PANE_LEFT
+                        else self._app_state["right_index"]
+                    )
+
+                    if len(fl) > 0:
+                        sf = fl[ix]
+                        if sf != "..":
+                            self._context_target_path = (
+                                f"/{sf}" if cp == "/" else f"{cp}/{sf}"
+                            )
+                            self._pending_action = self.ACT_DELETE
+                            self._confirm_menu = self.__menu_spawn(
+                                "Confirm Delete?", ("No", "Yes")
+                            )
+            self._needs_redraw = True
+
+        elif self._show_options:
+            if btn in (BUTTON_ESCAPE, BUTTON_CENTER):
+                self._show_options = False
+                self.__refresh_panes()
+                self._needs_redraw = True
+            elif btn == BUTTON_UP:
+                self._opt_idx = (self._opt_idx - 1) % len(self.OPTIONS_LABELS)
+                self._needs_redraw = True
+            elif btn == BUTTON_DOWN:
+                self._opt_idx = (self._opt_idx + 1) % len(self.OPTIONS_LABELS)
+                self._needs_redraw = True
+            elif btn in (BUTTON_LEFT, BUTTON_RIGHT):
+                self._needs_redraw = True
+                idx = self._opt_idx
+                if idx == 0:
+                    self._app_state["show_hidden"] = not self._app_state.get(
+                        "show_hidden", False
+                    )
+                elif idx == 1:
+                    self._app_state["dir_menu"] = not self._app_state.get(
+                        "dir_menu", True
+                    )
+
+        elif self._confirm_menu is not None:
+            if btn == BUTTON_ESCAPE:
+                del self._confirm_menu
+                self._confirm_menu = None
+                self._pending_action = self.ACT_NONE
+                self._pending_dest_path = ""
+                self._needs_redraw = True
+            elif btn == BUTTON_UP:
+                self._confirm_menu.scroll_up()
+                self._needs_redraw = True
+            elif btn == BUTTON_DOWN:
+                self._confirm_menu.scroll_down()
+                self._needs_redraw = True
+            elif btn == BUTTON_CENTER:
+                sl = self._confirm_menu.current_item
+
+                if sl == "Yes":
+                    storage = self._vm.storage
+                    mk = self._app_state["marked"]
+                    targets = mk if len(mk) > 0 else [self._context_target_path]
+
+                    if self._pending_action == self.ACT_DELETE:
+                        total = len(targets)
+                        for i, t in enumerate(targets):
+                            self.__loading_run(
+                                f"Deleting {int((i/total)*100)}%", i / total
+                            )
+                            if not storage.remove(t):
+                                self._vm.log(f"Delete Error on: {t}", 2)
+                        self.__loading_run("Deleted", 1.0)
+
+                    elif self._pending_action in (self.ACT_COPY, self.ACT_MOVE):
+                        total = len(targets)
+                        act_name = (
+                            "Copying"
+                            if self._pending_action == self.ACT_COPY
+                            else "Moving"
+                        )
+
+                        if total == 1:
+                            self.__loading_run(f"{act_name}...", 0.5)
+
+                        for i, t in enumerate(targets):
+                            if total > 1:
+                                self.__loading_run(
+                                    f"Batch {act_name} {int((i/total)*100)}%", i / total
+                                )
+
+                            dp = self._pending_dest_path
+                            if len(mk) > 0:
+                                dp = f"{dp}/{t.split('/')[-1]}".replace("//", "/")
+
+                            if t != dp:
+                                if storage.exists(dp):
+                                    storage.remove(dp)
+
+                                if self._pending_action == self.ACT_COPY:
+                                    if not storage.copy(t, dp):
+                                        self._vm.log(f"Copy Error on: {t}", 2)
+                                else:
+                                    if not storage.move(t, dp):
+                                        self._vm.log(f"Move Error on: {t}", 2)
+
+                        self.__loading_run("Done", 1.0)
+
+                    elif self._pending_action == self.ACT_RENAME:
+                        self.__loading_run("Renaming...", 0.0)
+                        if storage.exists(self._pending_dest_path):
+                            storage.remove(self._pending_dest_path)
+                        if not storage.move(
+                            self._context_target_path, self._pending_dest_path
+                        ):
+                            self._vm.log(
+                                f"Rename Error on: {self._context_target_path}", 2
+                            )
+                        self.__loading_run("Renamed", 1.0)
+
+                    elif self._pending_action == self.ACT_FLASH:
+                        self.__loading_run("Flashing...", 0.5)
+                        from picoware.system.uf2loader import UF2Loader
+
+                        uf2 = UF2Loader()
+                        uf2.flash(self._context_target_path)
+                        self.__loading_run("Done", 1.0)
+
+                    elif self._pending_action == self.ACT_AUDIO:
+                        if not MEDIA_ENABLED:
+                            self._vm.alert("Audio playback is not included in this firmware.")
+                            self._pending_action = self.ACT_NONE
+                            return True
+                        _is_wav = ".wav" in self._context_target_path.lower()
+                        if self._loading:
+                            self._loading.stop()
+
+                        _should_play = True
+
+                        if not _is_wav:
+                            # don't allow rp2040 for now...
+                            from picoware_boards import get_device_name
+
+                            _device = get_device_name()
+                            if "2" not in _device:
+                                self._vm.alert("MP3 playback requires rp2350")
+                                _should_play = False
+
+                        if _should_play:
+                            self.__loading_run("Playing...", 0.5)
+
+                            audio = self._vm.audio
+                            if audio:
+                                play_func: callable = (
+                                    audio.play_wav if _is_wav else audio.play_mp3
+                                )
+                                if play_func(self._context_target_path):
+                                    inp = self._vm.input_manager
+                                    inp.reset()
+                                    while audio.is_playing:
+                                        but = inp.button
+                                        if but in (
+                                            BUTTON_ESCAPE,
+                                            BUTTON_CENTER,
+                                        ):
+                                            break
+                                        self.__loading_run("Playing....", 0.5)
+                                    audio.stop()
+
+                    elif self._pending_action == self.ACT_VIDEO:
+                        self.__file_watch(self._context_target_path)
+
+                    elif self._pending_action == self.ACT_UNZIP:
+                        self.__zip_unzip(self._context_target_path)
+
+                    if len(mk) > 0:
+                        self._app_state["marked"].clear()
+                    if self._pending_action != self.ACT_NONE:
+                        self.__refresh_panes()
+
+                del self._confirm_menu
+                self._confirm_menu = None
+                self._pending_action = self.ACT_NONE
+                self._context_target_path = self._pending_dest_path = ""
+                self._needs_redraw = True
+
+        elif self._context_menu is not None:
+            if btn == BUTTON_ESCAPE:
+                del self._context_menu
+                self._context_menu = None
+                self._editor_state = self.MODE_EDITING
+                self._needs_redraw = True
+            elif btn == BUTTON_UP:
+                self._context_menu.scroll_up()
+                self._needs_redraw = True
+            elif btn == BUTTON_DOWN:
+                self._context_menu.scroll_down()
+                self._needs_redraw = True
+            elif btn == BUTTON_CENTER:
+                ac = self._context_menu.current_item
+
+                if self._is_editing:
+                    if ac in ("Save", "Save & Exit"):
+                        self.__loading_run("Saving...", 0.5)
+
+                        data = self._text_editor.current_text
+
+                        result = self._vm.storage.write(self._edit_file, data, "w")
+                        if result:
+                            self._edit_unsaved = False
+                        del data  # Plug memory leak right after save
+                        self.__loading_run("Saved", 1.0)
+                        if ac == "Save & Exit":
+                            self._is_editing = False
+                            self._is_shift = False
+                            self._is_caps = False
+                            self._text_editor = None
+                        else:
+                            self._text_editor.refresh()
+                    elif ac in ("Exit", "Exit without Saving"):
+                        self._is_editing = False
+                        self._is_shift = False
+                        self._is_caps = False
+                        self._text_editor = None
+
+                    del self._context_menu
+                    self._context_menu = None
+                    self._editor_state = self.MODE_EDITING
+                    self._needs_redraw = True
+                else:
+                    if ac == "Cancel":
+                        pass
+                    elif ac == "Clear Marks":
+                        self._app_state["marked"].clear()
+                        self.__refresh_panes()
+                    elif ac == "Open":
+                        if self._app_state["active_pane"] == self.PANE_LEFT:
+                            self._app_state["left_path"] = self._context_target_path
+                            self._app_state["left_index"] = 0
+                        else:
+                            self._app_state["right_path"] = self._context_target_path
+                            self._app_state["right_index"] = 0
+                        self.__refresh_panes()
+                    elif ac == "View":
+                        self.__file_view(self._context_target_path)
+                    elif ac == "List":
+                        self.__zip_list(self._context_target_path)
+                    elif ac == "Edit":
+                        self.__file_edit(self._context_target_path)
+                    elif ac == "Run":
+                        if not EXTRA_LANGUAGES_ENABLED:
+                            self._vm.alert("This language is not included in this firmware.")
+                            self._context_menu = None
+                            self._needs_redraw = True
+                            return True
+                        if self._context_target_path.endswith("js"):
+                            from picoware.system.js import JS
+                            mjs = JS()
+                            result = mjs.exec(self._context_target_path)
+                            if result:
+                                self._vm.log(f'JS Result: {result}', -1)
+                            del mjs
+                            mjs = None
+                        elif self._context_target_path.endswith("bas"): # basic
+                            from picoware.system.mmbasic import MMBasic
+                            bs = MMBasic(self._vm)
+                            bs.start(path=self._context_target_path)
+                            inp = self._vm.input_manager
+                            inp.reset()
+                            while bs.run():
+                                pass
+                            del bs
+                            bs = None
+                        elif self._context_target_path.endswith("c"): # C source
+                            from picoware.system.c import C
+                            c = C()
+                            result = c.exec(self._context_target_path)
+                            if result:
+                                self._vm.log(f'C Compile Result: {result}', -1)
+                            del c
+                            c = None
+                    elif ac == "Delete":
+                        self._pending_action = self.ACT_DELETE
+                        mk = self._app_state["marked"]
+                        msg = (
+                            f"Delete {len(mk)} items?"
+                            if len(mk) > 0
+                            else "Confirm Delete?"
+                        )
+                        self._confirm_menu = self.__menu_spawn(msg, ("No", "Yes"))
+                    elif ac == "Flash":
+                        self._pending_action = self.ACT_FLASH
+                        fn = self._context_target_path.split("/")[-1]
+                        self._confirm_menu = self.__menu_spawn("Flash?", ("No", "Yes"))
+                    elif ac == "Play Audio":
+                        self._pending_action = self.ACT_AUDIO
+                        fn = self._context_target_path.split("/")[-1]
+                        self._confirm_menu = self.__menu_spawn("Play?", ("No", "Yes"))
+                    elif ac == "Watch Video":
+                        self._pending_action = self.ACT_VIDEO
+                        fn = self._context_target_path.split("/")[-1]
+                        self._confirm_menu = self.__menu_spawn("Watch Video?", ("No", "Yes"))
+                    elif ac == "Unzip":
+                        self._pending_action = self.ACT_UNZIP
+                        self._confirm_menu = self.__menu_spawn(
+                            "Unzip here?", ("No", "Yes")
+                        )
+                    elif ac == "Rename":
+                        self._input_active = True
+                        self._input_text = self._context_target_path.split("/")[-1]
+                        self._input_cursor = len(self._input_text)
+                        self._input_mode = self.MODE_RENAME
+                        self._is_shift = False
+                        self._is_caps = False
+                    elif ac in ("Copy", "Move"):
+                        ap = self._app_state["active_pane"]
+                        td = (
+                            self._app_state["right_path"]
+                            if ap == self.PANE_LEFT
+                            else self._app_state["left_path"]
+                        )
+                        mk = self._app_state["marked"]
+
+                        if len(mk) > 0:
+                            self._pending_action = (
+                                self.ACT_COPY if ac == "Copy" else self.ACT_MOVE
+                            )
+                            self._pending_dest_path = td
+                            self._confirm_menu = self.__menu_spawn(
+                                f"Confirm {ac}?", ("No", "Yes")
+                            )
+                        else:
+                            fn = self._context_target_path.split("/")[-1]
+                            dp = (
+                                f"/{fn}"
+                                if td == "/"
+                                else f"/{td}/{fn}".replace("//", "/")
+                            )
+
+                            if dp == self._context_target_path:
+                                self._input_active = True
+                                self._input_text = fn
+                                self._input_cursor = len(self._input_text)
+                                self._input_mode = (
+                                    self.MODE_COPY_SAME
+                                    if ac == "Copy"
+                                    else self.MODE_RENAME
+                                )
+                                self._is_shift = False
+                                self._is_caps = False
+                            else:
+                                self._pending_action = (
+                                    self.ACT_COPY if ac == "Copy" else self.ACT_MOVE
+                                )
+                                self._pending_dest_path = dp
+                                ex = self._vm.storage.exists(dp)
+                                msg = "Overwrite?" if ex else f"Confirm {ac}?"
+                                self._confirm_menu = self.__menu_spawn(
+                                    msg, ("No", "Yes")
+                                )
+                    del self._context_menu
+                    self._context_menu = None
+                    self._needs_redraw = True
+
+        # --- Main File Browser Input: Navigation and Exiting ---
+        elif btn == BUTTON_ESCAPE:
+            if self._is_help_screen:
+                self._is_help_screen = False
+                self._needs_redraw = True
+            else:
+                self.__save_settings()
+                self._mode = self.MODE_EXIT
+                return False
+
+        elif btn == BUTTON_LEFT and not self._is_help_screen:
+            self._app_state["active_pane"] = self.PANE_LEFT
+            self._needs_redraw = True
+
+        elif btn == BUTTON_RIGHT and not self._is_help_screen:
+            self._app_state["active_pane"] = self.PANE_RIGHT
+            self._needs_redraw = True
+
+        elif btn == BUTTON_UP and not self._is_help_screen:
+            ap = self._app_state["active_pane"]
+            fl = (
+                self._app_state["left_files"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_files"]
+            )
+            ix = (
+                self._app_state["left_index"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_index"]
+            )
+
+            fln = len(fl)
+            if fln > 0:
+                if ap == self.PANE_LEFT:
+                    self._app_state["left_index"] = (ix - 1) % fln
+                else:
+                    self._app_state["right_index"] = (ix - 1) % fln
+                self._needs_redraw = True
+
+        elif btn == BUTTON_DOWN and not self._is_help_screen:
+            ap = self._app_state["active_pane"]
+            fl = (
+                self._app_state["left_files"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_files"]
+            )
+            ix = (
+                self._app_state["left_index"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_index"]
+            )
+
+            fln = len(fl)
+            if fln > 0:
+                if ap == self.PANE_LEFT:
+                    self._app_state["left_index"] = (ix + 1) % fln
+                else:
+                    self._app_state["right_index"] = (ix + 1) % fln
+                self._needs_redraw = True
+
+        elif btn == BUTTON_CENTER and not self._is_help_screen:
+            ap = self._app_state["active_pane"]
+            cp = (
+                self._app_state["left_path"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_path"]
+            )
+            fl = (
+                self._app_state["left_files"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_files"]
+            )
+            ix = (
+                self._app_state["left_index"]
+                if ap == self.PANE_LEFT
+                else self._app_state["right_index"]
+            )
+
+            if len(fl) > 0:
+                sf = fl[ix]
+                if sf == "..":
+                    pts = cp.rstrip("/").split("/")
+                    fe = pts[-1] if len(pts) > 1 else ""
+                    pr = "/" + "/".join(pts[1:-1])
+                    if pr in ("//", ""):
+                        pr = "/"
+
+                    if ap == self.PANE_LEFT:
+                        self._app_state["left_path"] = pr
+                    else:
+                        self._app_state["right_path"] = pr
+
+                    self.__refresh_panes()
+
+                    nf = (
+                        self._app_state["left_files"]
+                        if ap == self.PANE_LEFT
+                        else self._app_state["right_files"]
+                    )
+                    try:
+                        nix = nf.index(fe)
+                    except ValueError:
+                        nix = 0
+
+                    if ap == self.PANE_LEFT:
+                        self._app_state["left_index"] = nix
+                    else:
+                        self._app_state["right_index"] = nix
+                else:
+                    np = f"/{sf}" if cp == "/" else f"{cp}/{sf}"
+
+                    isd = False
+                    if np in self._stat_cache:
+                        isd = self._stat_cache[np][0]
+                    else:
+                        isd = self._vm.storage.is_directory(np)
+
+                    if self._mode == FILE_BROWSER_SELECTOR and not isd:
+                        self.__save_settings()
+                        self._mode = self.MODE_SELECT
+                        return False
+
+                    mk = self._app_state["marked"]
+
+                    if (
+                        isd
+                        and not self._app_state.get("dir_menu", True)
+                        and len(mk) == 0
+                    ):
+                        if ap == self.PANE_LEFT:
+                            self._app_state["left_path"] = np
+                            self._app_state["left_index"] = 0
+                        else:
+                            self._app_state["right_path"] = np
+                            self._app_state["right_index"] = 0
+                        self.__refresh_panes()
+                    elif self._mode == FILE_BROWSER_MANAGER and len(mk) > 0:
+                        self._context_target_path = np
+                        items = ["Open"] if isd else []
+                        items.extend(
+                            ["Copy", "Move", "Delete", "Clear Marks", "Cancel"]
+                        )
+                        self._context_menu = self.__menu_spawn(
+                            f"{len(mk)} Marked", items
+                        )
+                    else:
+                        self._context_target_path = np
+
+                        if isd:
+                            items = ["Open"]
+                        else:
+                            if np.lower().endswith(".uf2"):
+                                items = ["Flash"]
+                            elif np.lower().endswith(".zip"):
+                                items = ["List"]
+                                if self._mode == FILE_BROWSER_MANAGER:
+                                    items.append("Unzip")
+                            elif np.lower().endswith((".wav", ".mp3")):
+                                items = ["Play Audio"] if MEDIA_ENABLED else []
+                            elif np.lower().endswith((".mp4", ".avi", ".mov")):
+                                items = ["Watch Video"] if MEDIA_ENABLED else []
+                            elif np.lower().endswith((".js", ".mjs", ".bas", ".c")):
+                                items = (["Run"] if EXTRA_LANGUAGES_ENABLED else []) + ["View", "Edit"]
+                            else:
+                                is_img = np.lower().endswith((".jpg", ".jpeg", ".bmp"))
+                                items = ["View"] if is_img else ["View", "Edit"]
+
+                        if self._mode == FILE_BROWSER_MANAGER:
+                            items.extend(["Copy", "Move", "Rename", "Delete"])
+                        items.append("Cancel")
+                        self._context_menu = self.__menu_spawn(sf[:14], items)
+                        if (
+                            self._context_menu is not None
+                            and not isd
+                            and not np.lower().endswith((".jpg", ".jpeg", ".bmp", ".uf2", ".wav", ".mp3", ".js"))
+                            and "." in sf
+                            and sf.split(".")[-1].lower()
+                            in self.TEXT_EDITABLE_EXTENSIONS
+                            and self._context_menu.item_exists("Edit")
+                        ):
+                            self._context_menu.set_selected(1)
+                self._needs_redraw = True
+
+        if self._needs_redraw:
+            self.__render()
+
+        return True

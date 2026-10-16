@@ -1,0 +1,129 @@
+"""WiFi SSID - Enter a WiFi network name."""
+
+_ssid_is_running = False
+_ssid_save_requested = False
+_back_hit = False
+_keyboard_started = False
+
+
+def __callback_save(result: str) -> None:
+    """Callback for when the SSID is saved.
+
+    Args:
+        result (str): The saved SSID value.
+    """
+
+    global _ssid_is_running
+    global _ssid_save_requested
+
+    if not _ssid_is_running:
+        return
+
+    _ssid_save_requested = True
+
+
+def start(view_manager) -> bool:
+    """Start the app and open the SSID keyboard.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+
+    Returns:
+        bool: True if the keyboard started, False on failure.
+    """
+    from picoware.applications.wifi.utils import load_wifi_ssid
+
+    global _ssid_is_running
+    global _ssid_save_requested
+    global _back_hit
+    global _keyboard_started
+
+    _ssid_is_running = True
+    _ssid_save_requested = False
+    _back_hit = False
+    _keyboard_started = False
+
+    keyboard = view_manager.keyboard
+
+    if keyboard is None:
+        view_manager.alert("No keyboard available")
+        return False
+    keyboard.input_manager.reset()
+    keyboard.set_save_callback(__callback_save)
+    keyboard.response = load_wifi_ssid(view_manager)
+    keyboard.title = "Enter WiFi SSID"
+
+    return keyboard.run(force=True)
+
+
+def run(view_manager) -> None:
+    """Run the app and handle keyboard input.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+    """
+    from picoware.system.buttons import (
+        BUTTON_ESCAPE,
+    )
+
+    global _ssid_is_running
+    global _ssid_save_requested
+    global _back_hit
+    global _keyboard_started
+
+    if not _ssid_is_running:
+        return
+
+    button = view_manager.button
+
+    if button == BUTTON_ESCAPE:
+        _back_hit = True
+        _ssid_is_running = False
+        view_manager.back()
+        return
+
+    keyboard = view_manager.keyboard
+    if not keyboard:
+        return
+
+    if _ssid_save_requested:
+        _ssid_save_requested = False
+        ssid = keyboard.response
+        from picoware.applications.wifi.utils import (
+            save_wifi_ssid,
+        )
+
+        if not save_wifi_ssid(view_manager.storage, ssid):
+            view_manager.alert("Failed to save WiFi SSID.\nCheck the SD card.")
+            return
+        keyboard.reset()
+        _ssid_is_running = False
+        view_manager.back()
+        return
+
+    if not _keyboard_started:
+        keyboard.run(force=True)
+        _keyboard_started = True
+    else:
+        if not keyboard.run():
+            view_manager.back()
+
+
+def stop(view_manager) -> None:
+    """Stop the app and reset state.
+
+    Args:
+        view_manager (ViewManager): The view manager instance for display and storage access.
+    """
+    from gc import collect
+
+    global _ssid_is_running
+    global _ssid_save_requested
+    global _back_hit
+
+    _ssid_is_running = False
+    _ssid_save_requested = False
+    _back_hit = False
+    view_manager.keyboard.reset()
+
+    collect()

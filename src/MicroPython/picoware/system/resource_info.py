@@ -1,0 +1,64 @@
+"""Measured resource counters; unknown whole-chip usage is never inferred."""
+
+def snapshot(vm):
+    from gc import mem_free,mem_alloc
+    from picoware.system.system import System
+    from picoware.system import boards
+    from sys import platform
+    system=System()
+    free,used=mem_free(),mem_alloc()
+    rows=[('Heap',free,used,free+used)]
+    try:
+        from os import statvfs
+        stat=statvfs('/')
+        unit=stat[1] or stat[0]
+        total=unit*stat[2]
+        available=unit*stat[4]
+        rows.append(('Flash',available,total-available,total))
+    except Exception: rows.append(('Flash',None,None,None))
+    try:
+        total=system.total_psram
+        available=system.free_psram
+        rows.append(('PSRAM',available,total-available,total))
+    except Exception: rows.append(('PSRAM',None,None,None))
+    # Physical SRAM includes the two scratch banks (SDK SRAM_END-SRAM_BASE).
+    if boards.BOARD_ID in (boards.BOARD_PICOCALC_PICO_2,boards.BOARD_PICOCALC_PICO_2W,boards.BOARD_PICOCALC_PIMORONI_2W):
+        total=520*1024
+    elif boards.BOARD_ID in (boards.BOARD_PICOCALC_PICO,boards.BOARD_PICOCALC_PICOW): total=264*1024
+    else: total=None
+    rows.append(('SRAM',None,None,total))
+    return {'board':system.board_name,'frequency':system.freq,'rows':rows,
+            'simulator':platform in ('darwin','linux','win32')}
+
+
+def compact(value):
+    if value is None: return '-'
+    if value<1024: return str(value)+'B'
+    if value<1000*1024: return str(value//1024)+'K'
+    if value<10*1024*1024: return '%.1fM' % (value/(1024*1024))
+    if value<1000*1024*1024: return str(value//(1024*1024))+'M'
+    if value<1000*1024*1024*1024: return str(value//(1024*1024*1024))+'G'
+    return '%.1fT' % (value/(1024*1024*1024*1024))
+
+
+def lines(info):
+    board='Board: '+info['board']
+    result=[]
+    while len(board)>26:
+        split=board.rfind(' ',0,26)
+        if split<1: split=26
+        result.append(board[:split]); board=board[split:].lstrip()
+    result.append(board)
+    result.append('Frequency: %d MHz' % info['frequency'])
+    result.append('       Free Used  Tot  %F')
+    for name,free,used,total in info['rows']:
+        percent=str(int(100*free/total)) if free is not None and total else '-'
+        result.append('%-5s %4s %4s %4s %3s' % (name,compact(free),compact(used),compact(total),percent))
+    result.extend(('F1/Back returns to menu','K/M/G are binary units','Flash = filesystem space',
+                   'SRAM usage unavailable','Heap is part of SRAM'))
+    if info['simulator']: result.append('Simulator: host counters')
+    for name,free,used,total in info['rows']:
+        result.append(name+' bytes:')
+        for label,value in (('Free',free),('Used',used),('Total',total)):
+            result.append(' '+label+': '+(str(value) if value is not None else 'unavailable'))
+    return result

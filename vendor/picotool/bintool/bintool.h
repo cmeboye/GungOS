@@ -1,0 +1,47 @@
+#pragma once
+
+#include <functional>
+
+#if HAS_MBEDTLS
+    #include "mbedtls_wrapper.h"
+#endif
+#include "elf_file.h"
+#include "metadata.h"
+#include "model.h"
+
+typedef enum verified_t {
+    none,
+    failed,
+    passed
+} verified_t;
+
+// Common
+#if HAS_MBEDTLS
+    int read_keys(const std::string &filename, public_t *public_key, private_t *private_key);
+    void hash_andor_sign_block(block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, std::vector<uint8_t> to_hash = {});
+    bool detect_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t model, bool &pin_xip_sram);
+    void remove_non_generic_load_map_entries(block *new_block, model_t model);
+#endif
+
+// Elfs
+std::unique_ptr<block> find_first_block(elf_file *elf);
+std::vector<std::unique_ptr<block>> get_all_blocks(elf_file *elf, std::unique_ptr<block> &first_block);
+block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_t model, bool set_others_ignored=false);
+#if HAS_MBEDTLS
+    int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram = false, bool pin_xip_sram = false);
+    void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, model_t model, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
+    int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
+#endif
+
+// Bins
+typedef std::function<void(std::vector<uint8_t> &bin, uint32_t offset, uint32_t size)> get_more_bin_cb;
+std::unique_ptr<block> find_first_block(std::vector<uint8_t> bin, uint32_t storage_addr);
+std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb = nullptr);
+std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb = nullptr);
+block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, model_t model, bool set_others_ignored=false);
+uint32_t calc_checksum(std::vector<uint8_t> bin);
+#if HAS_MBEDTLS
+    std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram = false, bool pin_xip_sram = false);
+    std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
+    void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, model_t model, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb = nullptr);
+#endif

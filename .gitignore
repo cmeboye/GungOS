@@ -1,0 +1,48 @@
+# Private device data and local snapshots
+/local-backup/
+/SD contents/
+/.env
+/.env.*
+!/.env.example
+/simulator/sdcard/
+
+# Generated firmware, app packages and host executables
+/.build/
+/host-tools/
+/builds/MicroPython/apps/
+/builds/MicroPython/desktop/
+/builds/MicroPython/*.zip
+/firmware/*.uf2
+/updates/
+/*.zip
+/*.zip.sha256
+/SHA256SUMS.txt
+/verification/*
+!/verification/README.md
+!/verification/public-review.md
+/sd-card/*
+!/sd-card/README.md
+
+# Locally supplied audio: no redistribution grant recorded
+/Tetris Sound/
+/builds/MicroPython/apps_unfrozen/games/tetris_sounds/*.wav
+/builds/MicroPython/apps_unfrozen/games/tetris_sounds/manifest.json
+
+# Native simulator sidecars and scratch captures
+/simulator/viewer/sdl_fb_viewer
+/simulator/audio/tetris_pcm_player
+/simulator/audio/sdl_audio_player
+/simulator/audio/sdl_radio_player
+/simulator/jpeg/sim_jpeg_decode
+/simulator/gameboy/sim_gameboy_runner
+/screenshot.bmp
+/screenshot.png
+
+# Editor and interpreter state
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.vscode/
+.idea/

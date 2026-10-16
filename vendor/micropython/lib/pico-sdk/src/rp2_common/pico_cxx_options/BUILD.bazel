@@ -1,0 +1,27 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:defs.bzl", "compatible_with_rp2")
+load("//bazel/util:sdk_define.bzl", "pico_sdk_define")
+
+package(default_visibility = ["//visibility:public"])
+
+# PICO_BUILD_DEFINE: PICO_CXX_ENABLE_EXCEPTIONS, value of CMake var PICO_CXX_ENABLE_EXCEPTIONS, type=string, default=0, group=pico_cxx_options
+pico_sdk_define(
+    name = "PICO_CXX_ENABLE_EXCEPTIONS",
+    define_name = "PICO_CXX_ENABLE_EXCEPTIONS",
+    from_flag = "//bazel/config:PICO_CXX_ENABLE_EXCEPTIONS",
+)
+
+cc_library(
+    name = "pico_cxx_options",
+    srcs = ["new_delete.cpp"],
+    hdrs = [
+        "include/pico/cxx_options.h",
+    ],
+    includes = ["include"],
+    target_compatible_with = compatible_with_rp2(),
+    deps = [
+        ":PICO_CXX_ENABLE_EXCEPTIONS",
+        "//src:pico_platform_internal",
+        "//src/common/pico_base_headers",
+    ],
+)

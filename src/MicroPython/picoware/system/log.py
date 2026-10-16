@@ -1,0 +1,57 @@
+"""Log - Logging for Picoware."""
+
+from micropython import const
+import log
+
+# modes
+LOG_MODE_REPL = const(0)
+LOG_MODE_STORAGE = const(1)
+LOG_MODE_ALL = const(2)
+
+# types
+LOG_TYPE_NONE = const(-1)
+LOG_TYPE_INFO = const(0)
+LOG_TYPE_WARN = const(1)
+LOG_TYPE_ERROR = const(2)
+LOG_TYPE_DEBUG = const(3)
+
+
+class Log(log.Log):
+    """Log class for Picoware.
+
+    Methods:
+        - log(self, message: str, log_type: int = LOG_TYPE_NONE)
+        - reset(self)
+    Attributes:
+        - mode: int (getter and setter for log mode)
+        - logs: list (getter for stored logs)
+    """
+
+    def __init__(
+        self,
+        mode: int = LOG_MODE_REPL,
+        file_path: str = "picoware/log.txt",
+        reset: bool = False,
+    ):
+        """Initialize the log.
+
+        Args:
+            mode (int): Log mode. Defaults to LOG_MODE_REPL.
+            file_path (str): Path of the log file. Defaults to "picoware/log.txt".
+            reset (bool): Whether to reset the log on start. Defaults to False.
+        """
+        super().__init__(mode, file_path, reset)
+
+    def __setattr__(self, name, value):
+        """Set a log attribute, routing mode and file_path to setters.
+
+        Args:
+            name (str): Attribute name to set.
+            value (object): New value for the attribute.
+        """
+        if name == "mode":
+            self.set_mode(value)
+        elif name == "file_path":
+            self.set_file_path(value)
+        else:
+            super().__setattr__(name, value)

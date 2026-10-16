@@ -1,0 +1,346 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:defs.bzl", "compatible_with_rp2", "incompatible_with_config", "pico_generate_pio_header")
+load("//bazel/util:transition.bzl", "kitchen_sink_test_binary", "pico_set_binary_type", "pico_set_linker_script")
+load("//src/rp2_common/pico_standard_link:pico_psram_region.bzl", "generated_pico_psram_region")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "btstack_config",
+    hdrs = ["btstack_config.h"],
+    includes = ["."],
+)
+
+cc_library(
+    name = "lwip_config",
+    hdrs = ["lwipopts.h"],
+    includes = ["."],
+)
+
+cc_library(
+    name = "mbedtls_config",
+    hdrs = ["mbedtls_config.h"],
+    includes = ["."],
+)
+
+pico_generate_pio_header(
+    name = "trivial_pio_test",
+    srcs = ["trivial.pio"],
+)
+
+cc_library(
+    name = "kitchen_sink_common",
+    testonly = True,
+    # So that the cpp one can see the c file.
+    hdrs = ["kitchen_sink.c"],
+    target_compatible_with = compatible_with_rp2(),
+    deps = [
+        "//src/common/hardware_claim",
+        "//src/common/pico_binary_info",
+        "//src/common/pico_bit_ops_headers",
+        "//src/common/pico_sync",
+        "//src/common/pico_time",
+        "//src/common/pico_util",
+        "//src/rp2_common:hardware_structs",
+        "//src/rp2_common:pico_platform",
+        "//src/rp2_common/hardware_adc",
+        "//src/rp2_common/hardware_clocks",
+        "//src/rp2_common/hardware_divider",
+        "//src/rp2_common/hardware_dma",
+        "//src/rp2_common/hardware_exception",
+        "//src/rp2_common/hardware_flash",
+        "//src/rp2_common/hardware_gpio",
+        "//src/rp2_common/hardware_i2c",
+        "//src/rp2_common/hardware_interp",
+        "//src/rp2_common/hardware_irq",
+        "//src/rp2_common/hardware_pio",
+        "//src/rp2_common/hardware_pll",
+        "//src/rp2_common/hardware_pwm",
+        "//src/rp2_common/hardware_resets",
+        "//src/rp2_common/hardware_spi",
+        "//src/rp2_common/hardware_sync",
+        "//src/rp2_common/hardware_timer",
+        "//src/rp2_common/hardware_uart",
+        "//src/rp2_common/hardware_vreg",
+        "//src/rp2_common/hardware_watchdog",
+        "//src/rp2_common/hardware_xip_cache",
+        "//src/rp2_common/hardware_xosc",
+        "//src/rp2_common/pico_aon_timer",
+        "//src/rp2_common/pico_bootrom",
+        "//src/rp2_common/pico_divider",
+        "//src/rp2_common/pico_double",
+        "//src/rp2_common/pico_fix/rp2040_usb_device_enumeration",
+        "//src/rp2_common/pico_flash",
+        "//src/rp2_common/pico_float",
+        "//src/rp2_common/pico_i2c_slave",
+        "//src/rp2_common/pico_int64_ops",
+        "//src/rp2_common/pico_malloc",
+        "//src/rp2_common/pico_mem_ops",
+        "//src/rp2_common/pico_multicore",
+        "//src/rp2_common/pico_printf",
+        "//src/rp2_common/pico_rand",
+        "//src/rp2_common/pico_runtime",
+        "//src/rp2_common/pico_stdio",
+        "//src/rp2_common/pico_stdlib",
+        "//src/rp2_common/pico_unique_id",
+        "//test/pico_test",
+    ] + select({
+        "//bazel/constraint:rp2350": [
+            "//src/rp2_common/hardware_psram",
+            "//src/rp2_common/hardware_sha256",
+        ],
+        "//conditions:default": [
+            "//src/rp2_common/hardware_rtc",
+        ],
+    }),
+)
+
+cc_binary(
+    name = "kitchen_sink",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    deps = [":kitchen_sink_common"],
+)
+
+cc_binary(
+    name = "kitchen_sink_embed_xip_setup",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    defines = ["PICO_EMBED_XIP_SETUP=1"],
+    deps = [":kitchen_sink_common"],
+)
+
+cc_binary(
+    name = "kitchen_sink_cpp",
+    testonly = True,
+    srcs = ["kitchen_sink_cpp.cpp"],
+    # todo - seems like the bazel clang build omits important library(s) containing new/delete (or we end
+    #        up not providing them via new_delete.cpp for some reason).
+    #        I'm leaving as a todo for now as building with llvm-libc and clang outside of bazel work fine
+    #        (note DISABLE_VECTOR_TEST avoids use of std::vector in kitchen_sink_test_cpp)
+    defines = select({
+        "//bazel/constraint:pico_toolchain_clang_enabled": ["DISABLE_VECTOR_TEST=1"],
+        "//conditions:default": [],
+    }),
+    deps = [":kitchen_sink_common"],
+)
+
+cc_binary(
+    name = "kitchen_sink_copy_to_ram_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    tags = ["manual"],  # Built via kitchen_sink_copy_to_ram
+    deps = [":kitchen_sink_common"],
+)
+
+cc_binary(
+    name = "kitchen_sink_no_flash_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    tags = ["manual"],  # Built via kitchen_sink_no_flash
+    deps = [":kitchen_sink_common"],
+)
+
+cc_binary(
+    name = "kitchen_sink_cpp_no_flash_actual",
+    testonly = True,
+    srcs = ["kitchen_sink_cpp.cpp"],
+    # todo - seems like the bazel clang build omits important library(s) containing new/delete (or we end
+    #        up not providing them via new_delete.cpp for some reason).
+    #        I'm leaving as a todo for now as building with llvm-libc and clang outside of bazel work fine
+    #        (note DISABLE_VECTOR_TEST avoids use of std::vector in kitchen_sink_test_cpp)
+    defines = select({
+        "//bazel/constraint:pico_toolchain_clang_enabled": ["DISABLE_VECTOR_TEST=1"],
+        "//conditions:default": [],
+    }),
+    tags = ["manual"],  # Built via kitchen_sink_cpp_no_flash
+    deps = [":kitchen_sink_common"],
+)
+
+cc_binary(
+    name = "kitchen_sink_blocked_ram_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    tags = ["manual"],  # Built via kitchen_sink_blocked_ram
+    deps = [":kitchen_sink_common"],
+)
+
+pico_set_binary_type(
+    name = "kitchen_sink_copy_to_ram",
+    testonly = True,
+    src = ":kitchen_sink_copy_to_ram_actual",
+    binary_type = "copy_to_ram",
+    target_compatible_with = compatible_with_rp2(),
+)
+
+pico_set_binary_type(
+    name = "kitchen_sink_no_flash",
+    testonly = True,
+    src = ":kitchen_sink_no_flash_actual",
+    binary_type = "no_flash",
+    target_compatible_with = compatible_with_rp2(),
+)
+
+pico_set_binary_type(
+    name = "kitchen_sink_cpp_no_flash",
+    testonly = True,
+    src = ":kitchen_sink_cpp_no_flash_actual",
+    binary_type = "no_flash",
+    target_compatible_with = compatible_with_rp2(),
+)
+
+pico_set_binary_type(
+    name = "kitchen_sink_blocked_ram",
+    testonly = True,
+    src = ":kitchen_sink_blocked_ram_actual",
+    binary_type = "blocked_ram",
+    target_compatible_with = ["//bazel/constraint:rp2040"],
+)
+
+cc_binary(
+    name = "kitchen_sink_ram_section_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    defines = ["EXTRA_DATA_SECTION=1"],
+    tags = ["manual"],  # Built via kitchen_sink_ram_section
+    deps = [":kitchen_sink_common"],
+)
+
+cc_library(
+    name = "kitchen_sink_ram_section_linker_script",
+    # The order of the linker scripts below is important.
+    # Prevent buildifier from reordering them.
+    # buildifier: leave-alone
+    deps = [
+        "//test/kitchen_sink/kitchen_sink_ram_section_scripts",
+        "//test/kitchen_sink/kitchen_sink_extra_end_scripts",
+        "//src/rp2_common/pico_standard_link:default_linker_script",
+    ],
+)
+
+pico_set_linker_script(
+    name = "kitchen_sink_ram_section",
+    testonly = True,
+    src = ":kitchen_sink_ram_section_actual",
+    linker_script = "//test/kitchen_sink:kitchen_sink_ram_section_linker_script",
+    target_compatible_with = compatible_with_rp2(),
+)
+
+cc_binary(
+    name = "kitchen_sink_simple_overlay_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    defines = ["EXTRA_DATA_SECTION=2"],
+    tags = ["manual"],  # Built via kitchen_sink_simple_overlay
+    deps = [":kitchen_sink_common"],
+)
+
+cc_library(
+    name = "kitchen_sink_simple_overlay_linker_script",
+    # The order of the linker scripts below is important.
+    # Prevent buildifier from reordering them.
+    # buildifier: leave-alone
+    deps = [
+        "//test/kitchen_sink/kitchen_sink_simple_overlay_scripts",
+        "//test/kitchen_sink/kitchen_sink_extra_end_scripts",
+        "//src/rp2_common/pico_standard_link:default_linker_script",
+    ],
+)
+
+pico_set_linker_script(
+    name = "kitchen_sink_simple_overlay",
+    testonly = True,
+    src = ":kitchen_sink_simple_overlay_actual",
+    linker_script = "//test/kitchen_sink:kitchen_sink_simple_overlay_linker_script",
+    # Clang does not support overlay sections
+    target_compatible_with = compatible_with_rp2() + incompatible_with_config("//bazel/constraint:pico_toolchain_clang_enabled"),
+)
+
+cc_binary(
+    name = "kitchen_sink_lwip_poll_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    tags = ["manual"],  # Built via kitchen_sink_lwip_poll
+    deps = [
+        ":kitchen_sink_common",
+        "//src/rp2_common/pico_btstack",
+        "//src/rp2_common/pico_cyw43_arch:pico_cyw43_arch_lwip_poll",
+        "//src/rp2_common/pico_lwip:pico_lwip_mbedtls",
+        "//src/rp2_common/pico_mbedtls",
+    ],
+)
+
+cc_binary(
+    name = "kitchen_sink_lwip_background_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    tags = ["manual"],  # Built via kitchen_sink_lwip_background
+    deps = [
+        ":kitchen_sink_common",
+        "//src/rp2_common/pico_btstack",
+        "//src/rp2_common/pico_cyw43_arch:pico_cyw43_arch_lwip_threadsafe_background",
+        "//src/rp2_common/pico_lwip:pico_lwip_mbedtls",
+        "//src/rp2_common/pico_mbedtls",
+    ],
+)
+
+kitchen_sink_test_binary(
+    name = "kitchen_sink_lwip_poll",
+    testonly = True,
+    src = ":kitchen_sink_lwip_poll_actual",
+    bt_stack_config = ":btstack_config",
+    enable_ble = True,
+    enable_bt_classic = True,
+    lwip_config = ":lwip_config",
+    mbedtls_config = ":mbedtls_config",
+    target_compatible_with = compatible_with_rp2(),
+)
+
+kitchen_sink_test_binary(
+    name = "kitchen_sink_lwip_background",
+    testonly = True,
+    src = ":kitchen_sink_lwip_background_actual",
+    bt_stack_config = ":btstack_config",
+    enable_ble = True,
+    enable_bt_classic = True,
+    lwip_config = ":lwip_config",
+    mbedtls_config = ":mbedtls_config",
+    target_compatible_with = compatible_with_rp2(),
+)
+
+cc_binary(
+    name = "kitchen_sink_psram_actual",
+    testonly = True,
+    srcs = ["kitchen_sink.c"],
+    defines = [
+        "PICO_AUTO_DETECT_PSRAM=1",
+        'PICO_PSRAM_SIZE_BYTES="(8 * 1024 * 1024)"',
+    ],
+    tags = ["manual"],  # Built via kitchen_sink_psram
+    deps = [":kitchen_sink_common"],
+)
+
+generated_pico_psram_region(
+    name = "8M_psram_region",
+    psram_region_size = (8 * 1024 * 1024),
+)
+
+cc_library(
+    name = "kitchen_sink_psram_linker_script",
+    # The order of the linker scripts below is important.
+    # Prevent buildifier from reordering them.
+    # buildifier: leave-alone
+    deps = [
+        "//test/kitchen_sink:8M_psram_region",
+        "//src/rp2_common/pico_standard_link:default_linker_script",
+    ],
+)
+
+pico_set_linker_script(
+    name = "kitchen_sink_psram",
+    testonly = True,
+    src = ":kitchen_sink_psram_actual",
+    linker_script = "//test/kitchen_sink:kitchen_sink_psram_linker_script",
+    target_compatible_with = ["//bazel/constraint:rp2350"],
+)

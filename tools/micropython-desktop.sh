@@ -1,0 +1,107 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+picoware_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+
+micropython_dir=${MICROPYTHON_DIR:-}
+if [ -z "$micropython_dir" ]; then
+    for candidate in \
+        "$picoware_dir/vendor/micropython" \
+        "$HOME/pico/micropython" \
+        "$HOME/Picocalc_programming/micropython" \
+        "$picoware_dir/../micropython"
+    do
+        if [ -f "$candidate/ports/unix/Makefile" ]; then
+            micropython_dir=$candidate
+            break
+        fi
+    done
+fi
+
+if [ -z "$micropython_dir" ] || [ ! -f "$micropython_dir/ports/unix/Makefile" ]; then
+    echo "MicroPython Unix source tree not found." >&2
+    echo "Set MICROPYTHON_DIR to a MicroPython checkout." >&2
+    exit 1
+fi
+
+source_alias=${PICOWARE_DESKTOP_SOURCE_ALIAS:-"/tmp/picoware-desktop-src-$(id -u)"}
+if [ -L "$source_alias" ]; then
+    alias_target=$(CDPATH= cd -- "$source_alias" && pwd -P)
+    if [ "$alias_target" != "$picoware_dir" ]; then
+        echo "Desktop source alias points to another checkout: $source_alias" >&2
+        echo "Remove it or set PICOWARE_DESKTOP_SOURCE_ALIAS." >&2
+        exit 1
+    fi
+elif [ -e "$source_alias" ]; then
+    echo "Desktop source alias exists and is not a symlink: $source_alias" >&2
+    echo "Set PICOWARE_DESKTOP_SOURCE_ALIAS to an unused path." >&2
+    exit 1
+else
+    ln -s "$picoware_dir" "$source_alias"
+fi
+
+if [ -n "${PICOWARE_DESKTOP_BUILD_DIR:-}" ]; then
+    build_dir=$PICOWARE_DESKTOP_BUILD_DIR
+    display_build_dir=$build_dir
+else
+    build_dir="$source_alias/builds/MicroPython/desktop"
+    display_build_dir="$picoware_dir/builds/MicroPython/desktop"
+fi
+module_dir="$source_alias/src/MicroPython/Desktop/modules"
+variant_dir="$source_alias/src/MicroPython/Desktop/variant"
+jobs=${PICOWARE_BUILD_JOBS:-}
+if [ -z "$jobs" ]; then
+    if command -v getconf >/dev/null 2>&1; then
+        jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
+    fi
+    jobs=${jobs:-2}
+fi
+
+case ${1:-build} in
+    --clean|clean)
+        make -C "$micropython_dir/ports/unix" \
+            BUILD="$build_dir" \
+            VARIANT_DIR="$variant_dir" \
+            USER_C_MODULES="$module_dir" \
+            FROZEN_MANIFEST= \
+            PICOWARE_LEAN_BUILD=1 \
+            MICROPY_PY_FFI=0 \
+            CFLAGS_EXTRA="-DDESKTOP -DPICOWARE_LEAN_BUILD -Wno-error" \
+            clean
+        exit 0
+        ;;
+    build|"")
+        ;;
+    *)
+        echo "usage: sh tools/micropython-desktop.sh [build|clean]" >&2
+        exit 2
+        ;;
+esac
+
+mkdir -p "$build_dir"
+
+# Relative module sources emit objects up to three directories above BUILD.
+# Keep them inside a fresh private tree, preserving other builds and preventing
+# stale QSTR IDs when native modules are added. Install only after a full link.
+staging_root=$(mktemp -d /tmp/picoware-desktop-build.XXXXXX)
+trap 'rm -rf -- "$staging_root"' EXIT HUP INT TERM
+staging_build="$staging_root/builds/MicroPython/desktop"
+
+if [ ! -x "$micropython_dir/mpy-cross/build/mpy-cross" ]; then
+    make -C "$micropython_dir/mpy-cross" -j"$jobs"
+fi
+
+make -C "$micropython_dir/ports/unix" \
+    -j"$jobs" \
+    BUILD="$staging_build" \
+    VARIANT_DIR="$variant_dir" \
+    USER_C_MODULES="$module_dir" \
+    FROZEN_MANIFEST= \
+    PICOWARE_LEAN_BUILD=1 \
+    MICROPY_PY_FFI=0 \
+    CFLAGS_EXTRA="-DDESKTOP -DPICOWARE_LEAN_BUILD -Wno-error"
+
+install -m 755 "$staging_build/micropython" "$build_dir/micropython.new"
+mv -f "$build_dir/micropython.new" "$build_dir/micropython"
+echo "Desktop MicroPython build complete: $display_build_dir/micropython"

@@ -1,0 +1,1 @@
+"""Small embedded visual assets."""

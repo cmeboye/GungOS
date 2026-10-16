@@ -1,0 +1,157 @@
+radius: int = 0
+is_flipper = None
+
+
+def start(view_manager) -> bool:
+    """Start the app"""
+    global radius, is_flipper
+    from picoware.system.boards import BOARD_ID, BOARD_FLIPPER_ZERO, BOARD_POOM
+
+    is_flipper = BOARD_ID in (BOARD_FLIPPER_ZERO, BOARD_POOM)
+
+    screen_size = view_manager.draw.size
+    radius = screen_size.x // 2 - view_manager.draw.scale_x(60)
+    return True
+
+
+def run(view_manager) -> None:
+    """Run the app"""
+    from picoware.system.buttons import BUTTON_BACK
+    from picoware.system.vector import Vector
+    from picoware.system.colors import TFT_WHITE, TFT_RED, TFT_GREEN, TFT_ORANGE
+    from math import sin, cos, pi
+
+    inp = view_manager.input_manager
+    button = inp.button
+
+    if button == BUTTON_BACK:
+        inp.reset()
+        view_manager.back()
+        return
+
+    draw = view_manager.draw
+    time_obj = view_manager.time
+
+    # Get current time
+    time_str = time_obj.time  # Returns "HH:MM:SS"
+    try:
+        time_parts = time_str.split(":")
+        hours = int(time_parts[0])
+        minutes = int(time_parts[1])
+        seconds = int(time_parts[2])
+    except Exception:
+        hours = minutes = seconds = 0
+
+    # Clear screen
+    draw.erase()
+
+    # Calculate center and radius for the clock
+    screen_size = draw.size
+    center_x = screen_size.x // 2
+    center_y = screen_size.y // 2 - draw.scale_y(
+        20
+    )  # Offset up to make room for digital display
+
+    # Draw clock face
+    draw._circle(center_x, center_y, radius, TFT_WHITE)
+
+    # Draw hour markers
+    line_vec_pos = Vector(0, 0)
+    line_vec_size = Vector(0, 0)
+    rad = pi / 180
+    for i in range(12):
+        angle = (i * 30 - 90) * rad  # Convert to radians, -90 to start at top
+        marker_start = radius - 10
+        marker_end = radius - 5
+        line_vec_pos.x, line_vec_pos.y = int(center_x + marker_start * cos(angle)), int(
+            center_y + marker_start * sin(angle)
+        )
+        line_vec_size.x, line_vec_size.y = int(center_x + marker_end * cos(angle)), int(
+            center_y + marker_end * sin(angle)
+        )
+        draw._line(
+            line_vec_pos.x, line_vec_pos.y, line_vec_size.x, line_vec_size.y, TFT_WHITE
+        )
+
+    # Draw center dot
+    draw._fill_circle(center_x, center_y, draw.scale_x(4), TFT_WHITE)
+
+    # Calculate angles for clock hands (in radians)
+    # Convert 12-hour format
+    hours_12 = hours % 12
+    hour_angle = ((hours_12 * 30 + minutes * 0.5) - 90) * rad
+    minute_angle = ((minutes * 6) - 90) * rad
+    second_angle = ((seconds * 6) - 90) * rad
+
+    # Draw hour hand (shortest, thickest)
+    hour_length = radius * 0.5
+    hour_x = int(center_x + hour_length * cos(hour_angle))
+    hour_y = int(center_y + hour_length * sin(hour_angle))
+    line_vec_pos.x, line_vec_pos.y = center_x, center_y
+    line_vec_size.x, line_vec_size.y = hour_x, hour_y
+    draw._line(
+        line_vec_pos.x, line_vec_pos.y, line_vec_size.x, line_vec_size.y, TFT_WHITE
+    )
+    # Make it thicker by drawing parallel lines
+    line_vec_pos.x, line_vec_pos.y = center_x - 1, center_y
+    line_vec_size.x, line_vec_size.y = hour_x - 1, hour_y
+    draw._line(
+        line_vec_pos.x, line_vec_pos.y, line_vec_size.x, line_vec_size.y, TFT_WHITE
+    )
+    line_vec_pos.x, line_vec_pos.y = center_x + 1, center_y
+    line_vec_size.x, line_vec_size.y = hour_x + 1, hour_y
+    draw._line(
+        line_vec_pos.x, line_vec_pos.y, line_vec_size.x, line_vec_size.y, TFT_WHITE
+    )
+
+    # Draw minute hand (medium length)
+    minute_length = radius * 0.75
+    minute_x = int(center_x + minute_length * cos(minute_angle))
+    minute_y = int(center_y + minute_length * sin(minute_angle))
+    line_vec_pos.x, line_vec_pos.y = center_x, center_y
+    line_vec_size.x, line_vec_size.y = minute_x, minute_y
+    draw._line(
+        line_vec_pos.x, line_vec_pos.y, line_vec_size.x, line_vec_size.y, 0xFFFF if is_flipper else TFT_GREEN
+    )
+
+    # Draw second hand (longest, thinnest)
+    second_length = radius * 0.85
+    second_x = int(center_x + second_length * cos(second_angle))
+    second_y = int(center_y + second_length * sin(second_angle))
+    line_vec_pos.x, line_vec_pos.y = center_x, center_y
+    line_vec_size.x, line_vec_size.y = second_x, second_y
+    draw._line(
+        line_vec_pos.x, line_vec_pos.y, line_vec_size.x, line_vec_size.y, 0xFFFF if is_flipper else TFT_RED
+    )
+
+    # Draw digital time display below the clock
+    digital_y = center_y + radius + draw.scale_y(20)
+
+    # Calculate text centering
+    time_display = time_str
+    text_width = draw.len(time_display)
+    text_x = (screen_size.x - text_width) // 2
+    text_vec = Vector(text_x, digital_y)
+    draw._text(text_vec.x, text_vec.y, time_display, TFT_WHITE)
+
+    # Draw date below time
+    date_str = time_obj.date
+    date_width = draw.len(date_str)
+    date_x = (screen_size.x - date_width) // 2
+    text_vec.x, text_vec.y = date_x, digital_y + draw.scale_y(20)
+    draw._text(text_vec.x, text_vec.y, date_str, 0xFFFF if is_flipper else TFT_ORANGE)
+
+    # Swap buffers to display
+    draw.swap()
+
+
+def stop(view_manager) -> None:
+    """Stop the app"""
+    from gc import collect
+
+    global radius, is_flipper
+
+    radius = 0
+    is_flipper = None
+
+    collect()

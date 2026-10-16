@@ -1,0 +1,246 @@
+"""Small arithmetic parser: no Python eval, attribute access or arbitrary calls."""
+import math
+
+STAT_FUNCTIONS = ('mean', 'std', 'pstd', 'var', 'pvar', 'sum', 'sum2', 'n', 'median',
+                  'q1', 'q3', 'iqr', 'range', 'cov', 'pcov', 'corr', 'slope', 'intercept', 'r2', 'predict')
+FUNCTIONS = ('sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+             'sqrt', 'ln', 'log', 'logb', 'exp', 'abs', 'floor', 'ceil', 'round',
+             're', 'im', 'conj', 'int', 'min', 'max')+STAT_FUNCTIONS
+RESERVED = FUNCTIONS+('pi', 'e', 'i', 'ans', 'Ans', 'j', 'X', 'Y')
+
+
+def finite(value):
+    parts = (value.real, value.imag) if isinstance(value, complex) else (value,)
+    return all(not math.isnan(p) and not math.isinf(p) for p in parts)
+
+
+def tokens(text):
+    if len(text) > 1400: raise ValueError('Expression too long')
+    result, i = [], 0
+    while i < len(text):
+        char = text[i]
+        if char.isspace(): i += 1; continue
+        if char.isdigit() or char == '.':
+            start = i
+            while i < len(text) and (text[i].isdigit() or text[i] == '.'): i += 1
+            if i < len(text) and text[i] in 'eE':
+                end = i+1
+                if end < len(text) and text[end] in '+-': end += 1
+                exponent = end
+                while end < len(text) and text[end].isdigit(): end += 1
+                if end > exponent: i = end
+            try: value = float(text[start:i])
+            except ValueError: raise ValueError('Invalid number')
+            if not finite(value): raise ValueError('Number out of range')
+            result.append(('number', value))
+        elif char.isalpha():
+            start = i
+            while i < len(text) and (text[i].isalpha() or text[i].isdigit() or text[i] == '_'): i += 1
+            name = text[start:i]
+            if len(name) > 16: raise ValueError('Variable names: up to 16 characters')
+            result.append(('name', name))
+        elif char in '+-*/^%!(),=':
+            if char == '*' and i+1 < len(text) and text[i+1] == '*':
+                result.append(('^', '^')); i += 2
+            else: result.append((char, char)); i += 1
+        else: raise ValueError('Unsupported character: '+char)
+    if len(result) > 384: raise ValueError('Expression limit exceeded')
+    result.append(('end', ''))
+    return result
+
+
+class Parser:
+    def __init__(self, text, functions=FUNCTIONS):
+        self.items, self.index, self.depth = tokens(text), 0, 0
+        self.functions=functions
+
+    def peek(self): return self.items[self.index][0]
+
+    def take(self):
+        value = self.items[self.index]
+        self.index += 1
+        return value
+
+    def expression(self, minimum=0):
+        self.depth += 1
+        if self.depth > 40: raise ValueError('Expression nesting limit')
+        kind, value = self.take()
+        if kind == 'number': node = ('value', value)
+        elif kind in ('+', '-'):
+            node = ('unary', kind, self.expression(25))
+        elif kind == '(':
+            node = self.expression()
+            if self.peek() != ')': raise ValueError('Missing closing parenthesis')
+            self.take()
+        elif kind == 'name':
+            if self.peek() == '(' and value in self.functions:
+                self.take(); args = []
+                if self.peek() != ')':
+                    while True:
+                        args.append(self.expression())
+                        if self.peek() != ',': break
+                        self.take()
+                if self.peek() != ')': raise ValueError('Missing closing parenthesis')
+                self.take()
+                node = ('call', value, args)
+            else: node = ('name', value)
+        else: raise ValueError('Expected a number or expression')
+        while True:
+            kind = self.peek()
+            if kind == '!':
+                if 40 < minimum: break
+                self.take(); node = ('factorial', node); continue
+            implicit = kind in ('number', 'name', '(')
+            priority = 20 if implicit else {'+':10, '-':10, '*':20, '/':20, '%':20, '^':30}.get(kind, -1)
+            if priority < minimum: break
+            if not implicit: self.take()
+            operator = '*' if implicit else kind
+            right = self.expression(priority if operator == '^' else priority+1)
+            node = ('binary', operator, node, right)
+        self.depth -= 1
+        return node
+
+    def parse(self):
+        assignment = None
+        if self.peek() == 'name' and self.items[1][0] == '=':
+            assignment = self.take()[1]; self.take()
+            if assignment in RESERVED: raise ValueError('This name is reserved')
+        node = self.expression()
+        if self.peek() != 'end': raise ValueError('Unexpected '+str(self.items[self.index][1]))
+        return assignment, node
+
+
+class Evaluator:
+    def __init__(self, variables, angle='DEG', complex_mode=False, statistics=None):
+        self.variables, self.angle, self.complex_mode = variables, angle, complex_mode
+        self.steps = 0
+        self.statistics = statistics
+
+    def run(self, node, local=None):
+        self.steps += 1
+        if self.steps > 60000: raise ValueError('Calculation work limit')
+        kind = node[0]
+        if kind == 'value': return node[1]
+        if kind == 'name':
+            name = node[1]
+            if local is not None and name in local: return local[name]
+            if name in ('i', 'j'):
+                if not self.complex_mode: raise ValueError('Select Complex mode to use i')
+                return complex(0, 1)
+            if name == 'pi': return math.pi
+            if name == 'e': return math.e
+            if name in ('ans', 'Ans'): return self.variables.get('Ans', 0)
+            if name not in self.variables: raise ValueError('Unknown variable: '+name)
+            return self.variables[name]
+        if kind == 'unary':
+            value = self.run(node[2], local)
+            return -value if node[1] == '-' else value
+        if kind == 'factorial':
+            value = self.run(node[1], local)
+            if isinstance(value, complex) or value != int(value) or value < 0 or value > 34:
+                raise ValueError('Factorial accepts integers 0..34')
+            result = 1.0
+            for n in range(2, int(value)+1): result *= n
+            return result
+        if kind == 'binary':
+            a, b = self.run(node[2], local), self.run(node[3], local)
+            op = node[1]
+            if op == '+': value = a+b
+            elif op == '-': value = a-b
+            elif op == '*': value = a*b
+            elif op == '/': value = a/b
+            elif op == '%': value = a%b
+            else: value = a**b
+        else:
+            name, args = node[1], node[2]
+            column_call = name in ('min','max') and len(args) == 1 and args[0][0] == 'name' and args[0][1] in ('X','Y')
+            if name in STAT_FUNCTIONS or column_call:
+                if self.statistics is None: raise ValueError('Choose a Statistics dataset first')
+                if name in ('slope','intercept','r2'):
+                    if args: raise ValueError(name+' takes no arguments')
+                    value = self.statistics.fit()[name]
+                elif name in ('cov','pcov','corr'):
+                    if len(args) != 2 or args[0] != ('name','X') or args[1] != ('name','Y'):
+                        raise ValueError(name+' uses (X,Y)')
+                    value = self.statistics.pair_statistics()[name]
+                elif name == 'predict':
+                    if len(args) != 1: raise ValueError('predict needs one X value')
+                    value = self.statistics.predict(self.run(args[0],local))
+                else:
+                    if len(args) != 1 or args[0][0] != 'name' or args[0][1] not in ('X','Y'):
+                        raise ValueError(name+' uses (X) or (Y)')
+                    value = self.statistics.statistic(name,args[0][1])
+                if value is None: raise ValueError('Undefined for this dataset')
+                return value
+            if name == 'int':
+                if len(args) != 3: raise ValueError('int(lower,upper,expression in x)')
+                if local is not None: raise ValueError('Nested integrals are not available yet')
+                lower, upper = self.run(args[0]), self.run(args[1])
+                if isinstance(lower, complex) or isinstance(upper, complex): raise ValueError('Integral bounds must be real')
+                # Numerical integration uses the selected native backend. Do not
+                # silently substitute an unvalidated solver on older firmware.
+                from engtools.numerics.backend import require
+                _, sp = require()
+                if lower == upper: return 0.0
+                integrand = lambda x: self.run(args[2], {'x':x})
+                coarse, coarse_error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=3)
+                value, error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=4)
+                if not all(finite(v) for v in (coarse, coarse_error, value, error)):
+                    raise ValueError('Integral did not converge')
+                # Pinned ulab's raw estimate is not scaled by interval width.
+                # Compare successive bounded refinements instead of treating
+                # that estimate as an absolute error in the integral's units.
+                if abs(value-coarse) > 1e-4*max(1, abs(value)):
+                    raise ValueError('Integral accuracy limit reached')
+                return value
+            values = [self.run(arg, local) for arg in args]
+            if name in ('min', 'max'):
+                if not values: raise ValueError('Enter at least one argument')
+                return min(values) if name == 'min' else max(values)
+            expected = 2 if name == 'logb' else 1
+            if len(values) != expected: raise ValueError(name+' needs '+str(expected)+' argument(s)')
+            a = values[0]
+            if name == 'logb': value = math.log(values[1])/math.log(a)
+            elif name == 'abs': value = abs(a)
+            elif name == 're': value = a.real if isinstance(a, complex) else a
+            elif name == 'im': value = a.imag if isinstance(a, complex) else 0
+            elif name == 'conj': value = complex(a.real, -a.imag) if isinstance(a, complex) else a
+            elif name == 'round': value = round(a)
+            else:
+                if name in ('sin', 'cos', 'tan') and self.angle == 'DEG': a *= math.pi/180
+                actual = {'ln':'log', 'log':'log10'}.get(name, name)
+                if isinstance(a, complex) or (self.complex_mode and name in ('sqrt', 'ln', 'log') and a < 0):
+                    import cmath
+                    function = getattr(cmath, 'log' if name in ('ln', 'log') else actual, None)
+                    if function is None: raise ValueError('This function requires a real argument')
+                    value = function(a)
+                    if name == 'log': value /= math.log(10)
+                else: value = getattr(math, actual)(a)
+                if name in ('asin', 'acos', 'atan') and self.angle == 'DEG': value *= 180/math.pi
+        if not finite(value): raise ValueError('Result out of range')
+        if isinstance(value, complex) and not self.complex_mode:
+            raise ValueError('Select Complex mode for this result')
+        return value
+
+
+def calculate(text, variables, angle='DEG', complex_mode=False, statistics=None):
+    assignment, tree = Parser(text).parse()
+    value = Evaluator(variables, angle, complex_mode, statistics).run(tree)
+    if not finite(value): raise ValueError('Result out of range')
+    if isinstance(value, complex) and not complex_mode:
+        raise ValueError('Select Complex mode for this result')
+    if assignment is not None:
+        if assignment not in variables and len(variables) >= 25: raise ValueError('Variable limit: 24 names')
+        variables[assignment] = value
+    variables['Ans'] = value
+    return value, assignment
+
+
+def format_value(value, engineering=False):
+    if isinstance(value, complex):
+        if abs(value.imag) < 1e-7: return format_value(value.real, engineering)
+        return '%s%s%si' % (format_value(value.real), '+' if value.imag >= 0 else '-', format_value(abs(value.imag)))
+    if engineering and value:
+        exponent = int(math.floor(math.log10(abs(value))/3))*3
+        return '%.6ge%+d' % (value/(10**exponent), exponent)
+    return '%.7g' % value

@@ -1,0 +1,302 @@
+"""Thread - Threading support for Picoware."""
+
+from utime import ticks_ms
+from gc import collect
+
+class Thread:
+    """Class representing a thread."""
+
+    __slots__ = (
+        "_args",
+        "_error",
+        "_function",
+        "_lock",
+        "_running",
+        "_stop_requested",
+        "_stack_size",
+    )
+
+    def __init__(
+        self, function: callable, args: tuple = (), stack_size: int = 0
+    ) -> None:
+        """Initialize the thread.
+
+        Args:
+            function (callable): The function to run in the thread.
+            args (tuple): Arguments to pass to the function. Defaults to ().
+            stack_size (int): Thread stack size in bytes. Defaults to 0.
+        """
+        self._lock = None
+        try:
+            import _thread
+            self._lock = _thread.allocate_lock()
+        except ImportError:
+            pass
+
+        self._args = args
+        self._error = None
+        self._function = function
+        self._running = False
+        self._stop_requested = False
+        self._stack_size = stack_size
+
+    def __del__(self):
+        """Stop the thread and release its resources."""
+        self.stop()
+        self._args = ()
+        self._error = None
+        self._function = None
+
+    @property
+    def error(self):
+        """Get the error if any occurred during thread execution."""
+        if self._lock is None:
+            return None
+        
+        with self._lock:
+            return self._error
+
+    @property
+    def is_running(self) -> bool:
+        """Check if the thread is running."""
+        if self._lock is None:
+            return False
+        
+        with self._lock:
+            return self._running
+
+    @property
+    def should_stop(self) -> bool:
+        """Check if stop was requested."""
+        if self._lock is None:
+            return False
+
+        with self._lock:
+            return self._stop_requested
+
+    def _wrapper(self) -> None:
+        """Run the target function and capture any error."""
+        try:
+            self._function(*self._args)
+        except Exception as e:
+            with self._lock:
+                self._error = e
+        finally:
+            if self._lock is not None:
+                with self._lock:
+                    self._running = False
+                    self._stop_requested = False
+
+    def run(self) -> bool:
+        """Run the thread.
+
+        Returns:
+            bool: True if the thread started, False otherwise.
+        """
+        if self._lock is None:
+            return False
+            
+        with self._lock:
+            if self._running:
+                return False
+            try:
+                import _thread
+                self._running = True
+                self._stop_requested = False
+                if self._stack_size > 0:
+                    _thread.stack_size(self._stack_size)
+                _thread.start_new_thread(self._wrapper, ())
+                return True
+            except Exception as e:
+                self._error = e
+                self._running = False
+                return False
+
+    def stop(self) -> None:
+        """Request the thread to stop."""
+        if self._lock is None:
+            return
+        
+        with self._lock:
+            self._stop_requested = True
+
+
+class ThreadTask:
+    """Represents a task to be executed by ThreadManager."""
+
+    __slots__ = (
+        "args",
+        "error",
+        "function",
+        "_id",
+        "name",
+        "result",
+        "should_stop",
+        "stack_size",
+        "start_time",
+        "timeout",
+    )
+
+    def __init__(
+        self,
+        name: str,
+        function: callable,
+        args: tuple = (),
+        timeout: int = 0,
+        stack_size: int = 0,
+    ) -> None:
+        """Initialize the task.
+
+        Args:
+            name (str): The task name.
+            function (callable): The function to run.
+            args (tuple): Arguments to pass to the function. Defaults to ().
+            timeout (int): Timeout in milliseconds. Defaults to 0.
+            stack_size (int): Thread stack size in bytes. Defaults to 0.
+        """
+        self.args = args
+        self.error = None
+        self.function = function
+        self._id = 0
+        self.name = name
+        self.should_stop = False
+        self.start_time = 0
+        self.timeout = timeout
+        self.stack_size = stack_size
+
+    @property
+    def id(self) -> int:
+        """Get the task ID."""
+        return self._id
+
+    @id.setter
+    def id(self, value: int) -> None:
+        """Set the task ID.
+
+        Args:
+            value (int): The new task ID.
+        """
+        self._id = value
+
+    def stop(self) -> None:
+        """Request the task to stop."""
+        self.should_stop = True
+
+
+class ThreadManager:
+    """Class to manage multiple threads."""
+
+    __slots__ = ("_id", "_tasks", "_active_thread", "_active_task", "_outgoing")
+
+    def __init__(self) -> None:
+        """Initialize the thread manager."""
+        self._id = 0
+        self._tasks: list[ThreadTask] = []
+        self._active_thread: Thread = None
+        self._active_task: ThreadTask = None
+        self._outgoing = ""
+
+    @property
+    def task(self) -> ThreadTask:
+        """Get the currently active task."""
+        return self._active_task
+
+    @property
+    def thread(self) -> Thread:
+        """Get the currently active thread."""
+        return self._active_thread
+
+    @property
+    def is_idle(self) -> bool:
+        """Return whether no task is queued or active."""
+        return self._active_thread is None and not self._tasks
+
+    @property
+    def pending_count(self) -> int:
+        """Return the number of queued tasks, excluding the active task."""
+        return len(self._tasks)
+
+    def add_task(self, task: ThreadTask) -> int:
+        """Add a task to the manager.
+
+        Args:
+            task (ThreadTask): The task to add.
+
+        Returns:
+            int: The assigned task ID.
+        """
+        task.id = self._id
+        self._id += 1
+        self._tasks.append(task)
+        return task.id
+
+    def remove_task(self, task_id: int) -> bool:
+        """Stop and remove a queued task by ID.
+
+        Args:
+            task_id (int): The ID of the task to remove.
+
+        Returns:
+            bool: True if the task was removed, False otherwise.
+        """
+        for index, task in enumerate(self._tasks):
+            if task.id == task_id:
+                task.stop()
+                self._tasks.pop(index)
+                return True
+        return False
+
+    def run(self) -> str:
+        """Run tasks one-by-one, waiting for each to complete before starting the next.
+
+        Returns:
+            str: Any output messages from finished or failed tasks.
+        """
+        self._outgoing = ""
+        # Check if active thread finished
+        if self._active_thread is not None:
+            if not self._active_thread.is_running:
+                if self._active_task is not None:
+                    self._outgoing = f"[ThreadManager] Task {self._active_task.id} ({self._active_task.name}) finished after {ticks_ms() - self._active_task.start_time} ms.\n"
+                    # Task finished, capture error if any
+                    thread_error = self._active_thread.error
+                    if thread_error is not None:
+                        self._active_task.error = thread_error
+                    collect()  
+                self._active_thread = None
+                self._active_task = None
+            elif self._active_task is not None and self._active_task.should_stop:
+                # Stop was requested, stop the thread
+                self._active_thread.stop()
+                if self._active_task.error is None:
+                    self._active_task.error = Exception("Thread task was stopped.")
+            elif (
+                self._active_task is not None
+                and self._active_task.timeout > 0
+                and ticks_ms() - self._active_task.start_time
+                > self._active_task.timeout
+            ):
+                # Task timed out, stop it
+                self._active_task.stop()
+                self._active_thread.stop()
+                self._active_task.error = Exception("Thread task timed out.")
+            return self._outgoing
+
+        # Start next task if no active thread
+        if self._tasks:
+            task = self._tasks.pop(0)
+            # Skip task if stop was requested
+            if task.should_stop:
+                return self._outgoing
+            thread = Thread(task.function, task.args, task.stack_size)
+            if thread.run():
+                task.start_time = ticks_ms()
+                self._outgoing = (
+                    f"[ThreadManager] Task {task.id} ({task.name}) started."
+                )
+                self._active_thread = thread
+                self._active_task = task
+            else:
+                task.error = thread.error
+                self._outgoing = f'[ThreadManager] Failed to start task "{task.name}". Error: "{task.error}"'
+        return self._outgoing
