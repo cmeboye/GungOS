@@ -82,58 +82,44 @@ class Alert:
         text_max_width = size.x - (2 * text_start_x)  # Leave padding from border
         chars_per_line = (text_max_width // (font.width + font.spacing)) - 1
 
-        # Wrap text manually based on character count
+        # Wrap each line of the message (newlines start a new line), keeping
+        # only the last 400 characters so the end of long errors stays visible.
         line: int = 0
-        # max/last/most-recent 400 characters only
         if len(self._text) > 400:
             self._text = self._text[-400:]
-        words = self._text.split()
-        current_line = ""
-
         distance = font.height + 1
-        for word in words:
-            # Check if adding this word would exceed the line width
-            test_line = current_line + (" " if current_line else "") + word
+        lines_fit = True
+
+        def emit(text):
+            nonlocal line, lines_fit
             current_y = text_start_y + line * distance
-
             if current_y + distance > border_height:
-                break
+                lines_fit = False
+                return
+            self.display._text(text_start_x, current_y, text, self.text_color)
+            line += 1
 
-            if len(test_line) <= chars_per_line:
-                current_line = test_line
-            else:
-                # Draw the current line and start a new one
+        for paragraph in self._text.split("\n"):
+            current_line = ""
+            for word in paragraph.split():
+                if not lines_fit:
+                    break
+                test_line = current_line + (" " if current_line else "") + word
+                if len(test_line) <= chars_per_line:
+                    current_line = test_line
+                    continue
                 if current_line:
-                    self.display._text(
-                        text_start_x,
-                        current_y,
-                        current_line,
-                        self.text_color,
-                    )
-                    line += 1
-
-                # If the word itself is longer than a line, split it
+                    emit(current_line)
+                # A word longer than a line is split across lines
                 if len(word) > chars_per_line:
                     for i in range(0, len(word), chars_per_line):
-                        chunk = word[i : i + chars_per_line]
-                        self.display._text(
-                            text_start_x,
-                            current_y,
-                            chunk,
-                            self.text_color,
-                        )
-                        line += 1
+                        emit(word[i : i + chars_per_line])
                     current_line = ""
                 else:
                     current_line = word
-
-        # Draw any remaining text
-        if current_line:
-            self.display._text(
-                text_start_x,
-                text_start_y + line * distance,
-                current_line,
-                self.text_color,
-            )
+            if current_line and lines_fit:
+                emit(current_line)
+            if not lines_fit:
+                break
 
         self.display.swap()

@@ -65,8 +65,13 @@ def __should_save_choice(view_manager) -> bool:
 
     input_manager = view_manager.input_manager
     input_manager.reset()
+    from time import sleep_ms
+
     while True:
         _button = input_manager.button
+        if _button == -1:
+            sleep_ms(10)  # wait without spinning the CPU
+            continue
         if _button in (BUTTON_LEFT, BUTTON_UP):
             input_manager.reset()
             choice.scroll_up()

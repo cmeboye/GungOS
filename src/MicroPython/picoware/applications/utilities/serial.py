@@ -128,8 +128,13 @@ def start(view_manager) -> bool:
     d.swap()
     inp = view_manager.input_manager
     inp.reset()
+    from time import sleep_ms
+
     while True:
         but = inp.button
+        if but == -1:
+            sleep_ms(10)  # wait without spinning the CPU
+            continue
         if but == BUTTON_ESCAPE:
             view_manager.back()
             return False

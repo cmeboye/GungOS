@@ -583,7 +583,7 @@ def _run_selected_profile_check(opts):
         "test_preferences.py", "test_wifi_setup.py",
         "test_connectivity.py", "test_connectivity_ui.py", "test_service_independence.py",
         "test_shared_plots.py", "test_graph.py", "test_graph3d.py",
-        "test_graph3d_implicit.py", "test_choice_dialogs.py",
+        "test_graph3d_implicit.py", "test_choice_dialogs.py", "test_error_reporting.py",
     )
     for name in tests:
         command = _interpreter_command() + " -X heapsize=16M " + _quote(THIS_DIR + "/" + name)

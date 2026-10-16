@@ -377,12 +377,13 @@ class ViewManager:
         self._view_count += 1
         return True
 
-    def alert(self, message: str, back: bool = False) -> bool:
+    def alert(self, message: str, back: bool = False, title: str = "Alert") -> bool:
         """Show an alert and wait for the user to acknowledge it.
 
         Args:
             message (str): The message to display in the alert.
             back (bool): Whether to navigate back after the alert is acknowledged. Defaults to False.
+            title (str): The heading drawn above the message. Defaults to "Alert".
 
         Returns:
             bool: True if the user confirmed the alert, False otherwise.
@@ -398,7 +399,7 @@ class ViewManager:
             self._foreground_color,
             self._background_color,
         )
-        _alert.draw("Alert")
+        _alert.draw(title)
         self.log(f"Alert: {message}", 2)
 
         _denied: bool = False
@@ -406,12 +407,16 @@ class ViewManager:
         # Wait for user to acknowledge
         inp = self._input_manager
         inp.reset()
+        from time import sleep_ms
+
         while True:
             button = inp.button
-            if button != -1:
-                _denied = button == BUTTON_ESCAPE
-                inp.reset()
-                break
+            if button == -1:
+                sleep_ms(10)  # wait without spinning the CPU
+                continue
+            _denied = button == BUTTON_ESCAPE
+            inp.reset()
+            break
 
         if back:
             self.back()

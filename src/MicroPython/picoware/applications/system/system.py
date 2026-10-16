@@ -124,8 +124,13 @@ def activate(view_manager, index, redraw=None):
         choice.open()
         inp = view_manager.input_manager
         inp.reset()
+        from time import sleep_ms
+
         while True:
             _button = inp.button
+            if _button == -1:
+                sleep_ms(10)  # wait without spinning the CPU
+                continue
             if _button in (BUTTON_LEFT, BUTTON_UP):
                 inp.reset()
                 choice.scroll_up()

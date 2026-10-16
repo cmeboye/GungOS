@@ -15,6 +15,14 @@
   The keyboard driver now reports Alt+letter as distinct keys.
 - Simulator `--sim-check` runs eleven PicoCalc checks that were previously
   unreachable; all pass.
+- App crashes show the exception with its file and line, and the full
+  traceback is saved to `picoware/last_crash.txt` on SD. Alerts honour
+  line breaks.
+- Key-wait loops (alerts, yes/no dialogs, serial info) sleep between polls
+  instead of spinning the CPU.
+- A fatal error offers a restart (any key) or a stop at the REPL (Esc)
+  instead of leaving the device stuck.
+- Fixed: System > Shutdown and saving a scanned Wi-Fi network crashed.
 
 These changes require a new UF2 and matching SD apps.
 
