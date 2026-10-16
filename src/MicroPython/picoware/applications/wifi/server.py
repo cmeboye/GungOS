@@ -42,6 +42,8 @@ settings_info = {}  # for storing settings being edited
 # locations
 SERVER_FOLDER = "picoware/wifi/server"
 SERVER_INFO = "picoware/wifi/server/server_info.json"
+# The access point password lives in internal flash, not in SERVER_INFO.
+AP_PASSWORD_SECRET = "ap_password"
 
 # json example
 # {
@@ -673,6 +675,14 @@ def __get_setting(view_manager, key: str, default: str = "") -> str:
     except Exception as e:
         view_manager.log("Error reading server setting:" + str(e), 2)
 
+    if key == "password":
+        from picoware.system import secrets
+        stored = secrets.get(AP_PASSWORD_SECRET, None)
+        if stored is not None:
+            return stored
+        # Older SD cards hold the access point password in plain text: move it to flash.
+        if value and __save_setting(view_manager, key, value):
+            return value
     return value
 
 
@@ -692,7 +702,16 @@ def __save_setting(view_manager, key: str, value: str) -> bool:
         server_info: dict = _read_info(storage)
         if "settings" not in server_info:
             server_info["settings"] = {}
-        server_info["settings"][key] = value
+        if key == "password":
+            from picoware.system import secrets
+            if not secrets.update({AP_PASSWORD_SECRET: value}):
+                view_manager.alert("The access point password could not be saved.")
+                return False
+            if "password" not in server_info["settings"]:
+                return True
+            server_info["settings"].pop("password")
+        else:
+            server_info["settings"][key] = value
         return _write_info(view_manager,server_info)
     except Exception as e:
         view_manager.log("Error saving server setting:" + str(e), 2)

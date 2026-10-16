@@ -15,6 +15,10 @@ import _thread
 from gc import collect
 from picoware.system.decorator import storage_required, wifi_required
 
+# The password lives in internal flash; older releases kept it on the SD card.
+SSH_PASSWORD_SECRET = "ssh_password"
+LEGACY_SSH_PASSWORD_PATH = "picoware/ssh/password.txt"
+
 # View constants
 VIEW_MAIN_MENU = const(0)
 VIEW_KEYBOARD_HOST = const(1)
@@ -1334,12 +1338,18 @@ def _handle_terminal_input(view_manager) -> None:
 def __load_ssh_credentials(view_manager) -> bool:
     """Load SSH credentials from storage"""
     global ssh_host, ssh_port, ssh_username, ssh_password
+    from picoware.system import secrets
     storage = view_manager.storage
 
     stored_host = storage.read("picoware/ssh/host.txt")
     stored_port = storage.read("picoware/ssh/port.txt")
     stored_username = storage.read("picoware/ssh/username.txt")
-    stored_password = storage.read("picoware/ssh/password.txt")
+    stored_password = secrets.get(SSH_PASSWORD_SECRET, "")
+    # Older SD cards hold the password in plain text: move it to flash.
+    legacy_password = storage.read(LEGACY_SSH_PASSWORD_PATH) if storage.exists(LEGACY_SSH_PASSWORD_PATH) else ""
+    if legacy_password and secrets.update({SSH_PASSWORD_SECRET: legacy_password}):
+        storage.remove(LEGACY_SSH_PASSWORD_PATH)
+        stored_password = legacy_password
 
     if stored_host:
         ssh_host = stored_host
@@ -1373,8 +1383,11 @@ def _keyboard_save(view_manager) -> bool:
         file_path = "picoware/ssh/username.txt"
         ssh_username = kb.response
     elif current_view == VIEW_KEYBOARD_PASSWORD:
-        file_path = "picoware/ssh/password.txt"
+        from picoware.system import secrets
+        if not secrets.update({SSH_PASSWORD_SECRET: kb.response}):
+            return False
         ssh_password = kb.response
+        return True
 
     if file_path:
         return storage.write(file_path, kb.response)

@@ -47,8 +47,13 @@ on the shipped Pico firmware.
 
 ## Storage and API details
 
-- Saved Wi-Fi credentials remain in `picoware/settings/picoware.json` on SD.
-  No credential migration is needed.
+- Passwords (Wi-Fi, SSH, the server's access point) are stored in the Pico's
+  internal flash (`/secrets.json`, `picoware.system.secrets`), not on SD. The
+  SSID and other settings stay in `picoware/settings/picoware.json`. Passwords
+  that older releases wrote to the SD card move to flash the first time they
+  are read and are then removed from the card. They stay with the device:
+  moving the SD card to another PicoCalc means entering them again. Anyone
+  holding the device can still read them over the USB REPL.
 - Web-server settings/pages live in `picoware/wifi/server/server_info.json`.
 - On a future supported pairing backend, actual key material lives in
   `picoware/bluetooth/bonds.json`; `paired_devices.json` holds names and key

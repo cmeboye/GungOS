@@ -66,7 +66,7 @@ def verify_sd(root):
     assert actual==expected and not list(apps.rglob('*.py')),'Compiled app package mismatch'
     assert not (apps/'engtools/tools').exists(),'Unfinished tools in release'
     settings=json.loads((root/'sd-card/picoware/settings/picoware.json').read_text())
-    assert settings['wifi_ssid']==settings['wifi_password']=='','Release contains Wi-Fi credentials'
+    assert settings['wifi_ssid']=='' and 'wifi_password' not in settings,'Release contains Wi-Fi credentials'
     assert not any(settings.get(key) for key in settings if 'api_key' in key or 'server_password' in key),'Release contains secrets'
     retired=runpy.run_path(str(root/'src/MicroPython/picoware/system/settings.py'))['RETIRED_SETTINGS']
     assert not any(key in settings for key in retired),'Release contains retired settings'

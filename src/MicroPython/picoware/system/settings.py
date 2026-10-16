@@ -22,12 +22,14 @@ RETIRED_SETTINGS = RETIRED_SERVICE_SETTINGS + (
 )
 
 SETTINGS_PATH = "picoware/settings/picoware.json"
+# Kept in internal flash (picoware.system.secrets), never in the SD settings file.
+WIFI_PASSWORD_KEY = "wifi_password"
 
 
 class Settings:
     """Settings management for GungOS."""
 
-    __slots__ = ["_storage", "_path", "_settings"]
+    __slots__ = ["_storage", "_path", "_settings", "_legacy_password"]
 
     def __init__(self, storage):
         """Initialize settings, loading from storage if present.
@@ -45,7 +47,6 @@ class Settings:
             "screensaver": "",
             "theme_color": 0x001F,
             "wifi_ssid": "",
-            "wifi_password": "",
         }
         if not self._storage.exists(self._path):
             if not self.__save_settings():
@@ -60,6 +61,15 @@ class Settings:
                     pass
         for key in RETIRED_SETTINGS:
             self._settings.pop(key, None)
+        # Older SD cards hold the Wi-Fi password in plain text: move it to flash
+        # and remove it from the card. An empty field is dropped on the next save.
+        self._legacy_password = None
+        legacy = self._settings.pop(WIFI_PASSWORD_KEY, None)
+        if legacy:
+            if self.__store_password(legacy, False):
+                self.__save_settings()
+            else:
+                self._legacy_password = legacy
 
     @property
     def screensaver(self):
@@ -149,7 +159,12 @@ class Settings:
     def wifi_settings(self) -> dict:
         """Return the current WiFi settings."""
         ssid = self._settings.get("wifi_ssid", "")
-        password = self._settings.get("wifi_password", "")
+        if self._legacy_password is not None:
+            password = self._legacy_password
+        else:
+            from picoware.system import secrets
+
+            password = secrets.get(WIFI_PASSWORD_KEY, "")
         return {"ssid": ssid, "password": password}
 
     @wifi_settings.setter
@@ -165,7 +180,24 @@ class Settings:
         """Save WiFi credentials and return whether storage accepted the write."""
         ssid = value.get("ssid", "")
         password = value.get("password", "")
-        return self.update({"wifi_ssid": ssid, "wifi_password": password})
+        return self.update({"wifi_ssid": ssid, WIFI_PASSWORD_KEY: password})
+
+    def __store_password(self, value: str, explicit: bool) -> bool:
+        """Write the Wi-Fi password to internal flash.
+
+        Args:
+            value (str): The password.
+            explicit (bool): False when migrating an SD copy; an empty legacy
+                value then has nothing worth moving.
+
+        Returns:
+            bool: True if flash holds the value afterwards.
+        """
+        from picoware.system import secrets
+
+        if secrets.get(WIFI_PASSWORD_KEY, None) == value or (value == "" and not explicit):
+            return True
+        return secrets.update({WIFI_PASSWORD_KEY: value})
 
     def __save_settings(self) -> bool:
         """Save settings to storage.
@@ -179,32 +211,47 @@ class Settings:
         )
 
     def update(self, values: dict) -> bool:
-        """Persist a group of settings, retaining previous values on failure."""
+        """Persist a group of settings, retaining previous values on failure.
+
+        The Wi-Fi password goes to internal flash once the SD part is saved; if
+        that write fails the SD file is restored, so a failed save changes nothing.
+        """
+        values = dict(values)
+        password = values.pop(WIFI_PASSWORD_KEY, None)
         previous = self._settings.copy()
         current = previous.copy()
+        on_card = None
         # Another view may have saved credentials since this instance opened.
         # Merge only our changed fields into the latest settings on the card.
         if self._storage.exists(self._path):
             try:
-                saved = json.loads(self._storage.read(self._path))
-                if not isinstance(saved, dict):
+                on_card = json.loads(self._storage.read(self._path))
+                if not isinstance(on_card, dict):
                     return False
-                current.update(saved)
+                current.update(on_card)
             except Exception:
                 print("Cannot update unreadable device settings")
                 return False
         current.update(values)
         for key in RETIRED_SETTINGS:
             current.pop(key, None)
+        legacy = current.pop(WIFI_PASSWORD_KEY, None)
+        # Move a plain-text SD password to flash before the card copy is dropped.
+        if password is None and legacy and not self.__store_password(legacy, False):
+            return False
         self._settings = current
+        saved = False
         if self.__save_settings():
             try:
-                saved = json.loads(self._storage.read(self._path))
-                if saved == current:
-                    return True
+                saved = json.loads(self._storage.read(self._path)) == current
             except Exception:
-                pass
+                saved = False
+        if saved and (password is None or self.__store_password(password, True)):
+            self._legacy_password = None
+            return True
         self._settings = previous
+        if saved and on_card is not None:
+            self._storage.serialize(on_card, self._path)
         return False
 
     @classmethod

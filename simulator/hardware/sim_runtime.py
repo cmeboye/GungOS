@@ -352,7 +352,6 @@ def seed_sd(profile="dev"):
             "screen_brightness": 100,
             "theme_color": 31,
             "wifi_ssid": "Picoware-Sim",
-            "wifi_password": "",
         },
         ("wifi_ssid",),
     )
@@ -1287,6 +1286,13 @@ def host_path(path):
     elif raw.startswith("/"):
         raw = raw[1:]
     return sd_root + ("/" + raw if raw else "")
+
+
+def flash_path(name):
+    """Map a file in the Pico's internal flash to a folder beside the simulated SD."""
+    root = sd_root.rstrip("/") + ".flash"
+    mkdir_p(root)
+    return root + "/" + str(name).lstrip("/")
 
 
 def app_source_path(path):

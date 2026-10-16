@@ -23,6 +23,9 @@
 - A fatal error offers a restart (any key) or a stop at the REPL (Esc)
   instead of leaving the device stuck.
 - Fixed: System > Shutdown and saving a scanned Wi-Fi network crashed.
+- Wi-Fi, SSH and access point passwords are kept in the Pico's internal
+  flash instead of in plain text on the SD card; existing SD copies are
+  moved automatically.
 
 These changes require a new UF2 and matching SD apps.
 
