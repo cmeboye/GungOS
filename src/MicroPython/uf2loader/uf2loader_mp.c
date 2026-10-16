@@ -4,7 +4,7 @@
 #include "pico/bootrom.h"
 #include "hardware/structs/psm.h"
 
-#if defined(WAVESHARE_1_43) || defined(WAVESHARE_3_49) || defined(PICOCALC)
+#if defined(PICOCALC)
 #include "../sd/fat32.h"
 #endif
 
@@ -12,7 +12,7 @@
 
 #include LCD_INCLUDE
 
-#if defined(WAVESHARE_1_43) || defined(WAVESHARE_3_49) || defined(PICOCALC)
+#if defined(PICOCALC)
 static char _screen_print_buf[256];
 #define SCREEN_PRINT(fmt, ...)                                                      \
     do                                                                              \
@@ -32,7 +32,7 @@ extern psram_qspi_inst_t psram_instance;
 #define UF2_PSRAM_BASE_ADDR PSRAM_HEAP_START_ADDR
 #endif
 
-#if defined(WAVESHARE_1_43) || defined(WAVESHARE_3_49) || defined(PICOCALC)
+#if defined(PICOCALC)
 static uf2_block_t uf2loader_block_buf __attribute__((aligned(256)));
 
 static bool uf2loader_family_valid(uint32_t family_id)
@@ -203,7 +203,7 @@ __attribute__((noinline, section(".time_critical.uf2loader"))) static void uf2lo
 
 mp_obj_t uf2loader_flash_uf2(mp_obj_t filename_obj)
 {
-#if defined(WAVESHARE_1_43) || defined(WAVESHARE_3_49) || defined(PICOCALC)
+#if defined(PICOCALC)
     const char *filename = mp_obj_str_get_str(filename_obj);
 
     fat32_file_t fat_file;

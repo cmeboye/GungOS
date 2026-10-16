@@ -34,9 +34,9 @@ def main():
                 assert '..' not in Path(name).parts
                 package.extract(name,card)
     for name in ('settings','wifi','keyboard','engineering'):(card/'picoware'/name).mkdir()
-    defaults={'dark_mode':True,'screen_brightness':100,'theme_color':31,'debug':False,
-              'exit_button':77,'gmt_offset':0,'onscreen_keyboard':False,'lvgl_mode':False,
-              'usb_stream':False,'screensaver':'Calculator Widget','wifi_ssid':'','wifi_password':'',
+    defaults={'screen_brightness':100,'theme_color':31,'debug':False,
+              'gmt_offset':0,'onscreen_keyboard':False,
+              'screensaver':'Calculator Widget','wifi_ssid':'','wifi_password':'',
               'tetris_sound':bool(list(card.rglob('*.wav'))),'tetris_volume':25}
     (card/'picoware/settings/picoware.json').write_text(json.dumps(defaults,indent=2)+'\n')
     with zipfile.ZipFile(ROOT/('GungOS-v'+verify.VERSION+'-SD.zip'),'w',zipfile.ZIP_DEFLATED) as archive:

@@ -6,32 +6,27 @@ class System:
     @property
     def board_id(self) -> int:
         """Return the board ID."""
-        from picoware_boards import BOARD_ID
+        from picoware.system.boards import BOARD_ID
 
         return BOARD_ID
 
     @property
     def board_name(self):
         """Return the board name."""
-        from picoware_boards import get_device_name
+        from picoware.system.boards import DEVICE_NAME
 
-        return get_device_name()
+        return DEVICE_NAME
 
     @property
     def device_name(self):
         """Return the device name."""
-        from picoware_boards import get_current_name
+        from picoware.system.boards import BOARD_NAME
 
-        return get_current_name()
+        return BOARD_NAME
 
     @property
     def free_psram(self):
         """Return the amount of free PSRAM memory."""
-        from picoware_boards import BOARD_HAS_PSRAM
-
-        if BOARD_HAS_PSRAM == 0:
-            return 0
-
         from picoware.system.psram import PSRAM
 
         psram = PSRAM()
@@ -55,63 +50,6 @@ class System:
             # unpack tuple
             freq = machine.freq()[0] / 1000000
         return int(freq)
-
-    @property
-    def has_audio(self) -> bool:
-        """Return True if the device has audio capabilities."""
-        from picoware_boards import BOARD_HAS_AUDIO
-
-        from picoware.system.features import MEDIA_ENABLED
-        return MEDIA_ENABLED and BOARD_HAS_AUDIO == 1
-
-    @property
-    def has_psram(self) -> bool:
-        """Return True if the device has PSRAM capabilities."""
-        from picoware_boards import BOARD_HAS_PSRAM
-
-        return BOARD_HAS_PSRAM == 1
-
-    @property
-    def has_sd_card(self) -> bool:
-        """Return True if the device has an SD card slot."""
-        from picoware_boards import BOARD_HAS_SD
-
-        return BOARD_HAS_SD == 1
-
-    @property
-    def has_storage(self) -> bool:
-        """Return True if the device has persistent file storage."""
-        from picoware_boards import BOARD_HAS_SD
-
-        return BOARD_HAS_SD == 1
-
-    @property
-    def has_touch(self):
-        """Return True if the device has touch capabilities."""
-        from picoware_boards import BOARD_HAS_TOUCH
-
-        return BOARD_HAS_TOUCH == 1
-
-    @property
-    def has_wifi(self):
-        """Return True if the device has WiFi capabilities."""
-        from picoware_boards import BOARD_HAS_WIFI
-
-        return BOARD_HAS_WIFI == 1
-
-    @property
-    def has_bluetooth(self):
-        """Return True if the device has Bluetooth capabilities."""
-        from picoware_boards import BOARD_HAS_BLUETOOTH
-
-        return BOARD_HAS_BLUETOOTH == 1
-
-    @property
-    def is_circular(self):
-        """Return True if the device has a circular display."""
-        from picoware_boards import is_circular, BOARD_ID
-
-        return is_circular(BOARD_ID)
 
     @property
     def free_flash(self):
@@ -155,11 +93,6 @@ class System:
     @property
     def total_psram(self):
         """Return the total PSRAM memory size."""
-        from picoware_boards import BOARD_HAS_PSRAM
-
-        if BOARD_HAS_PSRAM == 0:
-            return 0
-
         from picoware.system.psram import PSRAM
 
         psram = PSRAM()
@@ -175,11 +108,6 @@ class System:
     @property
     def used_psram(self):
         """Return the total PSRAM memory used."""
-        from picoware_boards import BOARD_HAS_PSRAM
-
-        if BOARD_HAS_PSRAM == 0:
-            return 0
-
         from picoware.system.psram import PSRAM
 
         psram = PSRAM()
@@ -209,16 +137,6 @@ class System:
         Args:
             view_manager (ViewManager): Optional manager to show a shutdown alert. Defaults to None.
         """
-        from picoware_boards import BOARD_HAS_PSRAM, BOARD_ID, BOARD_FLIPPER_ZERO
-
-        if BOARD_ID == BOARD_FLIPPER_ZERO:
-            from flipper_battery import shutdown
-            shutdown()
-            return
-
-        if BOARD_HAS_PSRAM == 0:
-            return
-
         from picoware_southbridge import is_power_off_supported, write_power_off_delay
 
         if is_power_off_supported():

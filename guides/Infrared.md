@@ -4,7 +4,7 @@ protocol folders under `picoware.system.drivers.ir_rx` and `picoware.system.driv
 the lower-level decoders and encoders. They support NEC, NEC-ext, Samsung32,
 Sony SIRC 12/15/20, Philips RC-5/RC-6 mode 0, and Microsoft MCE.
 
-Currently the Flipper Zero supports both IR transmission and reception, the Cardputer-Adv only supports transmission, and the other boards need external IR hardware for either function.
+The PicoCalc has no built-in IR hardware. Transmission uses GP28 and needs external IR hardware; receiving is unavailable.
 
 ## SD layout
 

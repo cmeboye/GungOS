@@ -607,14 +607,3 @@ class USBMedia:
         self._xfer_done = False
         self._usbdev.submit_xfer(0x83, bytes([0, 0]))
 
-from picoware.system.features import MEDIA_ENABLED
-
-if MEDIA_ENABLED:
-    from usb_video_mp import USBVideoStream
-else:
-    class USBVideoStream:
-        """Compatibility error for apps requesting an excluded backend."""
-
-        def __init__(self):
-            raise RuntimeError("USB video streaming is not included in this firmware")
-

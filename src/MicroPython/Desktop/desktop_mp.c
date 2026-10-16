@@ -1,27 +1,14 @@
 #include "py/runtime.h"
-#include "picoware_boards.h"
 
 static mp_obj_t desktop_native_modules(void)
 {
     mp_obj_t modules[] = {
         MP_OBJ_NEW_QSTR(MP_QSTR_auto_complete),
-#ifndef PICOWARE_LEAN_BUILD
-        MP_OBJ_NEW_QSTR(MP_QSTR_c),
-        MP_OBJ_NEW_QSTR(MP_QSTR_engine),
-#endif
         MP_OBJ_NEW_QSTR(MP_QSTR_font),
         MP_OBJ_NEW_QSTR(MP_QSTR_picoware_pcm),
-#ifndef PICOWARE_LEAN_BUILD
-        MP_OBJ_NEW_QSTR(MP_QSTR_ghouls),
-        MP_OBJ_NEW_QSTR(MP_QSTR_mjs),
-        MP_OBJ_NEW_QSTR(MP_QSTR_mmbasic),
-#endif
         MP_OBJ_NEW_QSTR(MP_QSTR_response),
         MP_OBJ_NEW_QSTR(MP_QSTR_sim_raster),
         MP_OBJ_NEW_QSTR(MP_QSTR_ulab),
-#ifndef PICOWARE_LEAN_BUILD
-        MP_OBJ_NEW_QSTR(MP_QSTR_video),
-#endif
         MP_OBJ_NEW_QSTR(MP_QSTR_vector),
         MP_OBJ_NEW_QSTR(MP_QSTR_vt),
     };
@@ -32,7 +19,6 @@ static MP_DEFINE_CONST_FUN_OBJ_0(desktop_native_modules_obj,
 
 static const mp_rom_map_elem_t desktop_module_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_picoware_desktop)},
-    {MP_ROM_QSTR(MP_QSTR_BOARD_ID), MP_ROM_INT(BOARD_DESKTOP)},
     {MP_ROM_QSTR(MP_QSTR_native_modules),
      MP_ROM_PTR(&desktop_native_modules_obj)},
 };

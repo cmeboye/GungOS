@@ -68,7 +68,8 @@ def verify_sd(root):
     settings=json.loads((root/'sd-card/picoware/settings/picoware.json').read_text())
     assert settings['wifi_ssid']==settings['wifi_password']=='','Release contains Wi-Fi credentials'
     assert not any(settings.get(key) for key in settings if 'api_key' in key or 'server_password' in key),'Release contains secrets'
-    assert settings['dark_mode'] is True and settings['exit_button']==77,'Fixed keyboard/theme defaults'
+    retired=runpy.run_path(str(root/'src/MicroPython/picoware/system/settings.py'))['RETIRED_SETTINGS']
+    assert not any(key in settings for key in retired),'Release contains retired settings'
     assert settings['screensaver']=='Calculator Widget','Missing demonstration widget default'
     assert isinstance(settings['tetris_sound'],bool) and settings['tetris_volume']==25,'Sound defaults'
     for path in apps.rglob('*.wav'):

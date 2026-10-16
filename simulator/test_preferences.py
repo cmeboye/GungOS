@@ -53,13 +53,13 @@ assert vm.draw._brightness == 40
 assert not app._menu.item_exists('Dark Mode')
 assert not app._menu.item_exists('Exit Button')
 assert Settings(vm.storage).update({'dark_mode':False})
-assert vm.background_color == 0
+assert vm.background_color == 0 and 'dark_mode' not in Settings(vm.storage).settings
 app.__open_toggle(app.STATE_ONSCREEN_KEYBOARD)
 vm._button=BUTTON_CENTER
 app.run(vm)
 assert vm.keyboard.show_keyboard
 saved=Settings(vm.storage)
-assert saved.theme_color==red and saved.screen_brightness==40 and saved.dark_mode
+assert saved.theme_color==red and saved.screen_brightness==40
 assert saved.wifi_settings == {'ssid':'Updated','password':'updated-pass'}
 assert saved.settings['custom_field']=='keep'
 assert Settings.get(vm.storage, 'onscreen_keyboard', False)

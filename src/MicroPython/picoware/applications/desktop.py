@@ -1,4 +1,4 @@
-"""Desktop - Static desktop home screen."""
+"""Desktop - Dashboard home screen."""
 
 class PicowareAnimation:
     """Class to draw "Picoware" animation"""
@@ -9,7 +9,6 @@ class PicowareAnimation:
         Args:
             draw (Draw): The drawing context.
         """
-        from picoware.system.boards import BOARD_FLIPPER_ZERO, BOARD_ID, BOARD_POOM
         self.display = draw
         self.letter_states = []
         self.animation_complete = False
@@ -21,7 +20,7 @@ class PicowareAnimation:
         self.center_y = self.size.y // 2
         self.frame_counter = 0
 
-        self._color = 0xFFFF if BOARD_ID in (BOARD_FLIPPER_ZERO, BOARD_POOM) else 0x4208
+        self._color = 0x4208
 
         self._initialize_letter_animation()
 
@@ -32,7 +31,6 @@ class PicowareAnimation:
 
     def _initialize_letter_animation(self) -> None:
         """Initialize the animation state for each letter in 'Picoware'."""
-        from picoware.system.boards import BOARD_FLIPPER_ZERO, BOARD_ID, BOARD_POOM
         from picoware.system.colors import (
             TFT_RED,
             TFT_GREEN,
@@ -82,7 +80,7 @@ class PicowareAnimation:
                 "delay": i * 3,  # Staggered start times
                 "frame": 0,
                 "opacity": 0,  # Start invisible (0-100 scale)
-                "color": 0xFFFF if BOARD_ID in (BOARD_FLIPPER_ZERO, BOARD_POOM) else choice(colors),  # Random color for each letter (white for Flipper Zero/Poom)
+                "color": choice(colors),  # Random color for each letter
             }
             self.letter_states.append(letter_state)
 
@@ -155,116 +153,43 @@ class PicowareAnimation:
         self.frame_counter += 1
 
 
-_desktop = None
-_desktop_status = None
-_desktop_visual = None
-_has_wifi = True
 _dashboard = None
 _dashboard_state = None
 
 
 def start(view_manager):
-    """Open the custom home screen and reconnect to saved Wi-Fi."""
-    from picoware.gui.desktop import Desktop
-    from picoware.gui.home_visual import HomeVisual
-    global _desktop, _desktop_status, _desktop_visual, _has_wifi, _dashboard
-    _desktop = Desktop(view_manager.draw, view_manager.foreground_color,
-                       view_manager.background_color)
-    _desktop_status = None
-    _desktop_visual = HomeVisual()
-    if (view_manager.draw.size.x,view_manager.draw.size.y)==(320,320):
-        from picoware.gui.dashboard import Dashboard
-        _dashboard=Dashboard(view_manager,_dashboard_state)
-        _desktop_visual=None
-    _has_wifi = view_manager.has_wifi
-    if _has_wifi:
-        from picoware.applications.wifi.utils import connect_to_saved_wifi
+    """Open the dashboard home screen and reconnect to saved Wi-Fi."""
+    from picoware.gui.dashboard import Dashboard
+    from picoware.applications.wifi.utils import connect_to_saved_wifi
+    global _dashboard
+    _dashboard = Dashboard(view_manager, _dashboard_state)
+    if view_manager.has_wifi:
         connect_to_saved_wifi(view_manager)
     return True
 
 
 def run(view_manager):
-    """Update home status and time; handle navigation."""
-    from picoware.system.buttons import BUTTON_LEFT, BUTTON_CENTER, BUTTON_UP
-    from picoware.system.view import View
-    global _desktop_status
-    if _dashboard is not None:
-        _dashboard.update()
-        if view_manager.has_wifi:
-            wifi=view_manager.wifi
-            if not wifi.is_connected() and wifi.state in (0,4):
-                from picoware.applications.wifi.utils import connect_to_saved_wifi
-                connect_to_saved_wifi(view_manager)
-            elif wifi.is_connected() and not view_manager.time.is_set and not view_manager.time.is_fetching:
-                view_manager.time.fetch(view_manager.gmt_offset)
-        if not _dashboard or not _dashboard.dirty:
-            from time import sleep_ms
-            sleep_ms(10)
-        return
-    button = view_manager.button
-    if button == BUTTON_LEFT:
-        from picoware.applications.system import system_info
-        view_manager.add(View("system_info", system_info.run, system_info.start, system_info.stop))
-        view_manager.switch_to("system_info")
-        return
-    if button == BUTTON_CENTER:
-        from picoware.applications import library
-        view_manager.add(View("library", library.run, library.start, library.stop))
-        view_manager.switch_to("library")
-        return
-    if button == BUTTON_UP:
-        from picoware.applications import notifications
-        view_manager.add(View("notifications", notifications.run, notifications.start, notifications.stop))
-        view_manager.switch_to("notifications")
-        return
-
-    battery_level: int = view_manager.battery.percentage
-    is_connected = _has_wifi and view_manager.wifi.is_connected()
-    current = view_manager.time.rtc.datetime() if view_manager.time.is_set else None
-    clock_state = current[:6] if current is not None else None
-    if current is not None:
-        _desktop.set_time("%02d:%02d" % (current[4], current[5]))
-    else:
-        _desktop.set_time("")
-    status = (battery_level, is_connected, clock_state,
-              view_manager.foreground_color, view_manager.background_color)
-    if status != _desktop_status:
-        _desktop.set_battery(battery_level)
-        draw = view_manager.draw
-        draw.erase()
-        _desktop.text_color = view_manager.foreground_color
-        _desktop.background_color = view_manager.background_color
-        _desktop.is_dark_mode = view_manager.foreground_color == 0xFFFF and view_manager.background_color == 0
-        _desktop.draw_header(is_connected)
-        _desktop_visual.draw(draw, current, view_manager.foreground_color, view_manager.background_color)
-        draw.swap()
-        _desktop_status = status
-    else:
-        from time import sleep_ms
-
-        sleep_ms(10)
-
-    if not _has_wifi:
-        return
-    wifi = view_manager.wifi
-    if not wifi.is_connected():
-        if wifi.state in (0, 4):
+    """Update the dashboard; keep Wi-Fi and the clock in sync."""
+    _dashboard.update()
+    if view_manager.has_wifi:
+        wifi = view_manager.wifi
+        if not wifi.is_connected() and wifi.state in (0, 4):
             from picoware.applications.wifi.utils import connect_to_saved_wifi
             connect_to_saved_wifi(view_manager)
-    elif not view_manager.time.is_set and not view_manager.time.is_fetching:
-        view_manager.time.fetch(view_manager.gmt_offset)
+        elif wifi.is_connected() and not view_manager.time.is_set and not view_manager.time.is_fetching:
+            view_manager.time.fetch(view_manager.gmt_offset)
+    # update() may have opened another view, which releases the dashboard.
+    if _dashboard is None or not _dashboard.dirty:
+        from time import sleep_ms
+        sleep_ms(10)
 
 
 def stop(view_manager):
     """Release home drawing data when entering a menu."""
     from gc import collect
-    global _desktop, _desktop_status, _desktop_visual, _has_wifi, _dashboard, _dashboard_state
+    global _dashboard, _dashboard_state
     if _dashboard is not None:
-        _dashboard_state=(_dashboard.category,_dashboard.indices[:])
+        _dashboard_state = (_dashboard.category, _dashboard.indices[:])
         _dashboard.stop()
-        _dashboard=None
-    _desktop = None
-    _desktop_status = None
-    _desktop_visual = None
-    _has_wifi = True
+        _dashboard = None
     collect()

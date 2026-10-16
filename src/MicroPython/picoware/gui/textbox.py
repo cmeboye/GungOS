@@ -27,8 +27,6 @@ class TextBox(textbox.TextBox):
             show_scrollbar (bool): Whether to show the scrollbar. Defaults to True.
             show_cursor (bool): Whether to show the cursor. Defaults to False.
         """
-        self.use_lvgl = draw.use_lvgl
-        self._lvgl_textbox = None
         self._draw = draw
         super().__init__(
             y,
@@ -42,44 +40,8 @@ class TextBox(textbox.TextBox):
             show_cursor,
         )
 
-        # LVGL path
-        if self.use_lvgl:
-            try:
-                from picoware_lvgl import init, TextBox as LVGLTextBox
-
-                init()
-
-                class LVGLTextBoxWrapper(LVGLTextBox):
-                    """Wrapper that forwards text assignment to LVGL."""
-
-                    def __setattr__(self, name, value):
-                        """Forward text assignment to the LVGL text box.
-
-                        Args:
-                            name (str): The attribute name.
-                            value: The attribute value.
-                        """
-                        if name == "text":
-                            self.set_text(value)
-                        elif name == "current_line":
-                            self.set_current_line(value)
-                        else:
-                            super().__setattr__(name, value)
-
-                self._lvgl_textbox = LVGLTextBoxWrapper(
-                    y, height, foreground_color, background_color, show_scrollbar
-                )
-            except (ImportError, RuntimeError, ValueError):
-                self.use_lvgl = False
-
     def __del__(self):
-        """Clean up resources and deinitialize LVGL."""
-        if self._lvgl_textbox is not None:
-            from picoware_lvgl import deinit
-
-            del self._lvgl_textbox
-            self._lvgl_textbox = None
-            deinit()
+        """Clean up resources."""
 
     def __setattr__(self, name, value):
         """Set an attribute, routing text and cursor changes to setters.
@@ -100,8 +62,6 @@ class TextBox(textbox.TextBox):
     @property
     def current_text(self) -> str:
         """Returns the current text content of the text box."""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            return self._lvgl_textbox.text()
         return self.text
 
     @current_text.setter
@@ -111,45 +71,22 @@ class TextBox(textbox.TextBox):
         Args:
             value (str): The new text content.
         """
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.set_text(value)
-            task_handler()
-            return
 
         self._set_text(value)
 
     @property
     def text_height(self) -> int:
         """Returns the total height of the text content in pixels."""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            return self._lvgl_textbox.text_height()
         tl = self.total_lines
         return 0 if tl == 0 else (tl - 1) * self._draw.font_size.y + 2
 
     def clear(self):
         """Clears the text box content and screen."""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.clear()
-            task_handler()
-            return
 
         self._clear()
 
     def refresh(self):
         """Refreshes the text box display to reflect any changes in content or state."""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.refresh()
-            task_handler()
-            return
 
         self.render()
 
@@ -159,13 +96,6 @@ class TextBox(textbox.TextBox):
         Args:
             line (int): The line index to show.
         """
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.set_current_line(line)
-            task_handler()
-            return
 
         self._set_current_line(line)
 
@@ -175,60 +105,25 @@ class TextBox(textbox.TextBox):
         Args:
             text (str): The new text content.
         """
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.set_text(text)
-            task_handler()
-            return
 
         self._set_text(text)
 
     def scroll_down(self):
         """Scrolls the text box content down by one line"""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.scroll_down()
-            task_handler()
-            return
 
         self._scroll_down()
 
     def scroll_up(self):
         """Scrolls the text box content up by one line"""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.scroll_up()
-            task_handler()
-            return
 
         self._scroll_up()
 
     def jump_to_top(self):
         """Moves the cursor and viewport to the beginning of the text and redraws."""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.set_current_line(0)
-            task_handler()
-            return
 
         self._set_cursor(0)
 
     def jump_to_bottom(self):
         """Moves the cursor and viewport to the end of the text and redraws."""
-        if self.use_lvgl and self._lvgl_textbox is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_textbox.set_current_line(0xFFFF)
-            task_handler()
-            return
 
         self.render()

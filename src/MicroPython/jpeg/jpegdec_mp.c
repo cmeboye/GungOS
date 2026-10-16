@@ -13,8 +13,6 @@ void *JPEGdummy = {readFLASH}; // to avoid compiler error
 
 #if defined(PICOCALC)
 #include "../lcd/lcd_config.h"
-#elif defined(CARDPUTER) || defined(WAVESHARE_2_06) || defined(CROWPANEL_WATCH_2_01) || defined(PANCAKE) || defined(V8) || defined(FLIPPER_ZERO) || defined(PICO_DUO) || defined(POOM) || defined(WAVESHARE_C6_2_06)
-#include "../lcd/lcd_config.h"
 #else
 #include "../../../lcd/lcd_config.h"
 #endif
@@ -23,12 +21,6 @@ void *JPEGdummy = {readFLASH}; // to avoid compiler error
 #include LCD_INCLUDE
 #endif
 
-#if defined(CARDPUTER) || defined(WAVESHARE_2_06) || defined(CROWPANEL_WATCH_2_01) || defined(PANCAKE) || defined(V8) || defined(POOM) || defined(WAVESHARE_C6_2_06)
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/idf_additions.h"
-#define sleep_ms(ms) vTaskDelay(pdMS_TO_TICKS(ms))
-#endif
 
 volatile uint8_t core1_running = 0; // 0: stop, 1: run, 2: done
 static uint16_t disp_height, disp_width;
@@ -42,89 +34,6 @@ uint32_t core1_stack[CORE1_STACK_SIZE];
 
 uint32_t JPEG_msg_core1;
 
-#if defined(CARDPUTER) || defined(WAVESHARE_2_06) || defined(CROWPANEL_WATCH_2_01) || defined(PANCAKE) || defined(V8) || defined(POOM) || defined(WAVESHARE_C6_2_06)
-static TaskHandle_t s_jpeg_core1_task = NULL;
-static volatile bool s_jpeg_core1_result_pending = false;
-static volatile uint32_t s_jpeg_core1_result = 0;
-
-static BaseType_t multicore_fifo_pop_timeout_us(uint32_t timeout_us, uint32_t *result)
-{
-    (void)timeout_us;
-    if (result == NULL)
-    {
-        return pdFALSE;
-    }
-    if (s_jpeg_core1_result_pending)
-    {
-        *result = s_jpeg_core1_result;
-        s_jpeg_core1_result_pending = false;
-        return pdTRUE;
-    }
-    return pdFALSE;
-}
-
-static void multicore_lockout_victim_init(void)
-{
-}
-
-static void tight_loop_contents(void)
-{
-    taskYIELD();
-}
-
-static void multicore_reset_core1(void)
-{
-    if (s_jpeg_core1_task != NULL)
-    {
-        vTaskDelete(s_jpeg_core1_task);
-        s_jpeg_core1_task = NULL;
-    }
-    s_jpeg_core1_result_pending = false;
-    core1_running = 0;
-}
-
-typedef void (*jpeg_core1_entry_t)(void);
-
-static void jpeg_core1_task_entry(void *arg)
-{
-    jpeg_core1_entry_t entry = (jpeg_core1_entry_t)arg;
-    if (entry != NULL)
-    {
-        entry();
-    }
-    s_jpeg_core1_task = NULL;
-    vTaskDelete(NULL);
-}
-
-static void multicore_launch_core1_with_stack(void (*entry)(void), uint32_t *stack, uint32_t stack_words)
-{
-    (void)stack;
-    if (entry == NULL)
-    {
-        return;
-    }
-
-    const uint32_t stack_bytes = stack_words * sizeof(uint32_t);
-#if defined(CONFIG_FREERTOS_UNICORE)
-    const BaseType_t target_core = tskNO_AFFINITY;
-#else
-    const BaseType_t target_core = 1;
-#endif
-
-    if (xTaskCreatePinnedToCore(
-            jpeg_core1_task_entry,
-            "jpeg_core1",
-            stack_bytes,
-            (void *)entry,
-            tskIDLE_PRIORITY + 1,
-            &s_jpeg_core1_task,
-            target_core) != pdPASS)
-    {
-        s_jpeg_core1_task = NULL;
-        core1_running = 0;
-    }
-}
-#endif
 
 // decode_split runs with multicore
 #define FBUFFER_MAX (2)
@@ -371,10 +280,6 @@ static void decode_core1_split()
     docode_result = DecodeJPEG(g_context);
     g_context = NULL;
     JPEG_msg_core1 = (uint32_t)docode_result;
-#if defined(CARDPUTER) || defined(CROWPANEL_WATCH_2_01) || defined(PANCAKE) || defined(V8) || defined(POOM)
-    s_jpeg_core1_result = JPEG_msg_core1;
-    s_jpeg_core1_result_pending = true;
-#endif
     core1_running = 2;
 }
 

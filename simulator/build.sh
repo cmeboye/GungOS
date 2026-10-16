@@ -16,12 +16,9 @@ usage: sh simulator/build.sh [--force] [--clean] [--check] [target...]
 targets:
   all              build/check every simulator native helper
   viewer           simulator/viewer/sdl_fb_viewer
-  audio            local audio, radio and Tetris PCM sidecars
-  audio-player     simulator/audio/sdl_audio_player
+  audio            Tetris PCM speaker sidecar
   tetris-audio     simulator/audio/tetris_pcm_player
-  radio-player     simulator/audio/sdl_radio_player
   jpeg             simulator/jpeg/sim_jpeg_decode
-  gameboy          simulator/gameboy/sim_gameboy_runner
 EOF
 }
 
@@ -288,23 +285,6 @@ build_viewer() {
         "$sim_dir/viewer/sdl_fb_viewer.c"
 }
 
-build_audio_player() {
-    check_or_build \
-        "audio-player" \
-        "$sim_dir/audio/sdl_audio_player" \
-        "sdl" \
-        "$sim_dir/audio/sdl_audio_player.c" \
-        "$root_dir"/src/MicroPython/audio/minimp3/*.h
-}
-
-build_radio_player() {
-    check_or_build \
-        "radio-player" \
-        "$sim_dir/audio/sdl_radio_player" \
-        "sdl" \
-        "$sim_dir/audio/sdl_radio_player.c"
-}
-
 build_tetris_audio() {
     check_or_build "tetris-audio" "$sim_dir/audio/tetris_pcm_player" "sdl" "$sim_dir/audio/tetris_pcm_player.c"
 }
@@ -318,49 +298,21 @@ build_jpeg() {
         "$root_dir/src/MicroPython/JPEGDEC/src/JPEGDEC.cpp"
 }
 
-build_gameboy() {
-    check_or_build \
-        "gameboy" \
-        "$sim_dir/gameboy/sim_gameboy_runner" \
-        "sdl" \
-        "$sim_dir/gameboy/sim_gameboy_runner.c" \
-        "$root_dir/src/MicroPython/gameboy/PicoCalc-GameBoy/ext/Walnut-CGB/walnut_cgb.h" \
-        "$root_dir/src/MicroPython/gameboy/PicoCalc-GameBoy/ext/minigb_apu/minigb_apu.c" \
-        "$root_dir/src/MicroPython/gameboy/PicoCalc-GameBoy/ext/minigb_apu/minigb_apu.h"
-}
-
 run_target() {
     case "$1" in
         all)
             build_viewer
-            build_audio_player
             build_tetris_audio
-            build_radio_player
             build_jpeg
-            build_gameboy
             ;;
         viewer)
             build_viewer
             ;;
-        audio)
-            build_audio_player
+        audio|tetris-audio)
             build_tetris_audio
-            build_radio_player
-            ;;
-        audio-player)
-            build_audio_player
-            ;;
-        tetris-audio)
-            build_tetris_audio
-            ;;
-        radio-player)
-            build_radio_player
             ;;
         jpeg)
             build_jpeg
-            ;;
-        gameboy)
-            build_gameboy
             ;;
         *)
             usage
@@ -402,11 +354,8 @@ fi
 if [ "$mode" = "clean" ]; then
     rm -f \
         "$sim_dir/viewer/sdl_fb_viewer" \
-        "$sim_dir/audio/sdl_audio_player" \
         "$sim_dir/audio/tetris_pcm_player" \
-        "$sim_dir/audio/sdl_radio_player" \
-        "$sim_dir/jpeg/sim_jpeg_decode" \
-        "$sim_dir/gameboy/sim_gameboy_runner"
+        "$sim_dir/jpeg/sim_jpeg_decode"
     log "[sim-build] removed simulator native binaries"
     exit 0
 fi

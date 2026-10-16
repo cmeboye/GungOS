@@ -1,23 +1,6 @@
 import json
 import os
 import time
-import builtins
-
-_original_import = builtins.__import__
-_module_disabled = None
-
-
-def _profile_import(name, globals=None, locals=None, fromlist=(), level=0):
-    """Keep desktop native modules and host shims from masking excluded APIs."""
-    if not level:
-        names = [name]
-        # MicroPython bytecode supplies a boolean fromlist marker; explicit
-        # __import__ calls may supply an actual tuple/list of attribute names.
-        if isinstance(fromlist, (tuple, list)):
-            names.extend(name + "." + item for item in fromlist if item != "*")
-        if _module_disabled is not None and any(_module_disabled(item) for item in names):
-            raise ImportError("Module excluded from this firmware: " + name)
-    return _original_import(name, globals, locals, fromlist, level)
 
 
 class StopSimulation(SystemExit):
@@ -54,7 +37,6 @@ log_path = ""
 record_path = ""
 sd_profile = "dev"
 network_mode = "real"
-flipper_wifi_attached = True
 bluetooth_mode = "virtual"
 audio_mode = "real"
 speed_mode = "auto"
@@ -83,9 +65,6 @@ _recent_input = []
 _record_text = ""
 _ir_waveform = []
 _ir_rx_timestamps = []
-_touch_point = (0, 0)
-_touch_gesture = 0
-_touch_callbacks = []
 _key_callback = None
 _background_key_poll = False
 _notifying_key = False
@@ -138,7 +117,7 @@ KEY_NAMES = {
 KEY_NAMES.update({"alt-" + chr(97 + i): 0xE1 + i for i in range(26)})
 
 LIBRARY_ITEMS = {"apps": 0, "applications": 0, "system": 1, "comms": 2, "utils": 3, "utilities": 3}
-APPLICATION_ITEMS = {"graph": 0, "graph3d": 1, "picolab": 2, "games": 3, "screensavers": 4}
+APPLICATION_ITEMS = {"picodesk": 0, "picolab": 1, "games": 2, "misc": 3}
 SYSTEM_ITEMS = {"settings": 0, "about": 1, "system info": 2, "bootloader": 3, "restart": 4, "shutdown": 5, "stop": 6}
 COMMS_ITEMS = {"bluetooth": 0, "infrared": 1, "ir": 1, "usb": 2, "wifi": 3}
 UTILITY_ITEMS = {"file manager": 0, "filemanager": 0, "picoide": 1, "python editor": 1, "pythoneditor": 1, "python repl": 2, "repl": 2, "serial terminal": 3, "serial": 3, "ssh terminal": 4, "ssh": 4}
@@ -147,14 +126,10 @@ _MENU_ITEMS = {"apps": APPLICATION_ITEMS, "system": SYSTEM_ITEMS, "comms": COMMS
 
 
 def configure(_root, _sd_root, _apps_source, _scale, _board, _max_frames, _headless, _trace_keys, _trace_views, _trace_imports, _screenshot, _viewer=False, _viewer_frame="", _viewer_keys="", _network_mode="real", _bluetooth_mode="virtual", _audio_mode="real", _speed_mode="auto", _target_fps=0, _sd_profile="dev", _record_path=""):
-    global _module_disabled
-    from picoware.system.features import module_disabled
-    _module_disabled = module_disabled
-    builtins.__import__ = _profile_import
     global root, sd_root, apps_source, scale, board, max_frames, headless
     global trace_keys, trace_views, trace_imports, screenshot_path
     global viewer, viewer_frame_path, viewer_keys_path, status_path, error_path, control_path, log_path, record_path
-    global sd_profile, network_mode, bluetooth_mode, audio_mode, flipper_wifi_attached
+    global sd_profile, network_mode, bluetooth_mode, audio_mode
     global speed_mode, target_fps, _frame_interval_ms, _last_frame_ms, _viewer_key_offset, _last_status_ms, _control_offset, audio_muted
     global frame_count, loop_count, open_target, _keys, _delayed_keys, _held_keys, _held_key_order, _lcd
     global _wait_view, _assert_text, _seen_wait_view, _seen_assert_text, _current_view_name, _recent_text
@@ -181,7 +156,6 @@ def configure(_root, _sd_root, _apps_source, _scale, _board, _max_frames, _headl
     record_path = _record_path
     sd_profile = str(_sd_profile or "dev")
     network_mode = _network_mode
-    flipper_wifi_attached = True
     bluetooth_mode = _bluetooth_mode
     audio_mode = _audio_mode
     speed_mode = _speed_mode
@@ -326,23 +300,6 @@ def _link_assets():
     source = root + "/builds/MicroPython/assets"
     target = sd_root + "/picoware/assets"
     _link_app_files_into(source, target, include_init=True)
-    from picoware.system.features import GAME_BACKENDS_ENABLED
-    if not GAME_BACKENDS_ENABLED:
-        return
-    old_map = sd_root + "/picoware/apps/games/ghouls/assets/home.ghoulsmap"
-    # Retire only the exact old generated placeholder, keeping a rollback copy.
-    try:
-        with open(old_map, "rb") as handle:
-            is_placeholder = handle.read(64) == b"Picoware simulator placeholder map\n"
-        if is_placeholder and not _exists(old_map + ".placeholder-backup"):
-            os.rename(old_map, old_map + ".placeholder-backup")
-    except OSError:
-        pass
-    _link_app_files_into(
-        root + "/src/MicroPython/ghouls/Ghouls/src/assets",
-        sd_root + "/picoware/apps/games/ghouls/assets",
-        include_init=True,
-    )
 
 
 def _merge_json_defaults(path, defaults, fill_blank_keys=()):
@@ -381,90 +338,29 @@ def seed_sd(profile="dev"):
     dev_dirs = base_dirs + (
         "picoware/apps",
         "picoware/apps/games",
-        "picoware/apps/games/ghouls",
-        "picoware/apps/games/ghouls/assets",
-        "picoware/c",
         "picoware/bluetooth",
-        "picoware/scripts",
     )
-    media_dirs = dev_dirs + (
-        "picoware/vibesmp",
-        "picoware/vibesmp/lang",
-        "picoware/vibesmp/playlists",
-        "picoware/vibesmp/library",
-        "picoware/vibesmp/library/meta",
-        "picoware/vibesmp/library/covers",
-        "picoware/vibesmp/radio",
-    )
-    fixture_dirs = media_dirs + (
-        "picoware/fixtures",
-        "picoware/wikireader",
-        "picoware/weather",
-        "picoware/github",
-    )
-    if profile == "clean":
-        dirs = base_dirs
-    elif profile == "media":
-        dirs = media_dirs
-    elif profile == "network-fixtures":
-        dirs = fixture_dirs
-    else:
-        dirs = media_dirs
+    dirs = base_dirs if profile == "clean" else dev_dirs
     for name in dirs:
         mkdir_p(sd_root + "/" + name)
-    if profile in ("dev", "media", "network-fixtures"):
-        _write_if_missing(
-            sd_root + "/picoware/vibesmp/settings.json",
-            '{"auto_play_next":true,"shuffle":false,"language":"en","theme":"dark","volume":100,"seek_length":5,"first_run":false,"auto_expand_library":true,"loop_mode":0,"focus_timeout":10,"time_24h":true,"list_view_policy":"offset","list_scroll_offset":2}',
-        )
-        playlist_tracks = '["picoware/vibesmp/library/sim-tone.wav"]' if profile in ("media", "network-fixtures") else "[]"
-        _write_if_missing(sd_root + "/picoware/vibesmp/playlists/default.json", '{"tracks":' + playlist_tracks + ',"current_index":0}')
-        _write_if_missing(sd_root + "/picoware/vibesmp/radio/stations.json", '[{"name":"Simulator MP3 Radio","url":"http://ice1.somafm.com/groovesalad-128-mp3"}]')
-        database = '[{"title":"Simulator Tone","path":"picoware/vibesmp/library/sim-tone.wav","artist":"Picoware Simulator"}]' if profile in ("media", "network-fixtures") else "[]"
-        _write_if_missing(sd_root + "/picoware/vibesmp/library/database.json", database)
-        _write_if_missing(sd_root + "/picoware/vibesmp/library/state.json", '{}')
-        if profile in ("media", "network-fixtures"):
-            _write_binary_if_missing(sd_root + "/picoware/vibesmp/library/sim-tone.wav", _wav_fixture())
-    from picoware_boards import BOARD_HAS_KEYBOARD
-
     _merge_json_defaults(
         sd_root + "/picoware/settings/picoware.json",
         {
-            "anthropic_api_key": "",
-            "dark_mode": True,
-            "deepseek_api_key": "",
             "debug": False,
-            "exit_button": 177,
             "gmt_offset": 0,
-            "gemini_api_key": "",
-            "lvgl_mode": False,
-            "onscreen_keyboard": BOARD_HAS_KEYBOARD == 0,
-            "openai_api_key": "",
-            "local_url": "http://127.0.0.1:8080/v1/chat/completions",
+            "onscreen_keyboard": False,
             "screen_brightness": 100,
             "theme_color": 31,
-            "usb_stream": False,
             "wifi_ssid": "Picoware-Sim",
             "wifi_password": "",
-            "xai_api_key": "",
         },
         ("wifi_ssid",),
     )
     _write_if_missing(sd_root + "/picoware/wifi/ssid.json", '{"ssid":"Picoware-Sim"}')
-    if profile == "network-fixtures":
-        _write_if_missing(sd_root + "/picoware/fixtures/catfact.json", '{"fact":"Picoware simulator fixture cat fact.","length":38}')
-        _write_if_missing(sd_root + "/picoware/fixtures/weather.txt", "Clear,+21C,45%\n")
-        _write_if_missing(sd_root + "/picoware/fixtures/github.json", '{"message":"Picoware simulator GitHub fixture","items":[]}')
-        _write_if_missing(sd_root + "/picoware/wikireader/settings.json", '{"full_article":true,"language":"en","theme":"system","history":[],"favorites":[],"offline":[]}')
 
     # Symlink apps for __import__
     _link_app_files()
     _link_assets()
-    from picoware.system.features import EXTRA_LANGUAGES_ENABLED
-    if profile != "clean" and EXTRA_LANGUAGES_ENABLED:
-        _link_c_files()
-        _link_script_files()
-        _link_mmbasic_files()
 
 
 def _link_app_files():
@@ -475,27 +371,6 @@ def _link_app_files():
     _compiled = root + "/builds/MicroPython/apps"
     if _compiled != apps_source:
         _link_app_files_into(_compiled, target, skip_if_py_exists=True)
-
-
-def _link_c_files():
-    """Make bundled C examples available to the C application."""
-    source = root + "/builds/MicroPython/c"
-    target = sd_root + "/picoware/c"
-    _link_app_files_into(source, target)
-
-
-def _link_script_files():
-    """Symlink bundled JavaScript examples into the simulated SD card."""
-    source = root + "/builds/MicroPython/scripts"
-    target = sd_root + "/picoware/scripts"
-    _link_app_files_into(source, target)
-
-
-def _link_mmbasic_files():
-    """Symlink bundled MMBasic examples into the simulated SD card."""
-    source = root + "/builds/MicroPython/mmbasic"
-    target = sd_root + "/picoware/mmbasic"
-    _link_app_files_into(source, target)
 
 
 def _link_app_files_into(src_dir, dst_dir, skip_if_py_exists=False, include_init=False):
@@ -756,29 +631,6 @@ def set_background_key_poll(enable):
 def _dispatch_key_callback():
     """Deliver at most one queued key per simulated hardware poll."""
     global _notifying_key
-    if not _notifying_key and _keys and str(board).lower().replace("_", "-") in ("pico-duo", "picoduo"):
-        from machine import UART
-
-        uart = UART._endpoints.get("uart0")
-        if uart is None or not uart._initialized or uart._handler is None:
-            return
-        # Match the bytes delivered by PicoDuo's controller to the firmware UART.
-        controls = {
-            KEY_NAMES["up"]: b"\x04",
-            KEY_NAMES["down"]: b"\x07",
-            KEY_NAMES["left"]: b"\x08",
-            KEY_NAMES["right"]: b"\x02",
-            KEY_NAMES["enter"]: b"\x0d",
-            KEY_NAMES["back"]: b"\x0c",
-        }
-        data = controls.get(_keys.pop(0))
-        if data is not None:
-            _notifying_key = True
-            try:
-                uart.inject_rx(data)
-            finally:
-                _notifying_key = False
-        return
     if (
         _notifying_key
         or not _background_key_poll
@@ -957,43 +809,11 @@ def enqueue_text(text):
             push_key(ord(ch))
 
 
-def set_touch_point(x, y, gesture=0, notify=True):
-    global _touch_point, _touch_gesture
-    _touch_point = (int(x), int(y))
-    _touch_gesture = int(gesture)
-    if not notify:
-        return
-    for callback in list(_touch_callbacks):
-        try:
-            callback(None)
-        except Exception as e:
-            print("[sim:touch] callback failed:", e)
-
-
-def clear_touch():
-    set_touch_point(0, 0, 0, False)
-
-
 def next_ir_timestamp():
     """Return and consume the next simulator-controlled IR timestamp."""
     if not _ir_rx_timestamps:
         return None
     return _ir_rx_timestamps.pop(0)
-
-
-def touch_point():
-    return _touch_point
-
-
-def touch_gesture():
-    return _touch_gesture
-
-
-def register_touch_callback(callback):
-    if callback is None:
-        _touch_callbacks[:] = []
-    elif callback not in _touch_callbacks:
-        _touch_callbacks.append(callback)
 
 
 def set_battery_percentage(value):
@@ -1006,7 +826,6 @@ def battery_percentage():
 
 
 def run_script_file(path):
-    global flipper_wifi_attached
     try:
         with open(path, "r") as handle:
             lines = handle.read().split("\n")
@@ -1047,23 +866,6 @@ def run_script_file(path):
                 delay += 1
             else:
                 push_key(KEY_NAMES["back"])
-        elif command == "touch":
-            parts = value.replace(",", " ").split()
-            if len(parts) < 2:
-                raise ValueError("touch expects: touch X Y [GESTURE]")
-            gesture = int(parts[2]) if len(parts) > 2 else 6
-            set_touch_point(int(parts[0]), int(parts[1]), gesture)
-        elif command == "gesture":
-            parts = value.replace(",", " ").split()
-            if not parts:
-                raise ValueError("gesture expects: gesture CODE [X Y]")
-            x = int(parts[1]) if len(parts) > 1 else _touch_point[0]
-            y = int(parts[2]) if len(parts) > 2 else _touch_point[1]
-            set_touch_point(x, y, int(parts[0]))
-        elif command == "flipper-wifi":
-            if value not in ("on", "off"):
-                raise ValueError("flipper-wifi expects on or off")
-            flipper_wifi_attached = value == "on"
         elif command == "battery":
             set_battery_percentage(int(value))
         elif command == "open":
@@ -1084,15 +886,21 @@ def run_script_file(path):
             raise ValueError("Unknown script command: " + command)
 
 
-def request_open(name):
-    """Queue a route through the category sidebar and its submenu."""
-    global open_target,APPLICATION_ITEMS,SYSTEM_ITEMS,COMMS_ITEMS,UTILITY_ITEMS,_MENU_ITEMS
+def sync_menu_routes():
+    """Derive --open routes from the firmware's home menu sections."""
+    global APPLICATION_ITEMS,SYSTEM_ITEMS,COMMS_ITEMS,UTILITY_ITEMS,_MENU_ITEMS
     from picoware.applications import library
     APPLICATION_ITEMS={label.lower():i for i,label in enumerate(library.APP_ITEMS)}
     SYSTEM_ITEMS={label.lower():i for i,label in enumerate(library.SYSTEM_ITEMS)}
     COMMS_ITEMS={label.lower():i for i,label in enumerate(library.COMMS_ITEMS)}
     UTILITY_ITEMS={label.lower():i for i,label in enumerate(library.UTIL_ITEMS)}
     _MENU_ITEMS={'apps':APPLICATION_ITEMS,'system':SYSTEM_ITEMS,'comms':COMMS_ITEMS,'utils':UTILITY_ITEMS,'scripts':SCRIPT_ITEMS}
+
+
+def request_open(name):
+    """Queue a route through the category sidebar and its submenu."""
+    global open_target
+    sync_menu_routes()
     nested={'picodesk':('eggcel','picoword','picopaint'),
             'picolab':('graph','graph3d','plot previews','numerics checks','scientific calculator'),
             'misc':('screensavers',)}
@@ -1123,40 +931,22 @@ def request_open(name):
         if parts[2] not in choices:raise LaunchTargetError('Submenu route not found: '+str(name))
     from picoware.applications import library
     library._library_state = None
-    from picoware_boards import get_current_display_size
-    if get_current_display_size()==(320,320):
-        from picoware.applications import desktop
-        desktop._dashboard_state=None
-        if desktop._dashboard is not None:
-            desktop._dashboard.category=0
-            desktop._dashboard.indices=[0]*4
-            desktop._dashboard.focus='menu'
-            desktop._dashboard.widget.focused=False
-        push_key(KEY_NAMES['esc'])
-        if not parts: return
-        for _ in range(LIBRARY_ITEMS[parts[0]]): push_key(KEY_NAMES['right'])
-        if len(parts)==1: return
-        for _ in range(_MENU_ITEMS[parts[0]][parts[1]]): push_key(KEY_NAMES['down'])
+    from picoware.applications import desktop
+    desktop._dashboard_state=None
+    if desktop._dashboard is not None:
+        desktop._dashboard.category=0
+        desktop._dashboard.indices=[0]*4
+        desktop._dashboard.focus='menu'
+        desktop._dashboard.widget.focused=False
+    push_key(KEY_NAMES['esc'])
+    if not parts: return
+    for _ in range(LIBRARY_ITEMS[parts[0]]): push_key(KEY_NAMES['right'])
+    if len(parts)==1: return
+    for _ in range(_MENU_ITEMS[parts[0]][parts[1]]): push_key(KEY_NAMES['down'])
+    push_key(KEY_NAMES['enter'])
+    if len(parts)>2:
+        for _ in range(choices.index(parts[2])):push_key(KEY_NAMES['down'])
         push_key(KEY_NAMES['enter'])
-        if len(parts)>2:
-            for _ in range(choices.index(parts[2])):push_key(KEY_NAMES['down'])
-            push_key(KEY_NAMES['enter'])
-        return
-    push_key(KEY_NAMES["enter"])
-    if not parts:
-        return
-    for _ in range(LIBRARY_ITEMS[parts[0]]):
-        push_key(KEY_NAMES["down"])
-    if len(parts) == 1:
-        return
-    push_key(KEY_NAMES["right"])
-    for _ in range(_MENU_ITEMS[parts[0]][parts[1]]):
-        push_key(KEY_NAMES["down"])
-    push_key(KEY_NAMES["enter"])
-    if len(parts) == 3:
-        for _ in range(SCRIPT_ITEMS[parts[2]]):
-            push_key(KEY_NAMES["down"])
-        push_key(KEY_NAMES["enter"])
 
 
 def request_app(name):
@@ -1175,25 +965,8 @@ def request_game(name):
     target = str(name).lower()
     if target.endswith(".py"):
         target = target[:-3]
-    games = []
-    try:
-        import picoware_boards
-
-        from picoware_boards import BOARD_HAS_PICOCALC
-
-        from picoware.system.features import GAME_BACKENDS_ENABLED
-        if GAME_BACKENDS_ENABLED and BOARD_HAS_PICOCALC:
-            games.append("GameBoy Emulator")
-        if (
-            GAME_BACKENDS_ENABLED
-            and picoware_boards.has_wifi(picoware_boards.BOARD_ID)
-            and picoware_boards.BOARD_ID != picoware_boards.BOARD_PICOCALC_PICOW
-        ):
-            games.append("Ghouls")
-    except ImportError:
-        pass
     from picoware.system.features import RELEASE_GAMES
-    games.extend(app for app in _list_menu_apps(sd_root + "/picoware/apps/games") if app in RELEASE_GAMES)
+    games = list(app for app in _list_menu_apps(sd_root + "/picoware/apps/games") if app in RELEASE_GAMES)
     index = -1
     for i, game in enumerate(games):
         if game.lower() == target:
@@ -1230,35 +1003,20 @@ def _list_menu_apps(path):
 
 
 def print_capabilities():
-    from picoware.system.features import MEDIA_ENABLED, GAME_BACKENDS_ENABLED
-    audio_player = native_helper_path("audio/sdl_audio_player")
-    radio_player = native_helper_path("audio/sdl_radio_player")
-    gameboy_runner = root + "/simulator/gameboy/sim_gameboy_runner"
     viewer_bin = native_helper_path("viewer/sdl_fb_viewer")
+    tetris_audio = native_helper_path("audio/tetris_pcm_player")
     jpeg_status = "real" if _exists(root + "/simulator/jpeg/sim_jpeg_decode") or _host_command_exists("djpeg") else "unavailable"
-    try:
-        import picoware_desktop
-
-        native_modules = picoware_desktop.native_modules()
-    except ImportError:
-        native_modules = ()
     rows = (
         ("lcd", "real" if _exists(viewer_bin) else "partial", "RGB565 framebuffer + SDL viewer sidecar"),
         ("keyboard", "real", "SDL/scripted key queue"),
-        ("touch", "simulated", "scripted/viewer touch point and gesture state for touch boards"),
         ("sd_mp", "real", "host directory mapped to simulated SD"),
         ("network", "real" if network_mode == "real" else "fixture", "host sockets/TLS or strict offline fixtures"),
-        ("flipper_wifi", "simulated", "FlipperHTTP Wi-Fi commands on Flipper UART1; virtual AP catalog, no physical radio"),
         ("ubluetooth", "simulated", "virtual BLE scan/GATT/UART, no host radio"),
-        ("audio", "excluded" if not MEDIA_ENABLED else "real" if _exists(audio_player) and _exists(radio_player) else "partial", "media playback omitted from the selected firmware" if not MEDIA_ENABLED else "SDL/minimp3 local MP3/WAV and HTTP radio sidecars plus silent model"),
+        ("pcm", "real" if _exists(tetris_audio) else "silent", "PicoCalc PWM speaker PCM through the SDL Tetris sidecar"),
         ("jpegdec", jpeg_status, "firmware JPEGDEC/djpeg RGB565 decode; failures are reported"),
         ("bmp", "real", "direct uncompressed BMP decoder"),
         ("battery", "simulated", "scriptable battery percentage"),
         ("psram", "simulated", "global byte heap + LCD RGB565 render"),
-        ("engine", "real" if "engine" in native_modules else "unavailable", "firmware-native C++ 2D/3D engine"),
-        ("gameboy", "excluded" if not GAME_BACKENDS_ENABLED else "real" if _exists(gameboy_runner) else "unavailable", "native game backends omitted from the selected firmware" if not GAME_BACKENDS_ENABLED else "Walnut-CGB frames/input/audio and same-build binary save states"),
-        ("ghouls", "real" if "ghouls" in native_modules else "unavailable", "firmware-native game with host storage/network/audio bridges"),
-        ("mjs", "real" if "mjs" in native_modules else "unavailable", "firmware-native JavaScript interpreter"),
         ("uf2loader", "simulated", "records and validates flash request"),
         ("machine", "simulated", "Pin/UART/I2S/PWM/USBDevice state/logging shims, no host USB device"),
     )
@@ -1363,10 +1121,6 @@ def poll_viewer_keys():
                 if parts[0] == "release_all":
                     _held_keys.clear()
                     _held_key_order.clear()
-                    continue
-                if parts[0] == "touch" and len(parts) >= 3:
-                    gesture = int(parts[3]) if len(parts) > 3 else 6
-                    set_touch_point(int(parts[1]), int(parts[2]), gesture)
                     continue
                 if len(parts) >= 2 and parts[0] in ("down", "up"):
                     code = int(parts[1])

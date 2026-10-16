@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased: Pico 2 W only
+
+- GungOS now targets only the PicoCalc with a Raspberry Pi Pico 2 W. Code for
+  other boards (Flipper Zero, Cardputer, Waveshare, CrowPanel, Pancake, V8,
+  PicoDuo, POOM, other PicoCalc Pico variants) is removed from the firmware,
+  native modules and simulator; `picoware.system.boards` keeps the upstream
+  board constants only so existing Picoware SD apps still import.
+- Removed leftovers of retired features: LVGL, USB video, media playback,
+  AI/MCP settings, C/JavaScript/MMBasic runners, Game Boy/Ghouls backends,
+  ESP flasher, touch and round-display layouts, and the legacy desktop.
+- Settings for retired features are dropped from `picoware.json` on load/save.
+- Screenshots moved from F1 to **Alt+S** (any screen); F1 belongs to apps.
+  The keyboard driver now reports Alt+letter as distinct keys.
+- Simulator `--sim-check` runs eleven PicoCalc checks that were previously
+  unreachable; all pass.
+
+These changes require a new UF2 and matching SD apps.
+
 ## Unreleased SD update after v2.2
 
 - Eggcel: F1–F5 File/Actions/Range/Copy/Paste, Range→Go, fill down/right,

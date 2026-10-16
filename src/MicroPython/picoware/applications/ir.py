@@ -164,7 +164,6 @@ class InfraredStatus:
         self._frame = b""
         self._path = ""
 
-
     def _draw_fallback(self, draw, left, top, foreground):
         """Draw the desktop animation fallback if the bear assets are unavailable.
 
@@ -284,7 +283,7 @@ class InfraredStatus:
                     self._pixels[offset] = bg if (packed >> bit) & 1 else fg
                     offset += 1
 
-        # This 124 x 64 composition fits Flipper and stays centered elsewhere.
+        # This 124 x 64 composition stays centered on the 320 x 320 display.
         left = max(0, (draw.size.x - 124) // 2)
         top = max(0, (draw.size.y - 64) // 2)
         text_x = left + 52
@@ -590,16 +589,12 @@ def _rebuild_infrared(view_manager):
     global _infrared
 
     from picoware.system.infrared import Infrared
-    from picoware.system.boards import BOARD_FLIPPER_ZERO
 
     tx_pin = None
     if _use_external and _tx_pin is not None:
         try:
             from machine import Pin
-            if view_manager.board_id == BOARD_FLIPPER_ZERO:
-                tx_pin = Pin.cpu.A7
-            else:
-                tx_pin = Pin(_tx_pin, Pin.OUT)
+            tx_pin = Pin(_tx_pin, Pin.OUT)
         except Exception:
             pass
     _infrared = Infrared(view_manager.storage, "infrared", tx_pin=tx_pin)

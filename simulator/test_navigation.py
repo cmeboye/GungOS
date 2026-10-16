@@ -14,16 +14,16 @@ from picoware.system.view import View
 from picoware.system.view_manager import ViewManager
 from picoware.system import buttons as k
 store=Storage();store.mkdir('picoware');store.mkdir('picoware/settings')
-# Legacy light mode and Back-exit settings cannot override the new controls.
-assert Settings(store).update({'dark_mode':False,'exit_button':k.BUTTON_BACK,'theme_color':0xFD20})
+# Legacy light mode and Back-exit settings cannot override the fixed controls.
+assert Settings(store).update({'theme_color':0xFD20})
 legacy=json.loads(store.read('picoware/settings/picoware.json'));legacy['dark_mode']=False;legacy['exit_button']=k.BUTTON_BACK
 assert store.serialize(legacy,'picoware/settings/picoware.json')
 vm=ViewManager()
 assert (vm.background_color,vm.foreground_color,vm.selected_color)==(0,0xFFFF,0xFD20)
-settings=Settings(store);assert settings.dark_mode and settings.exit_button==k.BUTTON_ESCAPE
+settings=Settings(store);assert 'dark_mode' not in settings.settings and 'exit_button' not in settings.settings
 assert settings.update({'screen_brightness':70})
 saved=json.loads(store.read('picoware/settings/picoware.json'))
-assert saved['dark_mode'] is True and saved['exit_button']==k.BUTTON_ESCAPE
+assert 'dark_mode' not in saved and 'exit_button' not in saved
 inp=vm.input_manager
 assert inp._key_to_button(k.KEY_ESC)==k.BUTTON_ESCAPE
 assert inp._key_to_button(8)==inp._key_to_button(k.KEY_DEL)==k.BUTTON_BACKSPACE

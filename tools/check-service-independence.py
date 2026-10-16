@@ -7,7 +7,6 @@ regression check, not a network firewall or an audit of user-supplied SD scripts
 import ast
 from pathlib import Path
 import re
-import runpy
 import sys
 from urllib.parse import urlsplit
 
@@ -23,11 +22,7 @@ URL = re.compile(r'(?:https?|wss?)://[^\s\'"<>]+', re.I)
 
 def check(root=ROOT):
     issues = []
-    profile = runpy.run_path(str(root / 'src/MicroPython/picoware/system/features.py'))
-    disabled = profile['DISABLED_MODULES']
     for name in REMOVED_MODULES:
-        if name not in disabled:
-            issues.append((name, 0, 'retired client is not excluded from firmware/simulator'))
         path = root / 'src/MicroPython' / (name.replace('.', '/') + '.py')
         if path.exists():
             issues.append((str(path.relative_to(root)), 0, 'retired service client still exists'))

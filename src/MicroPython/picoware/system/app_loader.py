@@ -5,7 +5,7 @@ from gc import collect, mem_free
 
 class AppLoader:
     """Class to manage loading and running apps dynamically.
-    
+
     Attributes:
         view_manager (ViewManager): The view manager instance for display and storage access.
         loaded_apps (dict): Dictionary to cache loaded app modules, keyed by app name.
@@ -184,7 +184,6 @@ class AppLoader:
                     self._error = "Storage VFS not mounted"
                     raise RuntimeError("Storage VFS not mounted, cannot load apps.")
 
-                # Use the board-specific VFS prefix (/sdcard on Cardputer, /sd elsewhere)
                 base_apps_path = f"{storage.vfs_prefix}/picoware/apps"
 
                 # Always add the base apps directory to sys.path

@@ -47,8 +47,6 @@ class HTTP:
     """HTTP class for making HTTP requests."""
 
     __slots__ = [
-        "_is_flipper",
-        "_http_uart",
         "_async_request_complete",
         "_async_request_in_progress",
         "_async_thread_id",
@@ -75,23 +73,12 @@ class HTTP:
             thread_manager (ThreadManager): Manager for threaded requests. Defaults to None.
             view_manager (ViewManager): The ViewManager instance. Defaults to None.
         """
-        from picoware.system.boards import BOARD_ID, BOARD_FLIPPER_ZERO
-        self._is_flipper = (BOARD_ID == BOARD_FLIPPER_ZERO)
-        self._http_uart = None
         self._lock = None
-        if not self._is_flipper:
-            try:
-                from _thread import allocate_lock
-                self._lock = allocate_lock()
-            except ImportError:
-                pass
-        else:
-            try:
-                self._http_uart = HTTPUART() if view_manager is None else HTTPUART(view_manager.uart)
-            except Exception as e:
-                self._http_uart = None
-                view_manager.log(f"Error initializing HTTPUART: {e}")
-        
+        try:
+            from _thread import allocate_lock
+            self._lock = allocate_lock()
+        except ImportError:
+            pass
 
         self._async_request_complete = False
         self._async_request_in_progress = False
@@ -123,7 +110,7 @@ class HTTP:
         """Get the async callback function."""
         if self._lock is None:
             return None
-        
+
         with self._lock:
             return self._async_callback
 
@@ -143,7 +130,7 @@ class HTTP:
             return
         with self._lock:
             self._async_callback = value
-    
+
     @property
     def content_length(self) -> int:
         """Get the content length of the current request."""
@@ -151,7 +138,7 @@ class HTTP:
             return 0
         with self._lock:
             return self._content_length
-    
+
     @property
     def downloaded_bytes(self) -> int:
         """Get the number of bytes downloaded so far."""
@@ -171,10 +158,6 @@ class HTTP:
     @property
     def error(self):
         """Get the async error message, if any."""
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.error
-            return ""
         if self._lock is None:
             return ""
         with self._lock:
@@ -191,8 +174,6 @@ class HTTP:
     @property
     def is_finished(self) -> bool:
         """Check if the async request is finished."""
-        if self._is_flipper:
-            return True # synch
         if self._lock is None:
             return False
         with self._lock:
@@ -201,8 +182,6 @@ class HTTP:
     @property
     def is_successful(self) -> bool:
         """Check if the async request was successful."""
-        if self._is_flipper:
-            return True # synch
         if self._lock is None:
             return False
         with self._lock:
@@ -211,10 +190,6 @@ class HTTP:
     @property
     def response(self):
         """Get the async Response object."""
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.response
-            return None
         if self._lock is None:
             return None
         with self._lock:
@@ -227,7 +202,7 @@ class HTTP:
             return HTTP_IDLE
         with self._lock:
             return self._state
-    
+
     def _is_instance(self, obj) -> bool:
         """Check if the object is an instance of str or bytes.
 
@@ -266,17 +241,13 @@ class HTTP:
 
     def close(self):
         """Close the async thread, clear the async response, reset state."""
-        if self._is_flipper:
-            if self._http_uart is not None:
-                self._http_uart.close()
-            return
         if self._current_task:
             self._current_task.stop()
             self._current_task = None
 
         if self._lock is None:
             return
-        
+
         with self._lock:
             self._running = False
             if self._async_result is not None:
@@ -311,10 +282,6 @@ class HTTP:
         Returns:
             Response: The HTTP response.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request("DELETE", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
-            return None
         return self.request(
             "DELETE", url, headers=headers,timeout=timeout, save_to_file=save_to_file, storage=storage
         )
@@ -334,10 +301,6 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async("DELETE", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
-            return False
         return self.request_async(
             "DELETE",
             url,
@@ -362,10 +325,6 @@ class HTTP:
         Returns:
             Response: The HTTP response.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request("GET", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
-            return None
         return self.request(
             "GET", url=url, headers=headers,timeout=timeout, save_to_file=save_to_file, storage=storage
         )
@@ -385,10 +344,6 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async("GET", url, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage)
-            return False
         return self.request_async(
             "GET",
             url,
@@ -424,11 +379,6 @@ class HTTP:
         """
         if payload is None:
             raise ValueError("HEAD request requires a payload.")
-
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request("HEAD", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return None
 
         is_instance = self._is_instance(payload)
         return self.request(
@@ -467,10 +417,6 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async("HEAD", url, payload=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return False
         return self.request_async(
             "HEAD",
             url,
@@ -484,8 +430,6 @@ class HTTP:
 
     def is_request_complete(self) -> bool:
         """Check if the async request is complete."""
-        if self._is_flipper:
-            return True
         if self._lock is None:
             return True
         with self._lock:
@@ -518,11 +462,6 @@ class HTTP:
         if payload is None:
             raise ValueError("Payload cannot be None for PATCH request")
 
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request("PATCH", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return None
-        
         is_instance = self._is_instance(payload)
 
         return self.request(
@@ -561,10 +500,6 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async("PATCH", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return False
         return self.request_async(
             "PATCH",
             url,
@@ -602,15 +537,10 @@ class HTTP:
         """
         if payload is None and send_file is None:
             raise ValueError("Payload cannot be None for POST request")
-        
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request("POST", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return None
-        
+
         is_instance = self._is_instance(payload)
         has_payload = payload is not None
-        
+
         return self.request(
                     "POST",
                     url,
@@ -647,10 +577,6 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async("POST", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return False
         return self.request_async(
             "POST",
             url,
@@ -688,12 +614,7 @@ class HTTP:
         """
         if payload is None:
             raise ValueError("Payload cannot be None for PUT request")
-        
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request("PUT", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return None
-        
+
         is_instance = self._is_instance(payload)
 
         return self.request(
@@ -732,11 +653,7 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async("PUT", url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return False
-        
+
         return self.request_async(
             "PUT",
             url,
@@ -763,9 +680,7 @@ class HTTP:
         Returns:
             bytes: The response body.
         """
-        if self._is_flipper:
-            return b""
-        
+
         if uart:
             uart.write(f"[{method}/SUCCESS] {method} request successful.\n")
 
@@ -877,14 +792,10 @@ class HTTP:
         Returns:
             Response: The HTTP response.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request(method, url, data=data, json_data=json_data, headers=headers, auth=auth, timeout=timeout, parse_headers=parse_headers, uart=uart, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return None
-        
+
         if self._lock is None:
             return None
-        
+
         with self._lock:
             self._running = True
 
@@ -1250,11 +1161,7 @@ class HTTP:
         Returns:
             bool: True if the request was started.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request_async(method, url, payload=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return False
-        
+
         if self._async_request_in_progress:
             return False  # Request already in progress
 
@@ -1291,7 +1198,7 @@ class HTTP:
                 self._current_task = task
                 self._thread_manager.add_task(task)
                 return True
-            
+
             if self._lock is None:
                 return False
 
@@ -1338,11 +1245,7 @@ class HTTP:
         Returns:
             Response: The HTTP response.
         """
-        if self._is_flipper:
-            if self._http_uart is not None:
-                return self._http_uart.request(method, url, data=payload, headers=headers, timeout=timeout, save_to_file=save_to_file, storage=storage, send_file=send_file)
-            return None
-        
+
         try:
             result = None
             method = method.upper()
@@ -1449,254 +1352,3 @@ class HTTP:
                         )
                     except Exception:
                         pass
-
-class HTTPUART:
-    """HTTPUART - Handle HTTP requests over UART."""
-
-    def __init__(self, uart=None, chunk_size: int = (1024 * 4), timeout_ms: int = 5000) -> None:
-        """Initialize the HTTP class.
-
-        Args:
-            uart (UART): The UART instance. Defaults to None.
-            chunk_size (int): Transfer chunk size in bytes. Defaults to 4096.
-            timeout_ms (int): The timeout for UART receiving in milliseconds. Defaults to 5000.
-        """
-        self.uart = None
-        if uart is None:
-            from picoware.system.uart import UART
-            self.uart = UART(timeout=timeout_ms)
-        else:
-            self.uart = uart
-        if self.uart and not self.ping():
-            print("FlipperHTTP board not connected...")
-            self.uart = None
-        self.chunk_size = chunk_size
-        self.timeout_ms = timeout_ms
-        self.error = None
-        self._response = None
-
-    @property
-    def response(self) -> Response:
-        """Get the latest HTTP response received from the UART.
-
-        Returns:
-            Response: The latest HTTP response received from the UART.
-        """
-        return self._response
-
-    def __send_and_wait(self, command, add_newline: bool = True) -> str:
-        """Send a command to the UART and wait for a response.
-
-        Args:
-            command (str/bytes): The command to send.
-
-        Returns: 
-            str: The response from the UART.
-        """
-        if not self.uart:
-            return ""
-        if add_newline:
-            self.uart.println(command)
-        else:
-            self.uart.write(command)
-        while self.uart.is_sending:
-            pass
-        data = self.uart.read_line()
-        if not data:
-            return "[ERROR] No data returned"
-        if "[ERROR]" in data:
-            self.error = data
-        return data
-
-    def close(self) -> None:
-        """Close the UART connection."""
-        self.error = None
-    
-    def ping(self) -> bool:
-        """Check for pong response"""
-        return "PONG" in self.__send_and_wait("[PING]")
-
-    def request(
-        self,
-        method,
-        url,
-        data=None,
-        json_data=None,
-        headers=None,
-        auth=None,
-        timeout=None,
-        parse_headers=True,
-        uart=None,
-        save_to_file=None,
-        storage=None,
-        send_file=None,
-    ) -> Response:
-        """Make an HTTP request.
-
-        Args:
-            method (str): HTTP method (GET, POST, etc.).
-            url (str): URL to request.
-            data (str or bytes): Request body data. Defaults to None.
-            json_data (dict): JSON data to send (will be serialized). Defaults to None.
-            headers (dict): HTTP headers dict. Defaults to None.
-            auth (tuple): Authentication tuple (username, password). Defaults to None.
-            timeout (float): Request timeout in seconds. Defaults to None.
-            parse_headers (bool or callable): Whether to parse response headers. Defaults to True.
-            uart (UART): UART object for streaming output. Defaults to None.
-            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
-            storage (Storage): Storage object for file operations. Defaults to None.
-            send_file (str): File path to send as request body (requires storage). Defaults to None.
-
-        Returns:
-            Response: The HTTP response.
-        """
-        if not self.uart:
-            return None
-        _response_str = None
-        if method == "GET":
-            if headers is None:
-                _response_str = self.__send_and_wait(f"[GET]{url}")
-            else:
-                _response_str = self.__send_and_wait("[GET/HTTP]{\"url\":\"%s\",\"headers\":%s}" % (url, headers))
-        elif method == "POST":
-            if headers is None:
-                print("POST requires headers")
-                return None
-            if data is None and json_data is None and send_file is None:
-                print("POST requires data, json_data, or send_file")
-                return None
-            if storage is not None and send_file is not None:
-                _path = send_file 
-                if not storage.exists(send_file):
-                    if storage.exists(f"/sd/{send_file}"):
-                        _path = f"/sd/{send_file}"
-                    else:
-                        print("File not found in storage")
-                        return None
-                file_obj = storage.file_open(_path)
-                buffer = bytearray(self.chunk_size)
-                # write initial without payload
-                self.uart.write("[POST/HTTP]{\"url\":\"%s\",\"headers\":%s}" % (url, headers))
-                # send payload key and colon
-                self.uart.write("\"payload\":")
-                try:
-                    while True:
-                        bytes_read = storage.file_readinto(file_obj, buffer)
-                        if not bytes_read:
-                            break
-                        self.uart.write(buffer[:bytes_read])
-                finally:
-                    storage.file_close(file_obj)
-                    buffer = None
-                # add newline
-                self.uart.write("\n")
-            elif data is not None:
-                _response_str = self.__send_and_wait("[POST/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data))
-            elif json_data is not None:
-                _response_str = self.__send_and_wait("[POST/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, json_data))
-            else:
-                print("POST requires data, json_data, or send_file")
-                return None
-        elif method == "PUT":
-            if headers is None:
-                print("PUT requires headers")
-                return None
-            if data is None and json_data is None:
-                print("PUT requires data or json_data")
-                return None
-            if data is not None:
-                _response_str = self.__send_and_wait("[PUT/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data))
-            elif json_data is not None:
-                _response_str = self.__send_and_wait("[PUT/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, json_data))
-            else:
-                print("PUT requires data or json_data")
-                return None
-        elif method == "DELETE":
-            if headers is None:
-                print("DELETE requires headers")
-                return None
-            if data is None and json_data is None:
-                print("DELETE requires data or json_data")
-                return None
-            _response_str = self.__send_and_wait("[DELETE/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data if data is not None else json_data))
-        elif method == "PATCH":
-            if headers is None:
-                print("PATCH requires headers")
-                return None
-            if data is None and json_data is None:
-                print("PATCH requires data or json_data")
-                return None
-            if data is not None:
-                _response_str = self.__send_and_wait("[PATCH/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, data))
-            elif json_data is not None:
-                _response_str = self.__send_and_wait("[PATCH/HTTP]{\"url\":\"%s\",\"headers\":%s,\"payload\":%s}" % (url, headers, json_data))
-            else:
-                print("PATCH requires data or json_data")
-                return None
-        elif method == "HEAD":
-            if headers is None:
-                print("HEAD requires headers")
-                return None
-            _response_str = self.__send_and_wait("[HEAD/HTTP]{\"url\":\"%s\",\"headers\":%s}" % (url, headers))
-        else:
-            print("Unsupported HTTP method")
-            return None
-        if storage is not None and save_to_file is not None:
-            _path = save_to_file
-            if not storage.exists(save_to_file):
-                if storage.exists(f"/sd/{save_to_file}"):
-                    _path = f"/sd/{save_to_file}"
-                else:
-                    print("File not found in storage")
-                    return None
-            if not storage.write(_path, _response_str):
-                print("Failed to write response to storage")
-            return None
-        r = Response(_response_str)
-        if headers is not None:
-            r.headers = headers
-        return r
-
-
-    def request_async(
-        self,
-        method,
-        url,
-        payload=None,
-        headers=None,
-        timeout: float = 10.0,
-        save_to_file=None,
-        storage=None,
-        send_file=None,
-        stack_size: int = 8 * 1024,
-    ) -> bool:
-        """Handle async requests.
-
-        Args:
-            method (str): HTTP method (GET, POST, etc.).
-            url (str): URL to request.
-            payload (str, bytes, or dict): Request payload. Defaults to None.
-            headers (dict): HTTP headers dict. Defaults to None.
-            timeout (float): Request timeout in seconds. Defaults to 10.0.
-            save_to_file (str): File path to save response data to (requires storage). Defaults to None.
-            storage (Storage): Storage object for file operations. Defaults to None.
-            send_file (str): File path to send as request payload (requires storage). Defaults to None.
-
-        Returns:
-            bool: True if the request was started.
-        """
-        if not self.uart:
-            return False
-        is_instance = isinstance(payload, (str, bytes))
-        self._response = self.request(
-            method,
-            url,
-            payload if is_instance else None,
-            None if is_instance else dumps(payload),
-            headers,
-            timeout=timeout,
-            save_to_file=save_to_file,
-            storage=storage,
-            send_file=send_file
-        )
-        return self._response is not None

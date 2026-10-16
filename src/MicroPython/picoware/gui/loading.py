@@ -41,46 +41,8 @@ class Loading:
         text_width = self.display.len(self.current_text)
         self.text_vec.x = (self.display.size.x - text_width) // 2
 
-        self.use_lvgl = draw.use_lvgl
-        self._lvgl_loading = None
-
-        # Initialize LVGL Loading if requested
-        if self.use_lvgl:
-            try:
-                from picoware_lvgl import init, Loading as LVGLLoading
-
-                init()
-
-                class LVGLLoadingWrapper(LVGLLoading):
-                    """Wrapper that forwards text assignment to LVGL."""
-
-                    def __setattr__(self, name, value):
-                        """Forward text assignment to the LVGL loading spinner.
-
-                        Args:
-                            name (str): The attribute name.
-                            value: The attribute value.
-                        """
-                        if name == "text":
-                            self.set_text(value)
-                        else:
-                            super().__setattr__(name, value)
-
-                # Create LVGL Loading instance
-                self._lvgl_loading = LVGLLoadingWrapper(spinner_color, background_color)
-                # Set initial text
-                self._lvgl_loading.set_text(self.current_text)
-            except (ImportError, RuntimeError, ValueError):
-                self.use_lvgl = False
-
     def __del__(self) -> None:
-        """Clean up resources and deinitialize LVGL."""
-        if self._lvgl_loading is not None:
-            from picoware_lvgl import deinit
-
-            del self._lvgl_loading
-            self._lvgl_loading = None
-            deinit()
+        """Clean up resources."""
         self.current_text = ""
         self.animating = False
         self.time_elapsed = 0
@@ -89,12 +51,10 @@ class Loading:
         self.text_vec = None
         self.text_vec_2 = None
         self.rad = 0.0
-    
+
     @property
     def text(self) -> str:
         """Get the current loading text."""
-        if self.use_lvgl and self._lvgl_loading is not None:
-            return self._lvgl_loading.text
         return self.current_text
 
     @text.setter
@@ -105,11 +65,6 @@ class Loading:
             value (str): The new loading text.
         """
         self.current_text = value
-
-        # Update LVGL Loading if using it
-        if self.use_lvgl and self._lvgl_loading is not None:
-            self._lvgl_loading.set_text(value)
-            return
 
         # Calculate centered text position
         text_width = self.display.len(self.current_text)
@@ -122,13 +77,6 @@ class Loading:
             swap (bool): Whether to swap the display buffer. Defaults to True.
             http: Optional HTTP client for download progress display. Defaults to None.
         """
-        if self.use_lvgl and self._lvgl_loading is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(10)
-            self._lvgl_loading.animate(swap)
-            task_handler()
-            return
 
         if not self.animating:
             self.animating = True
@@ -235,24 +183,12 @@ class Loading:
         """
         self.current_text = text
 
-        # Update LVGL Loading if using it
-        if self.use_lvgl and self._lvgl_loading is not None:
-            self._lvgl_loading.set_text(text)
-            return
-
         # Calculate centered text position
         text_width = self.display.len(self.current_text)
         self.text_vec.x = (self.display.size.x - text_width) // 2
 
     def stop(self) -> None:
         """Stop the loading animation."""
-        if self.use_lvgl and self._lvgl_loading is not None:
-            from picoware_lvgl import tick, task_handler
-
-            tick(5)
-            self._lvgl_loading.stop()
-            task_handler()
-            return
 
         # Clear the entire screen
         self.display.erase()

@@ -145,15 +145,6 @@ static void append_key_event(const char *input_path, const char *action, int cod
     fclose(f);
 }
 
-static void append_touch_event(const char *input_path, int x, int y, int gesture)
-{
-    FILE *f = fopen(input_path, "a");
-    if (!f)
-        return;
-    fprintf(f, "touch %d %d %d\n", x, y, gesture);
-    fclose(f);
-}
-
 static int read_frame(const char *frame_path, uint8_t *buffer)
 {
     FILE *f = fopen(frame_path, "rb");
@@ -601,23 +592,6 @@ int main(int argc, char **argv)
                         code = down_codes[scancode];
                     down_codes[scancode] = code;
                     append_key_event(input_path, "down", code, event.key.repeat ? 1 : 0);
-                }
-            }
-            else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP)
-            {
-                if (event.button.button == SDL_BUTTON_LEFT)
-                {
-                    int x = event.button.x / scale;
-                    int y = event.button.y / scale;
-                    if (x < 0)
-                        x = 0;
-                    if (y < 0)
-                        y = 0;
-                    if (x >= FB_WIDTH)
-                        x = FB_WIDTH - 1;
-                    if (y >= FB_HEIGHT)
-                        y = FB_HEIGHT - 1;
-                    append_touch_event(input_path, event.type == SDL_MOUSEBUTTONUP ? 0 : x, event.type == SDL_MOUSEBUTTONUP ? 0 : y, event.type == SDL_MOUSEBUTTONUP ? 0 : 6);
                 }
             }
         }

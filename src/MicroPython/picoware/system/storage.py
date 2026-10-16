@@ -1,50 +1,34 @@
 """Storage - SD card file system access."""
 
-from picoware_boards import (
-    BOARD_CROWPANEL_10_1,
-    BOARD_ID,
-    BOARD_WAVESHARE_1_28_RP2350,
-    BOARD_WAVESHARE_1_69_RP2350,
-    BOARD_WAVESHARE_C6_2_06,
-    BOARD_CROWPANEL_WATCH_2_01,
-    BOARD_HAS_ESP32,
-    BOARD_FLIPPER_ZERO,
-    BOARD_PICO_DUO,
-)
+import sd_mp
 
-try:
-    import sd_mp
 
-    class FAT32File(sd_mp.fat32_file):
-        """Represents a fat32_mp_t structure on the FAT32 filesystem.
+class FAT32File(sd_mp.fat32_file):
+    """Represents a fat32_mp_t structure on the FAT32 filesystem.
 
-        Attributes:
-        - is_open: Indicates if the file is currently open
-        - last_entry_read: The last directory entry read from the file
-        - attributes: The file attributes (e.g., read-only, hidden, system, etc.)
-        - start_cluster: The starting cluster of the file on the SD card
-        - current_cluster: The current cluster being accessed in the file
-        - file_size: The total size of the file in bytes
-        - position: The current read/write position within the file in bytes
-        - dir_entry_sector: The sector number of the directory entry for this file
-        - dir_entry_offset: The byte offset within the directory sector for this file's entry
+    Attributes:
+    - is_open: Indicates if the file is currently open
+    - last_entry_read: The last directory entry read from the file
+    - attributes: The file attributes (e.g., read-only, hidden, system, etc.)
+    - start_cluster: The starting cluster of the file on the SD card
+    - current_cluster: The current cluster being accessed in the file
+    - file_size: The total size of the file in bytes
+    - position: The current read/write position within the file in bytes
+    - dir_entry_sector: The sector number of the directory entry for this file
+    - dir_entry_offset: The byte offset within the directory sector for this file's entry
+    """
+
+    def __setattr__(self, name, value):
+        """Set a file attribute, routing position through the C setter.
+
+        Args:
+            name (str): The attribute name to set.
+            value (object): The new value for the attribute.
         """
-
-        def __setattr__(self, name, value):
-            """Set a file attribute, routing position through the C setter.
-
-            Args:
-                name (str): The attribute name to set.
-                value (object): The new value for the attribute.
-            """
-            if name == "position":
-                self.set_position(value)
-            else:
-                super().__setattr__(name, value)
-
-except ImportError:
-    # waveshare 1.28, waveshare 1.69, and crowpanel
-    pass
+        if name == "position":
+            self.set_position(value)
+        else:
+            super().__setattr__(name, value)
 
 
 class Storage:
@@ -57,24 +41,14 @@ class Storage:
         self._vfs_mounted = False
         self._has_storage = True
 
-        if BOARD_ID in (
-            BOARD_WAVESHARE_1_28_RP2350,
-            BOARD_WAVESHARE_1_69_RP2350,
-            BOARD_CROWPANEL_10_1,
-            BOARD_PICO_DUO,
-            BOARD_WAVESHARE_C6_2_06,
-            BOARD_CROWPANEL_WATCH_2_01,
-        ):
+        try:
+            sd_mp.init()
+            sd_mp.mount()
+        except Exception as e:
+            # A missing or unreadable card must not abort startup: the rest
+            # of the storage API is already guarded by _has_storage.
+            print(f"SD card unavailable: {e}")
             self._has_storage = False
-        else:
-            try:
-                sd_mp.init()
-                sd_mp.mount()
-            except Exception as e:
-                # A missing or unreadable card must not abort startup: the rest
-                # of the storage API is already guarded by _has_storage.
-                print(f"SD card unavailable: {e}")
-                self._has_storage = False
 
     def __del__(self):
         """Destructor to ensure SD card is unmounted."""
@@ -111,13 +85,7 @@ class Storage:
 
     @property
     def vfs_prefix(self) -> str:
-        """Returns the filesystem path prefix for VFS access.
-
-        On Cardputer the SD card is exposed at /sdcard via the C POSIX bridge;
-        on all other boards it is mounted at /sd by mount_vfs().
-        """
-        if BOARD_HAS_ESP32 == 1:
-            return "/sdcard"
+        """Returns the filesystem path prefix for VFS access (mounted by mount_vfs())."""
         return "/sd"
 
     def copy(
@@ -298,7 +266,7 @@ class Storage:
             int: The number of bytes read.
         """
         if not self._has_storage:
-            return 0  # Waveshare SD module does not support file readinto yet
+            return 0
 
         return sd_mp.file_readinto(file_obj, buffer)
 
@@ -313,7 +281,7 @@ class Storage:
             bool: True if the seek succeeded, False otherwise.
         """
         if not self._has_storage:
-            return False  # Waveshare SD module does not support file seek yet
+            return False
 
         try:
             sd_mp.file_seek(file_obj, position)
@@ -334,7 +302,7 @@ class Storage:
             bool: True if the write succeeded, False otherwise.
         """
         if not self._has_storage:
-            return False  # Waveshare SD module does not support file write yet
+            return False
 
         try:
             if mode in ("w", "a"):
@@ -370,7 +338,7 @@ class Storage:
             list[str]: The filenames in the directory.
         """
         if not self._has_storage:
-            return []  # Waveshare SD module does not support listdir yet
+            return []
 
         try:
             return sd_mp.list_directory(path)
@@ -471,17 +439,7 @@ class Storage:
             return True  # Already mounted
 
         if not self._has_storage:
-            return False  # No SD storage on this board
-
-        if BOARD_HAS_ESP32 == 1:
-            self._vfs_mounted = True
-            return True
-
-        if BOARD_ID == BOARD_FLIPPER_ZERO:
-            result = self.mount()
-            if result:
-                self._vfs_mounted = True
-            return result
+            return False  # No SD card available
 
         try:
             from vfs_mp import mount
@@ -598,7 +556,7 @@ class Storage:
 
     def read_zip_item(self, zip_path: str, item_name: str) -> bytes:
         """Read a specific item from a ZIP archive.
-        
+
         Args:
             zip_path (str): The path to the ZIP archive.
             item_name (str): The name of the item within the ZIP archive to read.
@@ -754,12 +712,7 @@ class Storage:
         Returns:
             bool: True if unmounted successfully, False otherwise.
         """
-        if not self._vfs_mounted or BOARD_HAS_ESP32 == 1:
-            return True
-
-        if BOARD_ID == BOARD_FLIPPER_ZERO:
-            self.unmount()
-            self._vfs_mounted = False
+        if not self._vfs_mounted:
             return True
 
         try:

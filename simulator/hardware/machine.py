@@ -22,18 +22,6 @@ def bootloader():
     raise SystemExit
 
 
-class _PinCPU:
-    A0 = "A0"
-    B9 = "B9"
-    B6 = "B6"
-    B7 = "B7"
-
-
-class _PinBoard:
-    IR_RX = "IR_RX"
-    IR_TX = "IR_TX"
-
-
 class Pin:
     IN = 0
     OUT = 1
@@ -41,8 +29,6 @@ class Pin:
     PULL_DOWN = 1
     IRQ_FALLING = 4
     IRQ_RISING = 8
-    cpu = _PinCPU()
-    board = _PinBoard()
 
     def __init__(self, *args, **kwargs):
         self.id = args[0] if args else kwargs.get("id", None)
@@ -59,13 +45,6 @@ class Pin:
         self._receiver = getattr(handler, "__self__", None)
         self._irq_trigger = trigger
         self._irq_hard = bool(hard)
-        if self.id in (11, 20, 21):
-            try:
-                import sim_runtime
-
-                sim_runtime.register_touch_callback(handler)
-            except Exception:
-                pass
         return None
 
     def value(self, value=None):
@@ -383,13 +362,6 @@ class UART:
         self._irq_hard = False
         self._initialized = True
         self._baudrate = kwargs.get("baudrate", kwargs.get("baud_rate", 115200))
-        self._flipper_http = None
-        import sim_runtime
-
-        if self.id == 1 and self.name == "uart1" and sim_runtime.board in ("flipper", "flipper-zero"):
-            from sim_flipper_http import FlipperHTTP
-
-            self._flipper_http = FlipperHTTP()
         UART._endpoints[self.name] = self
 
     def init(self, *args, **kwargs):
@@ -411,10 +383,6 @@ class UART:
     def read(self, n=None):
         if n is None:
             n = len(self._buffer)
-            if self._flipper_http is not None and self._buffer.startswith(b"[GET/SUCCESS]\n"):
-                # The upstream scan client reads the status separately, then
-                # consumes the JSON payload and end marker in a second chunk.
-                n = len(b"[GET/SUCCESS]\n")
         data = bytes(self._buffer[:n])
         self._buffer = self._buffer[n:]
         return data
@@ -431,14 +399,7 @@ class UART:
         if isinstance(data, str):
             data = data.encode()
         self._tx.extend(data)
-        if self._flipper_http is not None:
-            # Credentials remain in the in-memory transport, never the log.
-            _append_log("uart_{}.log".format(self.name), "[FlipperHTTP TX]\n")
-            response = self._flipper_http.feed(data)
-            if response:
-                self.inject_rx(response)
-        else:
-            _append_log("uart_{}.log".format(self.name), data)
+        _append_log("uart_{}.log".format(self.name), data)
         peer = UART._endpoints.get(self.name + ":rx")
         if peer is not None:
             peer.inject_rx(data)

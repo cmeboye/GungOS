@@ -1,5 +1,5 @@
 # __init__.py Nonblocking IR blaster
-# Runs on Pyboard D or Pyboard 1.x (not Pyboard Lite), ESP32, RP2 and Flipper Zero.
+# Runs on Pyboard D or Pyboard 1.x (not Pyboard Lite), ESP32 and RP2.
 
 # Released under the MIT License (MIT). See LICENSE.
 # Source: https://github.com/peterhinch/micropython_ir/
@@ -9,19 +9,11 @@ from sys import platform
 from machine import idle
 ESP32 = platform == 'esp32'  # Loboris not supported owing to RMT
 RP2 = platform == 'rp2'
-try:
-    from picoware_boards import BOARD_ID, BOARD_FLIPPER_ZERO
-except ImportError:
-    BOARD_ID = -1
-    BOARD_FLIPPER_ZERO = -2
-FLIPPER_ZERO = platform == 'pyboard' and BOARD_ID == BOARD_FLIPPER_ZERO
 if ESP32:
     from machine import Pin, PWM
     from esp32 import RMT
 elif RP2:
     from .rp2_rmt import RP2_RMT
-elif FLIPPER_ZERO:
-    from pyb import Pin, Timer
 else:
     from pyb import Pin, Timer  # Pyboard does not support machine.PWM
 
@@ -57,9 +49,6 @@ class IR:
         elif RP2:  # PIO-based RMT-like device
             self._rmt = RP2_RMT(pin_pulse=None, carrier=(pin, cfreq, duty))  # 1μs resolution
             asize += 1  # Allow for possible extra space pulse
-        elif FLIPPER_ZERO:
-            self._flipper_freq = cfreq
-            self._flipper_duty = duty
         else:  # Pyboard
             if not IR._active_high:
                 duty = 100 - duty
@@ -93,10 +82,7 @@ class IR:
         else:
             mark = self._levels[p]
         self._ch.pulse_width_percent(self._duty if mark else self._space)
-        if FLIPPER_ZERO:
-            self._tim.init(period=v, tick_hz=1_000_000, callback=self._tcb)
-        else:
-            self._tim.init(prescaler=84, period=v, callback=self._tcb)
+        self._tim.init(prescaler=84, period=v, callback=self._tcb)
         self.aptr += 1
 
     def busy(self):
@@ -104,8 +90,6 @@ class IR:
             return not self._rmt.wait_done()
         if RP2:
             return self._rmt.busy()
-        if FLIPPER_ZERO:
-            return False
         return self._busy
 
     def deinit(self):
@@ -113,8 +97,6 @@ class IR:
             self._rmt.deinit()
         elif RP2:
             self._rmt.cancel()
-        elif FLIPPER_ZERO:
-            return
         else:
             self._tim.deinit()
             self._ch.pulse_width_percent(self._space)
@@ -152,15 +134,6 @@ class IR:
         elif RP2:
             self.append(STOP)
             self._rmt.send(self._arr)
-        elif FLIPPER_ZERO:
-            from flipper_ir import send
-
-            durations = tuple(self._mva[0 : self.aptr])
-            if self._levels is None:
-                levels = tuple(not (index & 1) for index in range(self.aptr))
-            else:
-                levels = tuple(self._levels[0 : self.aptr])
-            send(durations, levels, self._flipper_freq, self._flipper_duty)
         else:
             self.append(STOP)
             self.aptr = 0  # Reset pointer
@@ -182,7 +155,6 @@ class IR:
 
 # Given an iterable (e.g. list or tuple) of times, emit it as an IR stream.
 class Player(IR):
-
     def __init__(self, pin, freq=38000, verbose=False, asize=68, duty=33):  # NEC specifies 38KHz
         super().__init__(pin, freq, asize, duty, verbose)
 

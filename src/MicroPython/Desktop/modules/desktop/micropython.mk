@@ -4,4 +4,3 @@ SRC_USERMOD += $(USERMOD_DIR)/desktop_mp.c
 SRC_USERMOD += $(USERMOD_DIR)/desktop_bridge.c
 
 CFLAGS_USERMOD += -I$(PICOWARE_DESKTOP_DIR)
-CFLAGS_USERMOD += -I$(PICOWARE_DESKTOP_DIR)/../picoware_boards

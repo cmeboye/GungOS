@@ -1,7 +1,6 @@
 """FileBrowser - Browse and select files."""
 
 from micropython import const
-from picoware.system.features import EXTRA_LANGUAGES_ENABLED, MEDIA_ENABLED
 
 from picoware.system.buttons import (
     BUTTON_NONE,
@@ -80,9 +79,7 @@ class FileBrowser:
     ACT_MOVE = const(3)
     ACT_RENAME = const(4)
     ACT_FLASH = const(5)
-    ACT_AUDIO = const(6)
     ACT_UNZIP = const(7)
-    ACT_VIDEO = const(8)
 
     OPTIONS_LABELS = ("Hidden Files", "Dir Enter")
 
@@ -108,7 +105,6 @@ class FileBrowser:
         """
         import json
         from picoware.system.vector import Vector
-        from picoware.system.boards import BOARD_ID, BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_POOM
 
         # Link to system managers
         self._vm = view_manager
@@ -162,10 +158,6 @@ class FileBrowser:
         self._screen_w = draw.size.x
         self._screen_h = draw.size.y
         self._five = max(1, self._screen_h // 64)
-
-        self._add_info = BOARD_ID not in (BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_POOM)
-
-        self._is_flipper = BOARD_ID in (BOARD_FLIPPER_ZERO, BOARD_POOM)
 
         _start = start_directory if start_directory else "/"
 
@@ -361,31 +353,6 @@ class FileBrowser:
             self._vm.alert("Unsupported file format.")
             self._needs_redraw = True
 
-    def __file_watch(self, path) -> None:
-        """Watch a video."""
-        if not MEDIA_ENABLED:
-            self._vm.alert("Video playback is not included in this firmware.")
-            return
-        from picoware.system.video import Video
-
-        v = Video(path)
-
-        inp = self._vm.input_manager
-        inp.reset()
-        if v.start():
-            while v.run():
-                but = inp.button
-                if but in (
-                    BUTTON_ESCAPE,
-                    BUTTON_CENTER,
-                ):
-                    break
-            v.stop()
-        else:
-            self._vm.alert("Failed to start")
-
-        del v
-
     def __zip_list(self, path) -> None:
         """Show the names and sizes of files in a ZIP archive."""
         try:
@@ -552,7 +519,7 @@ class FileBrowser:
         char_w = max(1, draw.font_size.x)
         color_fg = self._vm.foreground_color
         color_bg = self._vm.background_color
-        color_sel = self._vm.selected_color if not self._is_flipper else self._vm.background_color
+        color_sel = self._vm.selected_color
 
         # 1. Image Viewer Overlay (State Machine for Loading Animation)
         if self._is_viewing_image:
@@ -778,14 +745,9 @@ class FileBrowser:
         mk_len = len(self._app_state["marked"])
         mk_str = f" [Sel:{mk_len}]" if mk_len > 0 else ""
 
-        if self._add_info:
-            draw._text(
-                text_pad_x, text_line_y, f"File Browser [Dir:{dm}]{mk_str}", color_fg
-            )
-        else:
-            draw._text(
-                text_pad_x, text_line_y, "File Browser", color_fg
-            )
+        draw._text(
+            text_pad_x, text_line_y, f"File Browser [Dir:{dm}]{mk_str}", color_fg
+        )
         draw._fill_rectangle(
             mx,
             top_bar_h,
@@ -848,50 +810,44 @@ class FileBrowser:
                         yo - sy(1),
                         max(1, pane_w - sx(2)),
                         max(1, row_h - sy(2)),
-                        color_fg if self._is_flipper else color_sel,
+                        color_sel,
                     )
 
                 szs = ""
-                if self._add_info:
-                    if isd:
-                        szs = "<DIR>"
-                    elif fz < 1024:
-                        szs = f"{fz}B"
-                    elif fz < 1048576:
-                        szs = f"{fz//1024}K"
-                    else:
-                        szs = f"{fz//1048576}M"
+                if isd:
+                    szs = "<DIR>"
+                elif fz < 1024:
+                    szs = f"{fz}B"
+                elif fz < 1048576:
+                    szs = f"{fz//1024}K"
+                else:
+                    szs = f"{fz//1048576}M"
 
                 mk_char = "*" if fp in self._app_state["marked"] else ""
                 dn = f"{mk_char}/{fn}" if isd else f"{mk_char}{fn}"
 
                 pl = max(0, c_lim - len(dn[:n_lim]) - len(szs))
-                tc = color_bg if (self._is_flipper and sel) else color_fg
-                if self._add_info:
-                    draw._text(
-                        xb + text_pad_x, yo, dn[:n_lim] + (" " * pl) + szs, tc
-                    )
-                else:
-                    n_lim = min(c_lim, 14)
-                    draw._text(xb + text_pad_x, yo, dn[:n_lim], tc)
+                tc = color_fg
+                draw._text(
+                    xb + text_pad_x, yo, dn[:n_lim] + (" " * pl) + szs, tc
+                )
                 yo += row_h
 
         draw._fill_rectangle(0, sh - bottom_bar_h, sw, bottom_bar_h, color_sel)
-        if self._add_info:
-            if self._mode == FILE_BROWSER_SELECTOR:
-                draw._text(
-                    text_pad_x,
-                    sh - bottom_bar_h + text_line_y,
-                    "ENT:Sel M:DirMode O:Opt",
-                    color_fg,
-                )
-            else:
-                draw._text(
-                    text_pad_x,
-                    sh - bottom_bar_h + text_line_y,
-                    "ENT:Menu SPC:Mark N:New M:DirMode O:Opt H:Help",
-                    color_fg,
-                )
+        if self._mode == FILE_BROWSER_SELECTOR:
+            draw._text(
+                text_pad_x,
+                sh - bottom_bar_h + text_line_y,
+                "ENT:Sel M:DirMode O:Opt",
+                color_fg,
+            )
+        else:
+            draw._text(
+                text_pad_x,
+                sh - bottom_bar_h + text_line_y,
+                "ENT:Menu SPC:Mark N:New M:DirMode O:Opt H:Help",
+                color_fg,
+            )
         draw.swap()
         self._needs_redraw = False
 
@@ -1424,50 +1380,6 @@ class FileBrowser:
                         uf2.flash(self._context_target_path)
                         self.__loading_run("Done", 1.0)
 
-                    elif self._pending_action == self.ACT_AUDIO:
-                        if not MEDIA_ENABLED:
-                            self._vm.alert("Audio playback is not included in this firmware.")
-                            self._pending_action = self.ACT_NONE
-                            return True
-                        _is_wav = ".wav" in self._context_target_path.lower()
-                        if self._loading:
-                            self._loading.stop()
-
-                        _should_play = True
-
-                        if not _is_wav:
-                            # don't allow rp2040 for now...
-                            from picoware_boards import get_device_name
-
-                            _device = get_device_name()
-                            if "2" not in _device:
-                                self._vm.alert("MP3 playback requires rp2350")
-                                _should_play = False
-
-                        if _should_play:
-                            self.__loading_run("Playing...", 0.5)
-
-                            audio = self._vm.audio
-                            if audio:
-                                play_func: callable = (
-                                    audio.play_wav if _is_wav else audio.play_mp3
-                                )
-                                if play_func(self._context_target_path):
-                                    inp = self._vm.input_manager
-                                    inp.reset()
-                                    while audio.is_playing:
-                                        but = inp.button
-                                        if but in (
-                                            BUTTON_ESCAPE,
-                                            BUTTON_CENTER,
-                                        ):
-                                            break
-                                        self.__loading_run("Playing....", 0.5)
-                                    audio.stop()
-
-                    elif self._pending_action == self.ACT_VIDEO:
-                        self.__file_watch(self._context_target_path)
-
                     elif self._pending_action == self.ACT_UNZIP:
                         self.__zip_unzip(self._context_target_path)
 
@@ -1545,38 +1457,6 @@ class FileBrowser:
                         self.__zip_list(self._context_target_path)
                     elif ac == "Edit":
                         self.__file_edit(self._context_target_path)
-                    elif ac == "Run":
-                        if not EXTRA_LANGUAGES_ENABLED:
-                            self._vm.alert("This language is not included in this firmware.")
-                            self._context_menu = None
-                            self._needs_redraw = True
-                            return True
-                        if self._context_target_path.endswith("js"):
-                            from picoware.system.js import JS
-                            mjs = JS()
-                            result = mjs.exec(self._context_target_path)
-                            if result:
-                                self._vm.log(f'JS Result: {result}', -1)
-                            del mjs
-                            mjs = None
-                        elif self._context_target_path.endswith("bas"): # basic
-                            from picoware.system.mmbasic import MMBasic
-                            bs = MMBasic(self._vm)
-                            bs.start(path=self._context_target_path)
-                            inp = self._vm.input_manager
-                            inp.reset()
-                            while bs.run():
-                                pass
-                            del bs
-                            bs = None
-                        elif self._context_target_path.endswith("c"): # C source
-                            from picoware.system.c import C
-                            c = C()
-                            result = c.exec(self._context_target_path)
-                            if result:
-                                self._vm.log(f'C Compile Result: {result}', -1)
-                            del c
-                            c = None
                     elif ac == "Delete":
                         self._pending_action = self.ACT_DELETE
                         mk = self._app_state["marked"]
@@ -1590,14 +1470,6 @@ class FileBrowser:
                         self._pending_action = self.ACT_FLASH
                         fn = self._context_target_path.split("/")[-1]
                         self._confirm_menu = self.__menu_spawn("Flash?", ("No", "Yes"))
-                    elif ac == "Play Audio":
-                        self._pending_action = self.ACT_AUDIO
-                        fn = self._context_target_path.split("/")[-1]
-                        self._confirm_menu = self.__menu_spawn("Play?", ("No", "Yes"))
-                    elif ac == "Watch Video":
-                        self._pending_action = self.ACT_VIDEO
-                        fn = self._context_target_path.split("/")[-1]
-                        self._confirm_menu = self.__menu_spawn("Watch Video?", ("No", "Yes"))
                     elif ac == "Unzip":
                         self._pending_action = self.ACT_UNZIP
                         self._confirm_menu = self.__menu_spawn(
@@ -1817,12 +1689,8 @@ class FileBrowser:
                                 items = ["List"]
                                 if self._mode == FILE_BROWSER_MANAGER:
                                     items.append("Unzip")
-                            elif np.lower().endswith((".wav", ".mp3")):
-                                items = ["Play Audio"] if MEDIA_ENABLED else []
-                            elif np.lower().endswith((".mp4", ".avi", ".mov")):
-                                items = ["Watch Video"] if MEDIA_ENABLED else []
-                            elif np.lower().endswith((".js", ".mjs", ".bas", ".c")):
-                                items = (["Run"] if EXTRA_LANGUAGES_ENABLED else []) + ["View", "Edit"]
+                            elif np.lower().endswith((".wav", ".mp3", ".mp4", ".avi", ".mov")):
+                                items = []
                             else:
                                 is_img = np.lower().endswith((".jpg", ".jpeg", ".bmp"))
                                 items = ["View"] if is_img else ["View", "Edit"]

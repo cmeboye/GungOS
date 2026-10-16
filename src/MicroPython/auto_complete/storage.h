@@ -9,7 +9,7 @@ extern "C"
 {
 #endif
 
-#if defined(WAVESHARE_1_43) || defined(WAVESHARE_3_49) || defined(PICOCALC)
+#if defined(PICOCALC)
 #include "../sd/fat32.h"
 #endif
 

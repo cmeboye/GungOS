@@ -7,7 +7,6 @@ _status_message: str = ""
 _connection_start_time = 0
 _ssid = ""
 _password = ""
-_is_flipper = False
 
 
 def __connect_callback(state: int, error: str) -> None:
@@ -43,24 +42,19 @@ def _get_status_text(view_manager) -> str:
     """
     global _status_message
 
-    extension = "\n" if _is_flipper else "\n\n"
+    extension = "\n\n"
 
     wifi = view_manager.wifi
-    if _is_flipper:
-        text = f"Network {_ssid}\n"
-    else:
-        text = f"WiFi Setup{extension}"
-        text += "Network: " + _ssid + "\n"
-
+    text = f"WiFi Setup{extension}"
+    text += "Network: " + _ssid + "\n"
 
     if wifi.is_connected():
         _status_message = "Connected successfully!"
         text += "MAC Address: " + wifi.mac_address + "\n"
         text += "IP Address: " + wifi.device_ip + extension
         text += "Status: " + _status_message + extension
-        
+
     else:
-        
         text += "MAC Address: " + wifi.mac_address + extension
         text += "Status: " + _status_message + extension
         from picoware.system.wifi import (
@@ -85,10 +79,9 @@ def _get_status_text(view_manager) -> str:
         elif state == WIFI_STATE_TIMEOUT:
             text += f"Connection timeout{extension}"
 
-    if not _is_flipper:
-        text += "Press RIGHT to connect\n"
-        text += "Press ESC to go back\n"
-        text += "Press UP to disconnect"
+    text += "Press RIGHT to connect\n"
+    text += "Press ESC to go back\n"
+    text += "Press UP to disconnect"
 
     return text
 
@@ -103,10 +96,8 @@ def start(view_manager) -> bool:
         bool: True if the app started, False if no credentials are saved.
     """
     from picoware.applications.wifi.utils import load_wifi_password, load_wifi_ssid
-    from picoware.system.boards import BOARD_FLIPPER_ZERO, BOARD_CARDPUTER, BOARD_POOM
 
-    global _connect, _ssid, _password, _is_flipper
-    _is_flipper = view_manager.board_id in (BOARD_FLIPPER_ZERO, BOARD_CARDPUTER, BOARD_POOM)
+    global _connect, _ssid, _password
 
     _ssid = load_wifi_ssid(view_manager)
     _password = load_wifi_password(view_manager)
@@ -192,7 +183,7 @@ def run(view_manager) -> None:
         view_manager.back()
         return
 
-    if button == BUTTON_UP and not _is_flipper:
+    if button == BUTTON_UP:
         wifi.disconnect()
         _status_message = "Disconnected"
     elif button in (BUTTON_UP, BUTTON_LEFT, BUTTON_RIGHT, BUTTON_DOWN):

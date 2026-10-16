@@ -9,7 +9,6 @@ class Choice:
         self.options=options;self._state=initial_state
         self.foreground_color=foreground_color;self.background_color=background_color
         self.selected_color=getattr(draw,'theme_color',0x001F) if selected_color is None else selected_color
-        self.use_lvgl=False
     @property
     def state(self):return self._state
     @state.setter

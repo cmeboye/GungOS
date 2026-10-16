@@ -1,7 +1,7 @@
 import sys,gc,random
 sys.path.insert(0,"builds/MicroPython/apps_unfrozen")
-from engtools.eggcel.model import Sheet
-from engtools.eggcel.formulas import CellError
+from desktopapps.eggcel.model import Sheet
+from desktopapps.eggcel.formulas import CellError
 random.seed(42)
 s=Sheet()
 alphabet='AB12()+-*/^%,:$=<>" '

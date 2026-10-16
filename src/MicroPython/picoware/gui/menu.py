@@ -10,7 +10,7 @@ class Menu:
         self.position=Vector(0,y);self.size=Vector(draw.size.x,height)
         self.text_color=text_color;self.background_color=background_color
         self.selected_color=selected_color;self.border_color=border_color;self.border_width=border_width
-        self.items=[];self._selected_index=0;self.use_lvgl=False
+        self.items=[];self._selected_index=0
         self.list=self
     @property
     def current_item(self):return self.get_item(self._selected_index)

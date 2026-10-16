@@ -31,10 +31,7 @@
 # Native simulator sidecars and scratch captures
 /simulator/viewer/sdl_fb_viewer
 /simulator/audio/tetris_pcm_player
-/simulator/audio/sdl_audio_player
-/simulator/audio/sdl_radio_player
 /simulator/jpeg/sim_jpeg_decode
-/simulator/gameboy/sim_gameboy_runner
 /screenshot.bmp
 /screenshot.png
 

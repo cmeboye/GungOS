@@ -195,21 +195,7 @@ class Keyboard:
         """
         from picoware.system.vector import Vector
         from picoware.system.auto_complete import AutoComplete
-        from picoware.system.boards import (
-            BOARD_ID,
-            BOARD_FLIPPER_ZERO,
-            BOARD_WAVESHARE_1_28_RP2350,
-            BOARD_WAVESHARE_1_43_RP2350,
-            BOARD_WAVESHARE_3_49_RP2350,
-            BOARD_POOM,
-        )
 
-        self._is_flipper = BOARD_ID in (BOARD_FLIPPER_ZERO, BOARD_POOM)
-
-        self._rotated = BOARD_ID == BOARD_WAVESHARE_3_49_RP2350
-        if self._rotated:
-            from picoware.gui.keyboard_rotation import KeyboardRotation
-            draw = KeyboardRotation(draw)
         self.draw = draw
         self.input_manager = input_manager
         self.text_color = text_color
@@ -239,21 +225,16 @@ class Keyboard:
         self.text_scroll_x = 0
         self.selected_suggestion_index = -1  # -1 means no suggestion selected
 
-        # A square inscribed in the round panel keeps every control visible.
         self._layout_width = draw.size.x
         self._layout_height = draw.size.y
-        if BOARD_ID in (BOARD_WAVESHARE_1_28_RP2350, BOARD_WAVESHARE_1_43_RP2350):
-            side = int(min(draw.size.x, draw.size.y) * 0.707)
-            self._layout_width = self._layout_height = side
         self._layout_x = (draw.size.x - self._layout_width) // 2
         self._layout_y = (draw.size.y - self._layout_height) // 2
-        self.KEY_MARGIN = 0 if self._is_flipper else max(1, draw.scale_x(2))
+        self.KEY_MARGIN = max(1, draw.scale_x(2))
         self.KEY_SPACING = 1
-        self._touch_enabled = input_manager.has_touch_support
 
         font_height = draw.font_size.y
-        padding_x = 1 if self._is_flipper else max(1, draw.scale_x(3))
-        padding_y = 1 if self._is_flipper else max(1, draw.scale_y(3))
+        padding_x = max(1, draw.scale_x(3))
+        padding_y = max(1, draw.scale_y(3))
         self.max_chars_per_line = max(
             1, (self._layout_width - 2 * (self.KEY_MARGIN + padding_x + 1))
             // draw.font_size.x - 1,
@@ -271,7 +252,7 @@ class Keyboard:
         )
         title_y = self._layout_y + self.TEXTBOX_HEIGHT + 1
         self.title_vec = Vector(0, title_y)
-        self._keys_y = title_y + font_height + 1 if not self._is_flipper else title_y - 1
+        self._keys_y = title_y + font_height + 1
         self._suggestion_y = self._layout_y + self._layout_height - font_height
         self.KEY_HEIGHT = (self._suggestion_y - self._keys_y - (self.NUM_ROWS - 1)) // self.NUM_ROWS
         self.keyboard_height = self.NUM_ROWS * self.KEY_HEIGHT + self.NUM_ROWS - 1
@@ -516,17 +497,7 @@ class Keyboard:
             return False
 
         self.dpad_input = self.input_manager.button
-        if self._rotated:
-            self.dpad_input = {
-                BUTTON_UP: BUTTON_RIGHT, BUTTON_RIGHT: BUTTON_DOWN,
-                BUTTON_DOWN: BUTTON_LEFT, BUTTON_LEFT: BUTTON_UP,
-            }.get(self.dpad_input, self.dpad_input)
-        has_touch_point = (
-            self._touch_enabled
-            and self.input_manager.point
-            and self.input_manager.point != (0, 0)
-        )
-        if self.dpad_input != -1 or force or has_touch_point:
+        if self.dpad_input != -1 or force:
             if self.dpad_input == BUTTON_ESCAPE:
                 # Exit keyboard without saving
                 self.just_stopped = True
@@ -548,12 +519,11 @@ class Keyboard:
             if self._show_keyboard:
                 self._draw_keyboard()
 
-            if not self._is_flipper:
-                self.draw._text(
-                    self.title_vec.x, self.title_vec.y,
-                    self._display_title,
-                    self.text_color,
-                )
+            self.draw._text(
+                self.title_vec.x, self.title_vec.y,
+                self._display_title,
+                self.text_color,
+            )
 
             # Draw auto-complete suggestions after keyboard/title
             self._draw_suggestions()
@@ -626,7 +596,7 @@ class Keyboard:
         widths = []
         for col, key in enumerate(self.ROWS[row]):
             label_width = self.draw.len(self._key_label(row, col), self._key_font) - font.spacing
-            widths.append(max(key.width * unit, label_width + (2 if self._is_flipper else 3)))
+            widths.append(max(key.width * unit, label_width + 3))
         return widths
 
     def _build_key_rects(self) -> list:
@@ -656,47 +626,6 @@ class Keyboard:
             rects.append(row_rects)
         return rects
 
-    def _key_at_point(self, x: int, y: int):
-        """Return the (row, col) under a touch point, or None.
-
-        Args:
-            x (int): The touch X coordinate.
-            y (int): The touch Y coordinate.
-
-        Returns:
-            tuple or None: The (row, col) of the key, or None if not on a key.
-        """
-        for row in range(self.NUM_ROWS):
-            for col in range(self.ROW_SIZES[row]):
-                rx, ry, rw, rh = self._key_rects[row][col]
-                if rx <= x < rx + rw and ry <= y < ry + rh:
-                    return row, col
-        return None
-
-    def _handle_touch_input(self) -> bool:
-        """Press the key under the touch point. True if the touch was used."""
-        point = self.input_manager.point
-        if not point or point == (0, 0):
-            return False
-
-        if self._rotated:
-            point = self.draw.touch_point(point[0], point[1])
-        hit = self._key_at_point(point[0], point[1])
-        if hit is None:
-            return False
-
-        self.cursor_row, self.cursor_col = hit
-        self.is_in_textbox = False
-        self.selected_suggestion_index = -1
-        # a tap is a centre press: the zone it lands in would otherwise report
-        # UP/DOWN/LEFT/RIGHT, which suppresses the shift reset
-        self.dpad_input = BUTTON_CENTER
-        self._process_key_press()
-
-        if self.ROWS[self.cursor_row][self.cursor_col].normal == "":
-            self.is_manual_shift = True
-        return True
-
     def _draw_key(self, row: int, col: int, is_selected: bool) -> None:
         """Draw a specific key on the keyboard.
 
@@ -714,32 +643,26 @@ class Keyboard:
         self.size_vec.x = width
         self.size_vec.y = height
 
-        if self._is_flipper:
-            # draw key background
-            self.draw._fill_rectangle(
-                x_pos, y_pos, self.size_vec.x, self.size_vec.y, self.text_color if is_selected else self.background_color
-            )
-        else:
-            # Draw key background
-            bg_color = self.selected_color if is_selected else self.background_color
-            self.draw._fill_rectangle(
-                x_pos, y_pos, self.size_vec.x, self.size_vec.y, bg_color
-            )
+        # Draw key background
+        bg_color = self.selected_color if is_selected else self.background_color
+        self.draw._fill_rectangle(
+            x_pos, y_pos, self.size_vec.x, self.size_vec.y, bg_color
+        )
 
-            # Leave room for drivers whose rectangle endpoints are inclusive.
-            self.draw._rectangle(
-                x_pos,
-                y_pos,
-                self.size_vec.x - 1,
-                self.size_vec.y - 1,
-                self.text_color,
-            )
+        # Leave room for drivers whose rectangle endpoints are inclusive.
+        self.draw._rectangle(
+            x_pos,
+            y_pos,
+            self.size_vec.x - 1,
+            self.size_vec.y - 1,
+            self.text_color,
+        )
 
         if key.normal in ("\x01", "\x02"):
             # Printable fonts have no Shift/Caps Lock glyphs.
             caps = key.normal == "\x01"
             rows = (4, 14, 31, 4, 4, 0, 31) if caps else (4, 14, 31, 4, 4, 4, 4)
-            color = self.background_color if self._is_flipper and is_selected else self.text_color
+            color = self.text_color
             # Fit the 5x7 bitmap to the same glyph box as the other key labels.
             font = self.draw.get_font(self._key_font)
             icon_width = self.draw.len(self._key_label(row, col), self._key_font) - font.spacing
@@ -756,7 +679,7 @@ class Keyboard:
                         self.draw._fill_rectangle(x + left, y + top, right - left, bottom - top, color)
             active = self.is_caps_lock_on if caps else self.is_shift_pressed
             if active:
-                inset = 0 if self._is_flipper else 2
+                inset = 2
                 self.draw._line(
                     x_pos + inset, y_pos + height - 1 - inset,
                     x_pos + width - 1 - inset, y_pos + height - 1 - inset, color,
@@ -768,7 +691,7 @@ class Keyboard:
         label_width = self.draw.len(key_label, self._key_font) - font.spacing
         key_x = x_pos + (width - label_width) // 2
         key_y = y_pos + (height - font.height) // 2
-        color = self.background_color if self._is_flipper and is_selected else self.text_color
+        color = self.text_color
         self.draw._text(key_x, key_y, key_label, color, self._key_font)
 
     def _key_label(self, row: int, col: int) -> str:
@@ -834,8 +757,8 @@ class Keyboard:
         self.draw._rectangle(
             self.text_border_pos.x,
             self.text_border_pos.y,
-            self.text_border_size.x - (0 if self._is_flipper else 1),
-            self.text_border_size.y - (0 if self._is_flipper else 1),
+            self.text_border_size.x - 1,
+            self.text_border_size.y - 1,
             border_color,
         )
 
@@ -982,8 +905,6 @@ class Keyboard:
         Args:
             max_characters (int): The maximum number of characters allowed in the response. 0 means no limit.
         """
-        if self._touch_enabled and self._handle_touch_input():
-            return
 
         suggestions = self._auto_complete_suggestions()
 

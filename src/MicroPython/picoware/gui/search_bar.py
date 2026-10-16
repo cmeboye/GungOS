@@ -58,8 +58,6 @@ class SearchBar:
         self.just_stopped = False
         self.is_save_pressed = False
 
-        self._touch_enabled = self.input_manager.has_touch_support
-
         # Layout from screen size
         self.max_chars_per_line = (self._size.x // self.draw.font_size.x) - 1
         self.max_lines = 2
@@ -135,13 +133,7 @@ class SearchBar:
             return False
 
         self._dpad_input = self.input_manager.button
-        has_touch_point = (
-            self._touch_enabled
-            and self.input_manager.point
-            and self.input_manager.point != (0, 0)
-        )
-
-        if self._dpad_input != -1 or force or has_touch_point:
+        if self._dpad_input != -1 or force:
             if self._dpad_input == BUTTON_ESCAPE:
                 # Exit search without saving
                 self.just_stopped = True
@@ -164,8 +156,6 @@ class SearchBar:
 
     def _handle_input(self) -> None:
         """Handles character entry, navigation, and item selection."""
-        if self._touch_enabled and self._handle_touch_input():
-            return
 
         button = self._dpad_input
 
@@ -189,48 +179,6 @@ class SearchBar:
             char = self.input_manager.button_to_char(button)
             if char:
                 self._type_char(char)
-
-    def _handle_touch_input(self) -> bool:
-        """Handle a touch tap. True if the touch was consumed."""
-        point = self.input_manager.point
-        if not point or point == (0, 0):
-            return False
-
-        index = self._item_at_point(point[0], point[1])
-        if index is not None:
-            self._select_item(index)
-            return True
-
-        # Tap moves the text cursor
-        if (
-            self.text_box_pos_vec.y <= point[1] < self._text_box_height
-            and 0 <= point[0] < self._size.x
-        ):
-            self._cursor = max(
-                0,
-                min(
-                    (point[0] - self._margin_x) // self.draw.font_size.x,
-                    len(self._current_text),
-                ),
-            )
-            return True
-
-        return False
-
-    def _item_at_point(self, x: int, y: int):
-        """Return the index of the item under a touch point, or None.
-
-        Args:
-            x (int): The touch X coordinate.
-            y (int): The touch Y coordinate.
-
-        Returns:
-            int or None: The index of the item, or None if not on an item.
-        """
-        for i, (rx, ry, rw, rh) in enumerate(self._item_rects):
-            if rx <= x < rx + rw and ry <= y < ry + rh:
-                return i
-        return None
 
     def _type_char(self, char: str) -> None:
         """Insert a character at the cursor position and re-filter the items.
@@ -439,4 +387,3 @@ class SearchBar:
                 self._text_color,
             )
 
-    

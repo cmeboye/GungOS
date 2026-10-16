@@ -7,17 +7,8 @@ class ViewManager:
 
     MAX_VIEWS = 10
     MAX_STACK_SIZE = 10
-    FREQ_DEFAULT = 200000000
-    FREQ_RP2040 = 200000000  # was 210 but users had issues
-    FREQ_RP2350 = 240000000
-    FREQ_PIMORONI = 210000000
-
-    _CORE_MODULES = {
-        "picoware.gui.draw",
-        "picoware.gui.keyboard",
-        "picoware.gui.alert",
-        "picoware.gui.desktop",
-    }
+    FREQ_DEFAULT = 200000000  # reduced clock used by the REPL and serial terminal
+    FREQ_RP2350 = 240000000  # normal clock on the Pico 2 W
 
     __slots__ = (
         "_active",
@@ -41,9 +32,7 @@ class ViewManager:
         "views",
         "view_stack",
         "_log",
-        "_audio",
         "_app_loader",
-        "_usb_video_stream",
         "_uart",
     )
 
@@ -59,8 +48,6 @@ class ViewManager:
         from picoware.system.thread import ThreadManager
         from picoware.system.log import Log, LOG_MODE_ALL, LOG_MODE_REPL
         from picoware.system.colors import TFT_BLUE, TFT_BLACK, TFT_WHITE
-        from picoware.system.buttons import BUTTON_ESCAPE
-        from picoware.system.boards import BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_POOM
         from picoware.system.app_loader import AppLoader
 
         self._active = True
@@ -69,8 +56,7 @@ class ViewManager:
         self._selected_color = TFT_BLUE
         self._stack_depth = 0
 
-        syst = System()
-        self._current_board_id = syst.board_id
+        self._current_board_id = System().board_id
 
         self.freq()
 
@@ -90,15 +76,8 @@ class ViewManager:
         self._background_color = TFT_BLACK
         self._foreground_color = TFT_WHITE
 
-
         # Initialize drawing system
         self._draw = Draw(self._foreground_color, self._background_color)
-
-        # on screen keyboard
-        _keyboard_state = settings.onscreen_keyboard
-
-        # LVGL mode
-        self._draw.use_lvgl = settings.lvgl_mode
 
         # theme color
         self._selected_color = settings.theme_color
@@ -128,38 +107,15 @@ class ViewManager:
             LOG_MODE_ALL if __debug else LOG_MODE_REPL, "picoware/log.txt", True
         )
 
-        # Initialize audio
-        self._audio = None
-
-        if self._draw.use_lvgl:
-            # disable networking...
-            self._wifi = None
-            self.log("LVGL mode enabled: WiFi disabled.", 2)
-            self.freq(True)
-        
-        # Initialize video stream on demand
-        self._usb_video_stream = None
-        from picoware.system.features import MEDIA_ENABLED
-        if MEDIA_ENABLED and settings.usb_stream:
-            self.start_usb_video_stream()
-
         # Initialize app loader
         self._app_loader = AppLoader(self)
 
-        # UART
+        # UART (created on first use)
         self._uart = None
-        if syst.board_id == BOARD_FLIPPER_ZERO:
-            try:
-                from picoware.system.uart import UART
-                self._uart = UART()
-            except ImportError:
-                self._uart = None
 
-        # Initialize WiFi if available
-        self._wifi = None
-        if syst is not None and syst.has_wifi:
-            from picoware.system.wifi import WiFi
-            self._wifi = WiFi(self)
+        # Initialize WiFi
+        from picoware.system.wifi import WiFi
+        self._wifi = WiFi(self)
 
         # Clear screen
         self.clear()
@@ -200,9 +156,6 @@ class ViewManager:
         if self._wifi is not None:
             del self._wifi
             self._wifi = None
-        if self._audio is not None:
-            del self._audio
-            self._audio = None
         if self._time:
             del self._time
             self._time = None
@@ -215,11 +168,6 @@ class ViewManager:
         if self._uart is not None:
             del self._uart
             self._uart = None
-        if self._usb_video_stream is not None:
-            if self._usb_video_stream.active:
-                self._usb_video_stream.stop()
-            del self._usb_video_stream
-            self._usb_video_stream = None
 
         collect()
 
@@ -241,15 +189,6 @@ class ViewManager:
     def app_loader(self):
         """Return the shared AppLoader instance."""
         return self._app_loader
-
-    @property
-    def audio(self):
-        """Return the Audio instance."""
-        if self._audio is None and self.has_audio:
-            from picoware.system.audio import Audio
-
-            self._audio = Audio()
-        return self._audio
 
     @property
     def background_color(self):
@@ -281,9 +220,9 @@ class ViewManager:
     @property
     def board_name(self):
         """Return the current device name."""
-        from picoware_boards import get_current_name
+        from picoware.system.boards import BOARD_NAME
 
-        return get_current_name()
+        return BOARD_NAME
 
     @property
     def button(self):
@@ -327,33 +266,9 @@ class ViewManager:
         self._gmt_offset = value
 
     @property
-    def has_audio(self):
-        """Return whether the current board has audio capability."""
-        from picoware.system.boards import BOARD_HAS_AUDIO
-
-        from picoware.system.features import MEDIA_ENABLED
-        return MEDIA_ENABLED and BOARD_HAS_AUDIO == 1
-
-    @property
     def has_bluetooth(self):
-        """Return whether the current board has Bluetooth capability."""
-        from picoware.system.boards import BOARD_HAS_BLUETOOTH
-
-        return BOARD_HAS_BLUETOOTH == 1
-
-    @property
-    def has_keyboard(self):
-        """Return whether the current board has a keyboard."""
-        from picoware.system.boards import BOARD_HAS_KEYBOARD
-
-        return BOARD_HAS_KEYBOARD == 1
-    
-    @property
-    def has_psram(self):
-        """Return whether the current board has PSRAM."""
-        from picoware_boards import has_psram
-
-        return has_psram(self._current_board_id)
+        """Return whether Bluetooth is available (always on the Pico 2 W)."""
+        return True
 
     @property
     def has_sd_card(self):
@@ -364,7 +279,6 @@ class ViewManager:
     def has_wifi(self):
         """Return whether the current board has WiFi capability."""
         return self._wifi is not None
-
 
     @property
     def input_manager(self):
@@ -377,7 +291,6 @@ class ViewManager:
         if self._keyboard is None:
             from picoware.gui.keyboard import Keyboard
             from picoware.system.settings import Settings
-            from picoware.system.boards import BOARD_HAS_KEYBOARD
             self._keyboard = Keyboard(
                 self._draw,
                 self._input_manager,
@@ -385,7 +298,7 @@ class ViewManager:
                 self._background_color,
                 self._selected_color,
             )
-            self._keyboard.show_keyboard = Settings.get(self._storage, "onscreen_keyboard", BOARD_HAS_KEYBOARD == 0)
+            self._keyboard.show_keyboard = Settings.get(self._storage, "onscreen_keyboard", False)
         return self._keyboard
 
     @property
@@ -437,28 +350,6 @@ class ViewManager:
             from picoware.system.uart import UART
             self._uart = UART()
         return self._uart
-    
-    @property
-    def usb_video_stream(self):
-        """Return the USBVideoStream instance."""
-        return self._usb_video_stream
-
-    def start_usb_video_stream(self):
-        """Start USB video streaming."""
-        from picoware.system.features import MEDIA_ENABLED
-        if not MEDIA_ENABLED:
-            return False
-        if self._usb_video_stream is None:
-            from picoware.system.usb import USBVideoStream
-
-            self._usb_video_stream = USBVideoStream()
-        self._usb_video_stream.start()
-        return True
-
-    def stop_usb_video_stream(self):
-        """Stop USB video streaming."""
-        if self._usb_video_stream is not None:
-            self._usb_video_stream.stop()
 
     @property
     def view_count(self):
@@ -591,55 +482,6 @@ class ViewManager:
                         self._view_count -= 1
                         break
 
-                # Free unused view modules
-                self._unload_unused_modules()
-
-    def _unload_unused_modules(self):
-        """Unload view and gui modules no longer used (Flipper only)."""
-        from picoware.system.boards import BOARD_FLIPPER_ZERO
-
-        if self._current_board_id != BOARD_FLIPPER_ZERO:
-            return
-        import sys
-
-        # Module names still used by registered views
-        _used = set()
-        for _view in self.views:
-            if _view is None:
-                continue
-            for _fn in (_view._run, _view._start, _view._stop):
-                if _fn is None:
-                    continue
-                _mod = getattr(_fn, "__module__", None)
-                if _mod:
-                    _used.add(_mod)
-
-        for _name in list(sys.modules):
-            if _name in self._CORE_MODULES or _name in _used:
-                continue
-            _mod = sys.modules.get(_name)
-            if _mod is None:
-                continue
-            # Frozen modules report "picoware/gui/x.py", SD ones "/sd/firmware/picoware/gui/x.mpy"
-            _file = getattr(_mod, "__file__", "")
-            if "picoware/gui/" not in _file and "picoware/applications/" not in _file:
-                continue
-            # Keep packages
-            if _file.endswith("__init__.mpy") or _file.endswith("__init__.py"):
-                continue
-            # Remove module and any submodules from sys.modules
-            for _sub in list(sys.modules):
-                if _sub == _name or _sub.startswith(_name + "."):
-                    del sys.modules[_sub]
-            # Drop parent package reference so it is freed
-            _dot = _name.rfind(".")
-            if _dot > 0:
-                _parent = sys.modules.get(_name[:_dot])
-                if _parent is not None:
-                    _attr = _name[_dot + 1:]
-                    if hasattr(_parent, _attr):
-                        delattr(_parent, _attr)
-
     def clear(self):
         """Clear the screen with the background color."""
         self._draw.fill_screen(self._background_color)
@@ -655,42 +497,18 @@ class ViewManager:
         """Set the CPU frequency.
 
         Args:
-            use_default (bool): Whether to use the default frequency. Defaults to False.
+            use_default (bool): Whether to use the reduced default frequency. Defaults to False.
             frequency (int): Explicit frequency in Hz. Defaults to None.
 
         Returns:
             int: The new CPU frequency.
         """
         from machine import freq
-        from picoware.system.boards import (
-            BOARD_PICOCALC_PICO,
-            BOARD_PICOCALC_PICOW,
-            BOARD_PICOCALC_PIMORONI_2W,
-            BOARD_HAS_ESP32,
-            BOARD_FLIPPER_ZERO,
-            BOARD_WAVESHARE_C6_2_06
-        )
-        if self._current_board_id == BOARD_FLIPPER_ZERO:
-            return
-
-        if self._current_board_id == BOARD_WAVESHARE_C6_2_06:
-            return freq(160000000)
-
-        if BOARD_HAS_ESP32 == 1:
-            return freq(240000000)
 
         if frequency is not None:
             return freq(frequency)
-
         if use_default:
             return freq(self.FREQ_DEFAULT)
-
-        if self._current_board_id in (BOARD_PICOCALC_PICO, BOARD_PICOCALC_PICOW):
-            return freq(self.FREQ_RP2040)
-
-        if self._current_board_id == BOARD_PICOCALC_PIMORONI_2W:
-            return freq(self.FREQ_PIMORONI)
-
         return freq(self.FREQ_RP2350)
 
     def get_view(self, view_name: str):
@@ -759,8 +577,6 @@ class ViewManager:
                     self.views[j] = self.views[j + 1]
                 self._view_count -= 1
 
-                # Free unused view modules
-                self._unload_unused_modules()
                 break
 
     def run(self) -> bool:

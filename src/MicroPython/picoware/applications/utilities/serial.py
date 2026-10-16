@@ -97,7 +97,6 @@ def __set_kb(view_manager, title: str) -> None:
 def start(view_manager) -> bool:
     """Start the app"""
     from picoware.system.buttons import BUTTON_ESCAPE
-    from picoware.system.boards import BOARD_HAS_PICOCALC
 
     global _textbox, _uart, state, _loading, _received, _prev_callback
 
@@ -112,7 +111,6 @@ def start(view_manager) -> bool:
     _received = False
 
     view_manager.freq(True)  # set to lower frequency
-    is_pico_calc = BOARD_HAS_PICOCALC == 1
     _uart = view_manager.uart
     _prev_callback = _uart.callback
     _uart.set_callback(__uart_callback)
@@ -124,12 +122,8 @@ def start(view_manager) -> bool:
     d.erase()
     d._text(0, 0, "To connect to the device, use the following settings:", fg)
     d._text(0, sixteen, "Baudrate: 115200", fg)
-    if not is_pico_calc:
-        d._text(0, sixteen * 2, f"TX Pin: GP{_uart.tx_pin if _uart else 'N/A'}", fg)
-        d._text(0, sixteen * 3, f"RX Pin: GP{_uart.rx_pin if _uart else 'N/A'}", fg)
-    else:
-        d._text(0, sixteen * 2, "TX Pin: UART0_TX (GP0)", fg)
-        d._text(0, sixteen * 3, "RX Pin: UART0_RX (GP1)", fg)
+    d._text(0, sixteen * 2, "TX Pin: UART0_TX (GP0)", fg)
+    d._text(0, sixteen * 3, "RX Pin: UART0_RX (GP1)", fg)
     d._text(0, sixteen * 4, "Press the any button to continue...", fg)
     d.swap()
     inp = view_manager.input_manager
@@ -192,7 +186,6 @@ def run(view_manager) -> None:
 
 def stop(view_manager) -> None:
     """Stop the app"""
-    from picoware.system.boards import BOARD_FLIPPER_ZERO
     from gc import collect
 
     global _textbox, _uart, _loading, state, message, _received, _prev_callback
@@ -206,8 +199,7 @@ def stop(view_manager) -> None:
     if _uart is not None:
         _uart.set_callback(_prev_callback)
         _prev_callback = None
-    if view_manager.board_id != BOARD_FLIPPER_ZERO:
-        _uart = None # close our reference
+    _uart = None # close our reference
     state = STATE_TYPING
     message = ""
     _received = False

@@ -74,8 +74,6 @@ class Draw(lcd.LCD):
             self._font_default.height,
         )
 
-        self._use_lvgl = False
-
         # Clear the display and framebuffer
         self._clear(self._background)
 
@@ -134,21 +132,6 @@ class Draw(lcd.LCD):
     def size(self) -> Vector:
         """Get the size of the display"""
         return self._size
-
-    @property
-    def use_lvgl(self) -> bool:
-        """Get whether LVGL mode is enabled"""
-        return self._use_lvgl
-
-    @use_lvgl.setter
-    def use_lvgl(self, state: bool):
-        """Set whether to use LVGL mode for drawing.
-
-        Args:
-            state (bool): True to enable LVGL mode.
-        """
-        from picoware.system.features import LVGL_ENABLED
-        self._use_lvgl = bool(state) and LVGL_ENABLED
 
     def __del__(self):
         """Destructor to ensure cleanup on object deletion"""

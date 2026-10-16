@@ -27,16 +27,24 @@ import picoware_desktop
 assert picoware_desktop.native_modules() == (
     "auto_complete", "font", "picoware_pcm", "response", "sim_raster", "ulab", "vector", "vt")
 
-for name in ("c", "mjs", "mmbasic", "engine", "gameboy", "ghouls",
-             "audio", "video", "usb_video_mp", "picoware_lvgl",
+# Retired Picoware features and other boards must stay out of the firmware tree.
+for name in ("picoware.engine", "picoware.system.gameboy", "picoware.system.audio",
+             "picoware.system.video", "picoware.system.app",
+             "picoware.system.drivers.espflasher", "picoware.gui.desktop",
+             "picoware.gui.home_visual", "picoware.gui.keyboard_rotation",
              "picoware.applications.system.update", "picoware.applications.applications.app_store",
              "picoware.system.agent", "picoware.applications.ai_setup",
-             "picoware.applications.applications.agent"):
-    try:
-        __import__(name)
-        raise AssertionError("Excluded backend was importable: " + name)
-    except ImportError:
-        pass
+             "picoware.applications.applications.agent",
+             "picoware.applications.utilities.utilities"):
+    path = root + "/src/MicroPython/" + name.replace(".", "/")
+    for candidate in (path + ".py", path + "/__init__.py"):
+        try:
+            os.stat(candidate)
+            raise AssertionError("Retired module is present: " + name)
+        except OSError:
+            pass
+import picoware.system.boards as boards
+assert boards.BOARD_ID == boards.BOARD_PICOCALC_PICO_2W and boards.DISPLAY_SIZE == (320, 320)
 for route in ("App Store", "Update", "Apps/Scripts/C", "JavaScript", "MMBasic", "Agent", "Email", "ESP Flasher"):
     try:
         sim_runtime.request_open(route)
@@ -46,18 +54,22 @@ for route in ("App Store", "Update", "Apps/Scripts/C", "JavaScript", "MMBasic", 
 sim_runtime._keys = []
 
 vm = ViewManager()
-assert Settings(vm.storage).update({"lvgl_mode": True, "usb_stream": True,
-    "theme_color": 0xF800, "screen_brightness": 40, "dark_mode": False,
-    "wifi_ssid": "Saved", "wifi_password": "test-only", "openai_api_key": "test-only",
-    "custom_field": "preserve"})
+# Old SD cards may carry settings for retired features; they must boot and be dropped.
+legacy = {"lvgl_mode": True, "usb_stream": True, "theme_color": 0xF800,
+          "screen_brightness": 40, "dark_mode": False, "exit_button": 5,
+          "wifi_ssid": "Saved", "wifi_password": "test-only", "openai_api_key": "test-only",
+          "mcp_servers": [{"endpoint": "x"}], "custom_field": "preserve"}
+assert vm.storage.serialize(legacy, "picoware/settings/picoware.json")
 del vm
 vm = ViewManager()
-assert not vm.draw.use_lvgl and vm.usb_video_stream is None
-assert not vm.start_usb_video_stream() and not vm.has_audio
 assert vm.selected_color == 0xF800 and vm.draw._brightness == 40
 assert vm.background_color == 0 and vm.has_wifi and vm.has_bluetooth
 assert Settings(vm.storage).settings["custom_field"] == "preserve"
-assert Settings(vm.storage).openai_api_key == "test-only"
+from picoware.system.settings import RETIRED_SETTINGS
+assert not any(key in Settings(vm.storage).settings for key in RETIRED_SETTINGS)
+assert Settings(vm.storage).update({"screen_brightness": 40})
+saved = vm.storage.deserialize("picoware/settings/picoware.json")
+assert not any(key in saved for key in RETIRED_SETTINGS) and saved["custom_field"] == "preserve"
 assert Settings(vm.storage).wifi_settings["ssid"] == "Saved"
 assert settings.start(vm)
 assert not settings._menu.item_exists("AI Setup")
@@ -139,8 +151,8 @@ sim_runtime.request_game("Tetris")
 assert games._games_index == 0
 sim_runtime._keys = []
 sim_runtime._delayed_keys = []
-print("PASS: lean native inventory and excluded import/menu routes")
-print("PASS: old LVGL/video settings boot safely; preferences, AI keys, Wi-Fi and Bluetooth retained")
+print("PASS: lean native inventory, Pico 2 W board facts and excluded modules/routes")
+print("PASS: old LVGL/video/AI settings boot safely and are dropped; preferences, Wi-Fi and Bluetooth retained")
 print("PASS: connected home has no HTTP/update requests and retains NTP")
 print("PASS: File Manager omits unsupported actions; Agent/AI excluded")
 print("PASS: release game allowlist and simulator launch indices")

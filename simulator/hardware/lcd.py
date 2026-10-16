@@ -9,20 +9,6 @@ except ImportError:
     _native_fill_triangle = None
 
 
-def default_font_for_board(board_id, boards=None):
-    """Return the firmware's compile-time default font for a board."""
-    if boards is None:
-        import picoware_boards as boards
-    if board_id in (boards.BOARD_CARDPUTER, boards.BOARD_WAVESHARE_2_06):
-        return 1
-    if board_id in (
-        boards.BOARD_WAVESHARE_1_43_RP2350,
-        boards.BOARD_WAVESHARE_3_49_RP2350,
-    ):
-        return 2
-    return 0
-
-
 def _rgb565_to_rgb(color):
     color = int(color) & 0xFFFF
     r = ((color >> 11) & 31) * 255 // 31
@@ -46,17 +32,7 @@ class LCD:
     MODE_PSRAM = 1
 
     def __init__(self, scale_x=1.0, scale_y=1.0, scale_position=False):
-        self._is_flipper = False
-        try:
-            import picoware_boards
-
-            self.width, self.height = picoware_boards.get_current_display_size()
-            self.FONT_DEFAULT = default_font_for_board(
-                picoware_boards.BOARD_ID, picoware_boards
-            )
-            self._is_flipper = picoware_boards.BOARD_ID == picoware_boards.BOARD_FLIPPER_ZERO
-        except Exception:
-            self.width, self.height = 320, 320
+        self.width, self.height = 320, 320
         self._scale_x_factor = scale_x
         self._scale_y_factor = scale_y
         self.scale_position = scale_position
@@ -119,10 +95,6 @@ class LCD:
 
     def _display_color(self, color):
         color = int(color) & 0xFFFF
-        if self._is_flipper:
-            # Match color_to_mono() in Flipper/lcd/lcd.c.
-            luminance = ((color >> 11) & 31) * 299 + ((color >> 5) & 63) * 587 + (color & 31) * 114
-            return 0xFFFF if luminance > 44800 else 0
         return color
 
     def _set_pixel(self, x, y, color):
@@ -130,7 +102,7 @@ class LCD:
         y = int(y)
         if 0 <= x < self.width and 0 <= y < self.height:
             off = self._offset(x, y)
-            color = self._display_color(color) if self._is_flipper else int(color) & 0xFFFF
+            color = int(color) & 0xFFFF
             self._buffer[off] = color & 0xFF
             self._buffer[off + 1] = (color >> 8) & 0xFF
 
@@ -192,10 +164,6 @@ class LCD:
                 y += sy
 
     def _rectangle(self, x, y, w, h, color):
-        if self._is_flipper:
-            # Flipper lcd_draw_rect() includes the border in width and height.
-            w -= 1
-            h -= 1
         self._line(x, y, x + w, y, color)
         self._line(x, y, x, y + h, color)
         self._line(x + w, y, x + w, y + h, color)
@@ -348,7 +316,7 @@ class LCD:
         ):
             _native_fill_triangle(
                 self._buffer, self.width, self.height,
-                x1, y1, x2, y2, x3, y3, int(color) & 0xFFFF, alpha, self._is_flipper,
+                x1, y1, x2, y2, x3, y3, int(color) & 0xFFFF, alpha, False,
             )
             return
         area = self._triangle_edge(x1, y1, x2, y2, x3, y3)
@@ -420,22 +388,6 @@ class LCD:
         except Exception:
             pass
         w, h, spacing = self._font_metrics(font_size)
-        if self._is_flipper:
-            # Firmware uses uint16_t text coordinates and skips whole glyphs
-            # outside the display. This matters for overwide keyboard labels.
-            start_x = int(x) & 0xFFFF
-            xx, yy = start_x, int(y) & 0xFFFF
-            for code in str(text).encode():
-                if code == 0:
-                    break
-                if code == 10:
-                    xx = start_x
-                    yy = (yy + h + 2) & 0xFFFF
-                    continue
-                if 32 <= code <= 126 and xx + w <= self.width and yy + h <= self.height:
-                    self._draw_glyph(xx, yy, chr(code), color, w, h)
-                xx = (xx + w + 1) & 0xFFFF
-            return
         xx = int(x)
         yy = int(y)
         for ch in str(text):

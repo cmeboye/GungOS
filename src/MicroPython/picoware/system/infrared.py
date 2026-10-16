@@ -468,58 +468,15 @@ class RemoteLibrary:
         return
 
 
-def _split_raw_timings(timings, max_timing):
-    """Split long alternating timings into explicit same-level chunks."""
-    if max_timing <= 0:
-        raise ValueError("max_timing must be positive")
-    durations = []
-    levels = []
-    level = True
-    for timing in timings:
-        remaining = int(timing)
-        while remaining > max_timing:
-            durations.append(max_timing)
-            levels.append(level)
-            remaining -= max_timing
-        durations.append(remaining)
-        levels.append(level)
-        level = not level
-    if len(timings) & 1:
-        durations.append(1)
-        levels.append(False)
-    return tuple(durations), tuple(levels)
-
-
 def _default_tx_pin():
     from machine import Pin
-    from picoware.system.boards import BOARD_ID, BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_HAS_PICOCALC, BOARD_POOM
 
-    if BOARD_ID == BOARD_CARDPUTER:
-        return Pin(44, Pin.OUT, value=0)
-    if BOARD_ID == BOARD_POOM:
-        return Pin(25, Pin.OUT, value=0)
-    if BOARD_ID == BOARD_FLIPPER_ZERO:
-        try:
-            return Pin.board.IR_TX
-        except AttributeError:
-            return Pin.cpu.B9
-    if BOARD_HAS_PICOCALC == 1:
-        return Pin(28, Pin.OUT)
-    raise ValueError("no built-in infrared transmitter on this board")
+    # Transmit on GP28; PicoCalc has no built-in IR hardware.
+    return Pin(28, Pin.OUT)
 
 
 def _default_rx_pin():
-    from machine import Pin
-    from picoware.system.boards import BOARD_ID, BOARD_FLIPPER_ZERO, BOARD_POOM
-
-    if BOARD_ID == BOARD_POOM:
-        return Pin(10, Pin.IN)
-    if BOARD_ID != BOARD_FLIPPER_ZERO:
-        raise ValueError("this board has no built-in infrared receiver")
-    try:
-        return Pin(Pin.board.IR_RX, Pin.IN)
-    except AttributeError:
-        return Pin(Pin.cpu.A0, Pin.IN)
+    raise ValueError("PicoCalc has no built-in infrared receiver")
 
 
 def _protocol_encoder(signal, pin, verbose):
@@ -574,19 +531,13 @@ class InfraredTransmitter:
 
     def _send_raw(self, signal, repeats):
         from picoware.system.drivers.ir_tx import Player
-        from picoware.system.boards import BOARD_ID, BOARD_CARDPUTER, BOARD_FLIPPER_ZERO, BOARD_POOM
 
-        if BOARD_ID in (BOARD_CARDPUTER, BOARD_POOM):
-            timings, levels = _split_raw_timings(signal.data, 32767)
-        elif BOARD_ID == BOARD_FLIPPER_ZERO:
-            timings, levels = _split_raw_timings(signal.data, 65535)
-        else:
-            timings = list(signal.data)
-            if len(timings) & 1:
-                timings.append(1)
-            if any(item > 65535 for item in timings):
-                raise ValueError("raw timing exceeds transmitter limit of 65535 us")
-            levels = None
+        timings = list(signal.data)
+        if len(timings) & 1:
+            timings.append(1)
+        if any(item > 65535 for item in timings):
+            raise ValueError("raw timing exceeds transmitter limit of 65535 us")
+        levels = None
 
         player = Player(
             self.pin,

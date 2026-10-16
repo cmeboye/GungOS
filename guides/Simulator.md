@@ -3,20 +3,16 @@ Run Picoware on your desktop. The simulator uses a native SDL2 window for displa
 
 ## Features
 - Custom Picoware UI with framebuffer and keyboard input
-- Scripted/viewer touch input for supported touch-board profiles
 - Real network access via host DNS/TCP/TLS (or `--network offline` for fixtures)
-- Selected Python/engineering profile with Agent/AI and virtual Bluetooth
+- The GungOS firmware for PicoCalc with Pico 2 W, with virtual Bluetooth
 - Simulated SD card at `simulator/sdcard` (auto-seeded on first run)
 - Headless mode for automated testing (`--headless`)
 
 ## Installation
 
-The current desktop build omits Agent/AI, Email, ESP Flasher, LVGL,
-C/JavaScript/MMBasic, native game engines, media playback/streaming, App Store
-and the upstream firmware updater. The home clock still supports NTP. JPEG
-viewing, USB HID, Bluetooth, Wi-Fi, SD editing and PicoLAB remain available.
-Unsupported native APIs are also blocked
-in simulator shims so the preview reflects the selected firmware.
+The simulator models only the PicoCalc with a Raspberry Pi Pico 2 W, the one
+board GungOS supports. The home clock still supports NTP. JPEG viewing, USB
+HID, Bluetooth, Wi-Fi, SD editing and PicoLAB are available.
 
 The desktop interpreter includes the [selected ulab build](../src/MicroPython/ulab/README.md)
 and uses float32, matching the current PicoCalc numeric profile. Engineering
@@ -93,27 +89,9 @@ audible helper for checks. See [Tetris audio](TetrisAudio.md).
 | `Ctrl+R` | Restart simulator |
 | `Ctrl+Shift+R` | Reset SD card and restart |
 | `Ctrl+1..4` | Change window scale |
-| Left mouse click | Send a touch point to touch-board profiles |
 
 
-Useful board names include `picocalc-pico2w`, `waveshare-1.28-rp2350`,
-`waveshare-1.43-rp2350`, `waveshare-1.69-rp2350`, `waveshare-3.49-rp2350`,
-`crowpanel-10.1`, and `cardputer`.
-
-### Game Boy controls
-
-The simulator runs Game Boy ROMs through the native Walnut-CGB helper when it
-is available, with a placeholder fallback if the helper cannot build or start.
-Firmware/PicoCalc controls still work, and the simulator also accepts a
-QWERTY-friendly keymap:
-
-| Key | Game Boy button |
-|---|---|
-| Arrow keys | D-pad |
-| `X` or `]` | A |
-| `Z` or `[` | B |
-| `Enter` or `=` | Start |
-| `Space` or `-` | Select |
+`--board` accepts only `picocalc-pico2w` (the default).
 
 ### Script input
 
@@ -123,14 +101,10 @@ Simulator scripts support queued key/text input plus simulator state changes:
 app Calculator
 keys down,enter
 text hello
-touch 440 200
-gesture 6 160 160
 battery 42
 ```
 
-`touch X Y [GESTURE]` and left-clicks in the viewer update the simulated touch
-controller. `battery N` sets the battery percentage reported by simulator board
-shims.
+`battery N` sets the battery percentage reported by the simulated southbridge.
 
 `wait`, `sleep`, or `frames` in a script delays later queued input. This is useful
 when launching directly into an app and waiting for lazy imports or loading
@@ -147,10 +121,6 @@ cd simulator
 ./build.sh --clean    # remove binaries
 ./build.sh --check    # report missing/stale binaries without rebuilding
 ./build.sh viewer     # rebuild only the viewer
-./build.sh audio      # rebuild local audio, radio and Tetris PCM helpers
-./build.sh audio-player
-./build.sh tetris-audio # streamed PCM music/effects preview
-./build.sh radio-player
+./build.sh audio      # rebuild the Tetris PCM helper (alias: tetris-audio)
 ./build.sh jpeg
-./build.sh gameboy    # rebuild only the Game Boy helper
 ```

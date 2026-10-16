@@ -7,39 +7,11 @@
 #define MEMORY_REALLOC m_realloc
 
 // storage info
-#if defined(CARDPUTER)
-#define STORAGE_INCLUDE "../cardputer/sd/storage.h"
-#define STORAGE_READ storage_file_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(WAVESHARE_2_06)
-#define STORAGE_INCLUDE "../Waveshare/ESP32S3-Touch-LCD-2.06/sd/storage.h"
-#define STORAGE_READ storage_file_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(PANCAKE)
-#define STORAGE_INCLUDE "../pancake/sd/storage.h"
-#define STORAGE_READ storage_file_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(V8)
-#define STORAGE_INCLUDE "../v8/sd/storage.h"
-#define STORAGE_READ storage_file_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(POOM)
-#define STORAGE_INCLUDE "../poom/sd/storage.h"
-#define STORAGE_READ storage_file_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(FLIPPER_ZERO)
-#define STORAGE_INCLUDE "../Flipper/sd/storage.h"
-#define STORAGE_READ storage_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(CROWPANEL_WATCH_2_01)
-#define STORAGE_INCLUDE "../CrowPanel/ESP32S3-Watch-2.01/storage.h"
-#define STORAGE_READ storage_file_read
-#define STORAGE_MAX_READ_SIZE 4096
-#elif defined(DESKTOP)
+#if   defined(DESKTOP)
 #define STORAGE_INCLUDE "desktop_bridge.h"
 #define STORAGE_READ desktop_storage_file_read
 #define STORAGE_MAX_READ_SIZE 4096
-#elif !defined(WAVESHARE_1_28) && !defined(WAVESHARE_1_69) && !defined(CROWPANEL_10_1) && !defined(PICO_DUO) && !defined(WAVESHARE_C6_2_06)
+#else
 #define STORAGE_INCLUDE "storage.h"
 #define STORAGE_READ storage_read
 #define STORAGE_MAX_READ_SIZE 4096

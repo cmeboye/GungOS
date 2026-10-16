@@ -2,16 +2,12 @@
 
 from micropython import const
 
-# states
-STATE_DARK_MODE = const(1)  # toggle (on/off)
-STATE_DEBUG = const(2)  # toggle (enable/disable)
-STATE_EXIT_BUTTON = const(4)  # selection to choose which button triggers app exits
-STATE_LVGL_MODE = const(15)  # toggle (use LVGL or not)
-STATE_ONSCREEN_KEYBOARD = const(9)  # toggle (show/hide)
-STATE_SCREEN_BRIGHTNESS = const(11)  # choice (10 - 100)
-STATE_THEME_COLOR = const(12)  # choice (select from predefined colors)
-STATE_TIME = const(13)  # menu with date (date picker), GMT offset (keyboard)
-STATE_USB_STREAM = const(14)  # toggle (enable/disable USB stream)
+# states (indices into __config())
+STATE_DEBUG = const(0)  # toggle (enable/disable)
+STATE_ONSCREEN_KEYBOARD = const(1)  # toggle (show/hide)
+STATE_SCREEN_BRIGHTNESS = const(2)  # choice (10 - 100)
+STATE_THEME_COLOR = const(3)  # choice (select from predefined colors)
+STATE_TIME = const(4)  # menu with date (date picker), GMT offset (keyboard)
 
 # modes
 _MODE_MENU = const(0)
@@ -20,9 +16,6 @@ _MODE_CHOICE = const(2)
 _MODE_TIME_MENU = const(3)
 _MODE_DATE_PICKER = const(4)
 _MODE_GMT_KEYBOARD = const(5)
-_MODE_MCP_SERVER_ENDPOINT_KEYBOARD = const(16)
-_MODE_MCP_API_KEY_KEYBOARD = const(17)
-_MODE_MCP_SERVERS_MENU = const(18)
 
 
 _settings = None
@@ -31,17 +24,12 @@ _toggle = None
 _choice = None
 _time_menu = None
 _date_picker = None
-_mcp_servers_menu = None
 _view_manager = None
 _mode = _MODE_MENU
 _current_setting = 0
 _gmt_save_requested = False
-_mcp_server_endpoint_save_requested = False
-_mcp_api_key_save_requested = False
-_mcp_server_index = 0
 _menu_setting_indices = []
 _resume_menu_label = None
-_mcp_only = False
 
 
 def __color_values() -> list[int]:
@@ -93,44 +81,12 @@ def __config() -> tuple:
     """
     # (menu label, json key, default value)
     return (
-        ("Anthropic API Key", "anthropic_api_key", ""),
-        ("Dark Mode", "dark_mode", True),
         ("Debug", "debug", False),
-        ("DeepSeek API Key", "deepseek_api_key", ""),
-        ("Exit Button", "exit_button", None),
-        ("Gemini API Key", "gemini_api_key", ""),
-        ("Local API Key", "local_api_key", ""),
-        ("Local URL", "local_url", "http://127.0.0.1:8080/v1/chat/completions"),
-        ("MCP Servers", "mcp_servers", None),
-        (
-            "Onscreen Keyboard",
-            "onscreen_keyboard",
-            True,
-        ),
-        ("OpenAI API Key", "openai_api_key", ""),
+        ("Onscreen Keyboard", "onscreen_keyboard", True),
         ("Screen Brightness", "screen_brightness", 100),
         ("Theme Color", "theme_color", None),
         ("Time", "time", None),
-        ("USB Stream", "usb_stream", False),
-        ("Use LVGL", "lvgl_mode", False),
-        ("xAI API Key", "xai_api_key", ""),
     )
-
-
-def __exit_button_mapping() -> dict[int, str]:
-    """Get the mapping of button values to their names for the exit button setting.
-
-    Returns:
-        dict[int, str]: The button value to name mapping.
-    """
-    from picoware.system.buttons import (
-        BUTTON_ESCAPE,
-    )
-
-    return {
-        BUTTON_ESCAPE: "<-Back",
-        BUTTON_ESCAPE: "Esc",
-    }
 
 
 def __apply_toggle_setting(index: int, state: bool) -> None:
@@ -142,13 +98,6 @@ def __apply_toggle_setting(index: int, state: bool) -> None:
     """
     if index == STATE_ONSCREEN_KEYBOARD:
         _view_manager.keyboard.show_keyboard = state
-    elif index == STATE_LVGL_MODE:
-        _view_manager.draw.use_lvgl = state
-    elif index == STATE_USB_STREAM:
-        if state:
-            _view_manager.start_usb_video_stream()
-        else:
-            _view_manager.stop_usb_video_stream()
 
 
 def __open_toggle(setting_index: int) -> None:
@@ -229,42 +178,6 @@ def __open_choice() -> None:
         draw.size,
         "Theme Color",
         _color_names,
-        initial_index,
-        _view_manager.foreground_color,
-        _view_manager.background_color,
-    )
-    _choice.draw()
-    _mode = _MODE_CHOICE
-
-
-def __open_choice_button() -> None:
-    """Open a Choice sub-view for the button to exit setting."""
-    global _choice, _mode, _current_setting
-    from picoware.gui.choice import Choice
-    from picoware.system.vector import Vector
-
-    _current_setting = STATE_EXIT_BUTTON
-    current_button = _settings.exit_button
-    str_buttons = list(__exit_button_mapping().values())
-    initial_index = 0
-    button_mapping = __exit_button_mapping()
-    for i, button_value in enumerate(button_mapping.keys()):
-        if button_value == current_button:
-            initial_index = i
-            break
-
-    draw = _view_manager.draw
-    draw.erase()
-    if _choice is not None:
-        del _choice
-        _choice = None
-
-    _choice = Choice(
-        draw,
-        Vector(0, 0),
-        draw.size,
-        "Button to Exit",
-        str_buttons,
         initial_index,
         _view_manager.foreground_color,
         _view_manager.background_color,
@@ -383,119 +296,9 @@ def __gmt_save_callback(result: str) -> None:
     _gmt_save_requested = True
 
 
-def __open_mcp_server_endpoint_keyboard() -> None:
-    """Open the keyboard for adding an MCP server endpoint."""
-    global _mode, _mcp_server_endpoint_save_requested
-
-    keyboard = _view_manager.keyboard
-    keyboard.reset()
-    keyboard.title = "MCP Server Endpoint"
-    keyboard.response = ""
-    keyboard.set_save_callback(__mcp_server_endpoint_save_callback)
-    keyboard.input_manager.reset()
-    keyboard.run(force=True)
-    _mcp_server_endpoint_save_requested = False
-    _mode = _MODE_MCP_SERVER_ENDPOINT_KEYBOARD
-
-
-def __mcp_server_endpoint_save_callback(result: str) -> None:
-    """Callback triggered when an MCP endpoint is saved."""
-    global _mcp_server_endpoint_save_requested
-    _mcp_server_endpoint_save_requested = True
-
-
-def __add_mcp_server(endpoint: str) -> bool:
-    """Add an MCP server with an empty optional API key."""
-    servers = list(_settings.mcp_servers)
-    servers.append({"endpoint": endpoint, "api_key": ""})
-    return _settings.update({"mcp_servers": servers})
-
-
-def __open_mcp_servers_menu() -> None:
-    """Open the menu containing configured MCP servers."""
-    global _mcp_servers_menu, _mode
-    from picoware.gui.menu import Menu
-
-    draw = _view_manager.draw
-    draw.erase()
-    if _mcp_servers_menu is not None:
-        del _mcp_servers_menu
-        _mcp_servers_menu = None
-
-    _mcp_servers_menu = Menu(
-        draw,
-        "MCP Servers",
-        0,
-        draw.size.y,
-        _view_manager.foreground_color,
-        _view_manager.background_color,
-        _view_manager.selected_color,
-        _view_manager.foreground_color,
-        2,
-    )
-    _mcp_servers_menu.add_item("[Add Server]")
-    for server in _settings.mcp_servers:
-        _mcp_servers_menu.add_item(server.get("endpoint", ""))
-    _mcp_servers_menu.draw()
-    _mode = _MODE_MCP_SERVERS_MENU
-
-
-def __open_mcp_api_key_keyboard(server_index: int) -> None:
-    """Open the keyboard for a per-server MCP API key.
-
-    Args:
-        server_index (int): The index of the server in the settings list.
-    """
-    global _mode, _mcp_api_key_save_requested, _mcp_server_index
-
-    _mcp_server_index = server_index
-    keyboard = _view_manager.keyboard
-    keyboard.reset()
-    keyboard.title = "MCP API Key"
-    keyboard.secret = True
-    keyboard.response = _settings.mcp_servers[server_index].get("api_key", "")
-    keyboard.text_cursor_position = len(keyboard.response)
-    keyboard.set_save_callback(__mcp_api_key_save_callback)
-    keyboard.input_manager.reset()
-    keyboard.run(force=True)
-    _mcp_api_key_save_requested = False
-    _mode = _MODE_MCP_API_KEY_KEYBOARD
-
-
-def __mcp_api_key_save_callback(result: str) -> None:
-    """Callback triggered when an MCP API key keyboard is saved.
-
-    Args:
-        result (str): The saved keyboard value.
-    """
-    global _mcp_api_key_save_requested
-    _mcp_api_key_save_requested = True
-
-
-def __save_mcp_api_key(value: str) -> bool:
-    """Save a per-server MCP API key by its server index."""
-    servers = list(_settings.mcp_servers)
-    server = dict(servers[_mcp_server_index])
-    server["api_key"] = value
-    servers[_mcp_server_index] = server
-    return _settings.update({"mcp_servers": servers})
-
-
-def __back_to_mcp_servers_menu() -> None:
-    """Return to the MCP Servers sub-menu."""
-    global _mcp_server_endpoint_save_requested, _mcp_api_key_save_requested
-
-    keyboard = _view_manager.keyboard
-    keyboard.reset()
-    _mcp_server_endpoint_save_requested = False
-    _mcp_api_key_save_requested = False
-
-    __open_mcp_servers_menu()
-
-
 def __back_to_menu() -> None:
     """Clean up any sub-view and return to the main menu."""
-    global _toggle, _choice, _time_menu, _date_picker, _mcp_servers_menu, _mode
+    global _toggle, _choice, _time_menu, _date_picker, _mode
 
     if _toggle is not None:
         del _toggle
@@ -509,9 +312,6 @@ def __back_to_menu() -> None:
     if _date_picker is not None:
         del _date_picker
         _date_picker = None
-    if _mcp_servers_menu is not None:
-        del _mcp_servers_menu
-        _mcp_servers_menu = None
 
     _mode = _MODE_MENU
     _menu.draw()
@@ -548,16 +348,11 @@ def start(view_manager) -> bool:
     from picoware.gui.menu import Menu
     from picoware.system.settings import Settings
 
-    global _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _mcp_servers_menu, _gmt_save_requested, _mcp_server_endpoint_save_requested, _mcp_api_key_save_requested
-
-    global _menu_setting_indices, _mcp_only
-    global _resume_menu_label
-    _mcp_only = False
+    global _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _gmt_save_requested
+    global _menu_setting_indices, _resume_menu_label
     _view_manager = view_manager
     _mode = _MODE_MENU
     _gmt_save_requested = False
-    _mcp_server_endpoint_save_requested = False
-    _mcp_api_key_save_requested = False
 
     if _settings is not None:
         del _settings
@@ -571,9 +366,6 @@ def start(view_manager) -> bool:
     if _date_picker is not None:
         del _date_picker
         _date_picker = None
-    if _mcp_servers_menu is not None:
-        del _mcp_servers_menu
-        _mcp_servers_menu = None
 
     view_manager.storage.mkdir("picoware/settings")
 
@@ -592,19 +384,7 @@ def start(view_manager) -> bool:
     )
 
     _menu_setting_indices = []
-    from picoware.system.features import LVGL_ENABLED, MEDIA_ENABLED, AI_ENABLED
-    if AI_ENABLED:
-        _menu.add_item("AI Setup")
-        _menu_setting_indices.append(-1)
     for index, cfg in enumerate(__config()):
-        if cfg[1] in ("dark_mode","exit_button"):
-            continue
-        if cfg[1].endswith("api_key") or cfg[1] in ("local_url", "mcp_servers"):
-            continue
-        if cfg[1] == "lvgl_mode" and not LVGL_ENABLED:
-            continue
-        if cfg[1] == "usb_stream" and not MEDIA_ENABLED:
-            continue
         _menu.add_item(cfg[0])
         _menu_setting_indices.append(index)
 
@@ -619,16 +399,6 @@ def start(view_manager) -> bool:
         _resume_menu_label=None
 
     _menu.draw()
-    return True
-
-
-def start_mcp(view_manager):
-    """Open MCP settings from the AI Setup advanced menu."""
-    global _mcp_only
-    if not start(view_manager):
-        return False
-    _mcp_only = True
-    __open_mcp_servers_menu()
     return True
 
 
@@ -658,10 +428,7 @@ def run(view_manager) -> None:
             _menu.scroll_down()
         elif button == BUTTON_CENTER:
             selected = _menu.current_item
-            if selected == "AI Setup":
-                from picoware.applications.ai_setup import open_setup
-                open_setup(view_manager)
-            elif selected == 'Screensaver':
+            if selected == 'Screensaver':
                 global _resume_menu_label
                 _resume_menu_label='Screensaver'
                 from picoware.system.view import View
@@ -674,8 +441,6 @@ def run(view_manager) -> None:
                 __open_choice()
             elif selected == "Time":
                 __open_time_menu()
-            elif selected == "Exit Button":
-                __open_choice_button()
             elif selected == "Screen Brightness":
                 __open_choice_brightness()
             else:
@@ -730,47 +495,6 @@ def run(view_manager) -> None:
             view_manager.keyboard.reset()
             __back_to_time_menu()
 
-    elif _mode == _MODE_MCP_SERVER_ENDPOINT_KEYBOARD:
-        global _mcp_server_endpoint_save_requested
-        if _mcp_server_endpoint_save_requested:
-            _mcp_server_endpoint_save_requested = False
-            endpoint = view_manager.keyboard.response or ""
-            if endpoint:
-                if not __add_mcp_server(endpoint):
-                    view_manager.alert("Could not save MCP server.\nCheck the SD card.")
-                    return
-            __back_to_mcp_servers_menu()
-        elif not view_manager.keyboard.run():
-            __back_to_mcp_servers_menu()
-
-    elif _mode == _MODE_MCP_SERVERS_MENU:
-        if button == BUTTON_ESCAPE:
-            if _mcp_only:
-                view_manager.back()
-            else:
-                __back_to_menu()
-        elif button in (BUTTON_UP, BUTTON_LEFT):
-            _mcp_servers_menu.scroll_up()
-        elif button in (BUTTON_DOWN, BUTTON_RIGHT):
-            _mcp_servers_menu.scroll_down()
-        elif button == BUTTON_CENTER:
-            selected = _mcp_servers_menu.selected_index
-            if selected == 0:
-                __open_mcp_server_endpoint_keyboard()
-            else:
-                __open_mcp_api_key_keyboard(selected - 1)
-
-    elif _mode == _MODE_MCP_API_KEY_KEYBOARD:
-        global _mcp_api_key_save_requested
-        if _mcp_api_key_save_requested:
-            _mcp_api_key_save_requested = False
-            if not __save_mcp_api_key(view_manager.keyboard.response or ""):
-                view_manager.alert("Could not save MCP key.\nCheck the SD card.")
-                return
-            __back_to_mcp_servers_menu()
-        elif not view_manager.keyboard.run():
-            __back_to_mcp_servers_menu()
-
     elif _mode == _MODE_TOGGLE:
         if button == BUTTON_ESCAPE:
             __back_to_menu()
@@ -799,17 +523,6 @@ def run(view_manager) -> None:
                     _choice.draw()
                     return
                 _view_manager.selected_color = selected_color
-            elif _current_setting == STATE_EXIT_BUTTON:
-                button_mapping = __exit_button_mapping()
-                selected_button_value = list(button_mapping.keys())[_choice.state]
-                if not _settings.update({"exit_button": selected_button_value}):
-                    view_manager.alert("Could not save exit button.\nCheck the SD card.")
-                    _choice.draw()
-                    return
-                from picoware.system.system import System
-
-                s = System()
-                s.hard_reset()
             elif _current_setting == STATE_SCREEN_BRIGHTNESS:
                 selected_value = int(_choice.options[_choice.state])
                 if not _settings.update({"screen_brightness": selected_value}):
@@ -828,7 +541,7 @@ def stop(view_manager) -> None:
     """
     from gc import collect
 
-    global _settings, _menu, _toggle, _choice, _time_menu, _date_picker, _mcp_servers_menu
+    global _settings, _menu, _toggle, _choice, _time_menu, _date_picker
 
     if _settings is not None:
         del _settings
@@ -845,31 +558,9 @@ def stop(view_manager) -> None:
     if _time_menu is not None:
         del _time_menu
         _time_menu = None
-    if _mcp_servers_menu is not None:
-        del _mcp_servers_menu
-        _mcp_servers_menu = None
     if _menu is not None:
         del _menu
         _menu = None
-
-    from picoware.system.features import LVGL_ENABLED
-    if LVGL_ENABLED and view_manager.draw.use_lvgl:
-        # restart with wifi disconnected...
-        if view_manager._wifi is not None:
-            from picoware.system.system import System
-
-            sys = System()
-            sys.hard_reset()
-    elif LVGL_ENABLED:
-        if view_manager._wifi is None:
-            from picoware.system.system import System
-
-            sys = System()
-            if sys.has_wifi:
-                # wifi was disabled before so just restart...
-                # we probably could just deinit lvgl and continue
-                # but maybe thats something we'll try later...
-                sys.hard_reset()
 
     view_manager.keyboard.reset()
     collect()

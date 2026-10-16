@@ -14,11 +14,11 @@ def __set_text(view_manager):
     if _system_info:
         system = System()
         info = f"""System Information
-        
+
         Board: {system.board_name}
         Device: {system.device_name}
         Frequency: {system.freq} MHz
-        
+
         Free Heap: {system.free_heap} bytes
         Used Heap: {system.used_heap} bytes
         Total Heap: {system.total_heap} bytes
@@ -33,9 +33,6 @@ def __set_text(view_manager):
 
         Battery Level: {view_manager.battery.percentage}%
         """
-        if view_manager.battery.has_voltage:
-            info += f"Battery voltage: {view_manager.battery.voltage} mV\n"
-        
         _system_info.set_text(info)
 
 

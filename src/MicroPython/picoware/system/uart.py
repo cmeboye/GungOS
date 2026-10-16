@@ -14,35 +14,25 @@ class UART:
         """Initialize the UART interface.
 
         Args:
-            uart_id (int or None): UART peripheral ID, or None for the board default. Defaults to None.
-            tx_pin (int or None): TX pin number, or None for the board default. Defaults to None.
-            rx_pin (int or None): RX pin number, or None for the board default. Defaults to None.
+            uart_id (int or None): UART peripheral ID, or None for UART0. Defaults to None.
+            tx_pin (int or None): TX pin number, or None for GP0. Defaults to None.
+            rx_pin (int or None): RX pin number, or None for GP1. Defaults to None.
             baud_rate (int): Baud rate for the interface. Defaults to 115200.
             timeout (int): Read timeout in milliseconds. Defaults to 2000.
 
         Raises:
             Exception: If the UART peripheral could not be initialized.
         """
-        from picoware.system.boards import BOARD_ID, BOARD_FLIPPER_ZERO, BOARD_WAVESHARE_1_28_RP2350, BOARD_WAVESHARE_1_43_RP2350, BOARD_WAVESHARE_3_49_RP2350, BOARD_CARDPUTER
         from machine import UART as MachineUART
         from machine import Pin
 
-        _map = {
-            BOARD_WAVESHARE_1_28_RP2350: (0, 16, 17),
-            BOARD_WAVESHARE_1_43_RP2350: (1, 4, 5),
-            BOARD_WAVESHARE_3_49_RP2350: (1, 4, 5),
-            BOARD_CARDPUTER: (1, 1, 2),
-        }
-        if BOARD_ID == BOARD_FLIPPER_ZERO:
-            _map[BOARD_FLIPPER_ZERO] = (1, Pin.cpu.B6, Pin.cpu.B7)
-            
-        _config = _map.get(BOARD_ID, (0, 0, 1))  # Default to PicoCalc if board not recognized
+        # PicoCalc exposes UART0 on GP0 (TX) and GP1 (RX).
         if uart_id is None:
-            uart_id = _config[0]
+            uart_id = 0
         if tx_pin is None:
-            tx_pin = _config[1]
+            tx_pin = 0
         if rx_pin is None:
-            rx_pin = _config[2]
+            rx_pin = 1
 
         self._uart_id = uart_id
         self._tx_pin = tx_pin
@@ -51,17 +41,10 @@ class UART:
         self._uart = None
         self._callback = None
 
-        try:
-            if BOARD_ID == BOARD_FLIPPER_ZERO:
-                self._uart = MachineUART(uart_id, baudrate=baud_rate)
-                self._uart.init(baudrate=baud_rate)
-            else:
-                self._uart = MachineUART(
-                    uart_id, baudrate=baud_rate, tx=Pin(tx_pin), rx=Pin(rx_pin)
-                )
-                self._uart.init()
-        except Exception as e:
-            raise e
+        self._uart = MachineUART(
+            uart_id, baudrate=baud_rate, tx=Pin(tx_pin), rx=Pin(rx_pin)
+        )
+        self._uart.init()
 
         self._timeout = timeout  # milliseconds
 
@@ -198,12 +181,10 @@ class UART:
         Args:
             callback (callable): The interrupt handler function.
         """
-        from picoware.system.boards import BOARD_HAS_ESP32
-        _hard = hard if not BOARD_HAS_ESP32 else False
         self._uart.irq(
             handler=callback,
             trigger=trigger if trigger is not None else self._uart.IRQ_RXIDLE,
-            hard=_hard,
+            hard=hard,
         )
         self._callback = callback
 

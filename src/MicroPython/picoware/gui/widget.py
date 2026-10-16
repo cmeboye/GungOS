@@ -11,7 +11,6 @@ def rgb332(color):
 
 class WidgetDraw:
     FONT_DEFAULT=0
-    use_lvgl=False
     def __init__(self, master, width, height):
         self.width,self.height = width,height
         self._size = Vector(width,height)

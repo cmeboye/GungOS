@@ -1,124 +1,68 @@
-"""Decorators for feature availability checks."""
+"""Decorators for feature availability checks on the PicoCalc with a Pico 2 W.
 
-import micropython
-import picoware_boards
+Audio, PSRAM, SD, Bluetooth, the keyboard, Wi-Fi and the GP28 infrared
+transmitter are always present, so their decorators return the function
+unchanged. There is no infrared receiver.
+"""
+
 import sys
 
-def audio_required(func: callable) -> callable:
-    """Decorator to check if Audio is available.
 
-    Args:
-        func (callable): The function to decorate.
+def _available(func: callable) -> callable:
+    """Return the function unchanged: its hardware is always present."""
+    return func
 
-    Returns:
-        callable: The wrapped function, or a stub that raises when audio is missing.
 
-    Raises:
-        RuntimeError: If the decorated function is called without audio support.
-    """
-    if picoware_boards.BOARD_HAS_AUDIO == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because audio is not available.
+def _unavailable(func: callable, feature: str) -> callable:
+    """Return a stub that raises because the hardware is absent."""
+    def unavailable(*args, **kwargs):
+        """Raise an error because the feature is not available.
 
-            Raises:
-                RuntimeError: If audio support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires Audio, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
+        Raises:
+            RuntimeError: Always.
         """
-        return func(*args, **kwargs)
-    return wrapper
+        raise RuntimeError(f"{func.__name__} requires {feature}, which is not available")
+    return unavailable
+
+
+audio_required = _available
+psram_required = _available
+storage_required = _available
+bluetooth_required = _available
+infrared_tx_required = _available
+keyboard_required = _available
+
+
+def infrared_rx_required(func: callable) -> callable:
+    """Decorator for functions that need an infrared receiver (absent on PicoCalc)."""
+    return _unavailable(func, "infrared reception")
+
 
 def native(func: callable) -> callable:
-    """Decorator to wrap a function with micropython.native.
+    """Decorator to wrap a function with micropython.native on the device.
 
     Args:
         func (callable): The function to decorate.
 
     Returns:
-        callable: The function, wrapped with micropython.native on supported boards.
+        callable: The function, wrapped with micropython.native on the RP2350.
     """
-    if picoware_boards.BOARD_HAS_RP2040 == 1 or sys.platform in ("darwin", "linux", "win32"):
+    if sys.platform in ("darwin", "linux", "win32"):
         return func
     from picoware.system.native import native_wrapper
     return native_wrapper(func)
 
-def psram_required(func: callable) -> callable:
-    """Decorator to check if PSRAM is available.
-
-    Args:
-        func (callable): The function to decorate.
-
-    Returns:
-        callable: The wrapped function, or a stub that raises when PSRAM is missing.
-
-    Raises:
-        RuntimeError: If the decorated function is called without PSRAM support.
-    """
-    if picoware_boards.BOARD_HAS_PSRAM == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because PSRAM is not available.
-
-            Raises:
-                RuntimeError: If PSRAM support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires PSRAM, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
-        """
-        return func(*args, **kwargs)
-    return wrapper
-
-
-def storage_required(func: callable) -> callable:
-    """Decorator to check if storage is available.
-
-    Args:
-        func (callable): The function to decorate.
-
-    Returns:
-        callable: The wrapped function, or a stub that raises when storage is missing.
-
-    Raises:
-        RuntimeError: If the decorated function is called without SD storage support.
-    """
-    if picoware_boards.BOARD_HAS_SD == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because SD storage is not available.
-
-            Raises:
-                RuntimeError: If SD storage support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires SD storage, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
-        """
-        return func(*args, **kwargs)
-    return wrapper
 
 def viper(func: callable) -> callable:
-    """Decorator to wrap a function with micropython.viper.
+    """Decorator to wrap a function with micropython.viper on the device.
 
     Args:
         func (callable): The function to decorate.
 
     Returns:
-        callable: The function, wrapped with micropython.viper on supported boards.
+        callable: The function, wrapped with micropython.viper on the RP2350.
     """
-    if picoware_boards.BOARD_HAS_RP2040 == 1 or sys.platform in ("darwin", "linux", "win32"):
+    if sys.platform in ("darwin", "linux", "win32"):
         return func
     try:
         from picoware.system.native import viper_wrapper
@@ -126,146 +70,19 @@ def viper(func: callable) -> callable:
     except Exception:
         return func
 
-def bluetooth_required(func: callable) -> callable:
-    """Decorator to check if Bluetooth is available.
-
-    Args:
-        func (callable): The function to decorate.  
-    
-    Returns:
-        callable: The wrapped function, or a stub that raises when Bluetooth is missing.
-    Raises:
-        RuntimeError: If the decorated function is called without Bluetooth support.
-    """
-    if picoware_boards.BOARD_HAS_BLUETOOTH == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because Bluetooth is not available.
-
-            Raises:
-                RuntimeError: If Bluetooth support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires Bluetooth, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
-        """
-        return func(*args, **kwargs)
-    return wrapper
-
-def infrared_rx_required(func: callable) -> callable:
-    """Decorator to check if infrared reception support is available.
-
-    Args:
-        func (callable): The function to decorate.
-
-    Returns:
-        callable: The wrapped function, or a stub that raises when infrared reception is missing.
-
-    Raises:
-        RuntimeError: If the decorated function is called without infrared reception support.
-    """
-    if picoware_boards.BOARD_HAS_IR_RX == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because infrared reception is not available.
-
-            Raises:
-                RuntimeError: If infrared reception support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires infrared reception, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
-        """
-        return func(*args, **kwargs)
-    return wrapper
-
-def infrared_tx_required(func: callable) -> callable:
-    """Decorator to check if infrared transmission support is available.
-
-    Args:
-        func (callable): The function to decorate.
-
-    Returns:
-        callable: The wrapped function, or a stub that raises when infrared transmission is missing.
-
-    Raises:
-        RuntimeError: If the decorated function is called without infrared transmission support.
-    """
-    if picoware_boards.BOARD_HAS_IR == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because infrared transmission is not available.
-
-            Raises:
-                RuntimeError: If infrared transmission support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires infrared transmission, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
-        """
-        return func(*args, **kwargs)
-    return wrapper
-
-def keyboard_required(func: callable) -> callable:
-    """Decorator to check if keyboard support is available.
-
-    Args:
-        func (callable): The function to decorate.
-
-    Returns:
-        callable: The wrapped function, or a stub that raises when keyboard support is missing.
-
-    Raises:
-        RuntimeError: If the decorated function is called without keyboard support.
-    """
-    if picoware_boards.BOARD_HAS_KEYBOARD == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because keyboard is not available.
-
-            Raises:
-                RuntimeError: If keyboard support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires keyboard, which is not available")
-        return unavailable
-    def wrapper(*args, **kwargs):
-        """Call the wrapped function with the given arguments.
-
-        Returns:
-            object: The result of the wrapped function.
-        """
-        return func(*args, **kwargs)
-    return wrapper
 
 def wifi_required(func: callable) -> callable:
-    """Decorator to check if WiFi is available.
+    """Decorator to require a Wi-Fi connection before calling a view function.
 
     Args:
-        func (callable): The function to decorate.
+        func (callable): The function to decorate; its first argument is the view manager.
 
     Returns:
-        callable: The wrapped function, or a stub that raises when WiFi is missing.
+        callable: The wrapped function.
 
     Raises:
         RuntimeError: If the decorated function is called without WiFi connected.
     """
-    if picoware_boards.BOARD_HAS_WIFI == 0:
-        def unavailable(*args, **kwargs):
-            """Raise an error because WiFi is not available.
-
-            Raises:
-                RuntimeError: If WiFi support is missing on the board.
-            """
-            raise RuntimeError(f"{func.__name__} requires WiFi, which is not available")
-        return unavailable
     def wrapper(*args, **kwargs):
         """Connect to saved WiFi and call the wrapped function.
 

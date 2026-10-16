@@ -1,12 +1,6 @@
 def main():
     """Main function to run the application"""
     from gc import collect, threshold, mem_free, mem_alloc
-    from time import sleep
-    from picoware.system.boards import BOARD_HAS_ESP32
-
-    if BOARD_HAS_ESP32 == 1:
-        # added this for ThonnyIDE connecting/stopping
-        sleep(1)
 
     # Initial cleanup
     collect()

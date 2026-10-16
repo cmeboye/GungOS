@@ -75,7 +75,7 @@ desktop.run(vm)
 assert swaps[0]==5, 'Theme change did not redraw'
 vm.draw.screenshot('/private/tmp/picoware-logo-clock-light.bmp')
 desktop.stop(vm)
-assert desktop._desktop_visual is None, 'Decoded logo should be released in menus'
+assert desktop._dashboard is None, 'Decoded logo should be released in menus'
 Draw.swap=original
 print('PASS: logo decodes, clock/date update by minute and midnight, unset time handled')
 print('PASS: no per-second redraws; dark/light themes work; logo released on leaving home')

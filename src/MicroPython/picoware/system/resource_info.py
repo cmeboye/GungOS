@@ -3,7 +3,6 @@
 def snapshot(vm):
     from gc import mem_free,mem_alloc
     from picoware.system.system import System
-    from picoware.system import boards
     from sys import platform
     system=System()
     free,used=mem_free(),mem_alloc()
@@ -21,12 +20,8 @@ def snapshot(vm):
         available=system.free_psram
         rows.append(('PSRAM',available,total-available,total))
     except Exception: rows.append(('PSRAM',None,None,None))
-    # Physical SRAM includes the two scratch banks (SDK SRAM_END-SRAM_BASE).
-    if boards.BOARD_ID in (boards.BOARD_PICOCALC_PICO_2,boards.BOARD_PICOCALC_PICO_2W,boards.BOARD_PICOCALC_PIMORONI_2W):
-        total=520*1024
-    elif boards.BOARD_ID in (boards.BOARD_PICOCALC_PICO,boards.BOARD_PICOCALC_PICOW): total=264*1024
-    else: total=None
-    rows.append(('SRAM',None,None,total))
+    # Physical RP2350 SRAM includes the two scratch banks (SDK SRAM_END-SRAM_BASE).
+    rows.append(('SRAM',None,None,520*1024))
     return {'board':system.board_name,'frequency':system.freq,'rows':rows,
             'simulator':platform in ('darwin','linux','win32')}
 
