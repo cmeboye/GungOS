@@ -2,7 +2,6 @@
 #include "py/mperrno.h"
 #include "../vector/vector_mp.h"
 #include "../log/log_mp.h"
-#include "../engine/memory.h"
 
 bool mp_engine_gc_ready = false;
 
