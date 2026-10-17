@@ -29,6 +29,10 @@ extern "C"
 
     // Drawing functions (lcd_draw_*, lcd_fill*, blits, text) are in gfx_lcd.h.
 
+    // Experimental: send 12 bits per pixel instead of 16 (25% less to send).
+    // Returns false for anything but 12 or 16.
+    bool lcd_set_panel_bits(uint8_t bits);
+
     void lcd_set_mode(uint8_t mode);
     uint8_t lcd_get_mode(void);
 

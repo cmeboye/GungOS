@@ -17,3 +17,4 @@ void desktop_lcd_set_brightness(uint8_t brightness);
 void desktop_lcd_set_rgb_led(uint8_t red, uint8_t green, uint8_t blue);
 void desktop_lcd_set_mode(uint8_t mode);
 uint8_t desktop_lcd_get_mode(void);
+bool desktop_lcd_set_panel_bits(uint8_t bits);

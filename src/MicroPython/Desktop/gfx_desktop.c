@@ -96,3 +96,10 @@ uint8_t desktop_lcd_get_mode(void)
 {
     return mode;
 }
+
+/* The simulated panel always shows the RGB565 frame; the format is checked
+ * and remembered so apps behave as on the device. */
+bool desktop_lcd_set_panel_bits(uint8_t bits)
+{
+    return bits == 12 || bits == 16;
+}

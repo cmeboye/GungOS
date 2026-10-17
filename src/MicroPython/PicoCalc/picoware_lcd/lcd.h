@@ -102,6 +102,7 @@ extern "C"
     void lcd_stream_begin(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
     void lcd_stream_bytes(const uint8_t *bytes, size_t len);
     void lcd_stream_end(void);
+    void lcd_set_pixel_format(uint8_t bits);
     void lcd_solid_rectangle(uint16_t colour, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
     // Initialization

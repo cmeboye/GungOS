@@ -1495,6 +1495,16 @@ mp_obj_t lcd_mp_swap(mp_obj_t self_in)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(lcd_mp_swap_obj, lcd_mp_swap);
 
+#ifdef LCD_MP_SET_PANEL_BITS
+// Experimental: 12 or 16 bits per pixel on the way to the panel.
+mp_obj_t lcd_mp_set_panel_bits(mp_obj_t self_in, mp_obj_t bits)
+{
+    (void)self_in;
+    return mp_obj_new_bool(LCD_MP_SET_PANEL_BITS((uint8_t)mp_obj_get_int(bits)));
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(lcd_mp_set_panel_bits_obj, lcd_mp_set_panel_bits);
+#endif
+
 // One row of the screen image as bytes, RGB332 (1 byte per pixel).
 mp_obj_t lcd_mp_read_row(mp_obj_t self_in, mp_obj_t row_in)
 {
@@ -1615,6 +1625,9 @@ static const mp_rom_map_elem_t lcd_mp_locals_dict_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_scaling), MP_ROM_PTR(&lcd_mp_set_scaling_obj)},                    // self.set_scaling()
     {MP_ROM_QSTR(MP_QSTR_swap), MP_ROM_PTR(&lcd_mp_swap_obj)},                                  // self.swap() -> rows sent
     {MP_ROM_QSTR(MP_QSTR__read_row), MP_ROM_PTR(&lcd_mp_read_row_obj)},                          // self._read_row(y) -> RGB332 bytes
+#ifdef LCD_MP_SET_PANEL_BITS
+    {MP_ROM_QSTR(MP_QSTR_set_panel_bits), MP_ROM_PTR(&lcd_mp_set_panel_bits_obj)},                // self.set_panel_bits(12 or 16) -> bool
+#endif
     {MP_ROM_QSTR(MP_QSTR_MODE_PSRAM), MP_ROM_INT(0)},                                            // screen image in PSRAM
     {MP_ROM_QSTR(MP_QSTR_MODE_SRAM), MP_ROM_INT(1)},                                             // screen image in SRAM (default)
     {MP_ROM_QSTR(MP_QSTR__text), MP_ROM_PTR(&lcd_mp_text_obj)},                                 // self._text()

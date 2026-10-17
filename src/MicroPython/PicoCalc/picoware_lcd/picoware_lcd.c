@@ -33,6 +33,9 @@ static gfx_sram sram_image;
 // RGB332 -> RGB565 with the bytes swapped, so memory holds the high byte
 // first, as the panel expects.
 static uint16_t palette_be[256] __attribute__((aligned(4)));
+// RGB332 -> RGB444 for the experimental 12-bit panel format.
+static uint16_t palette_444[256] __attribute__((aligned(4)));
+static uint8_t panel_bits = 16;
 static uint16_t stream_buffer[2][DISPLAY_WIDTH * LCD_STREAM_LINES] __attribute__((aligned(4)));
 static uint8_t row_buffer[DISPLAY_WIDTH] __attribute__((aligned(4)));
 
@@ -188,7 +191,9 @@ void picocalc_lcd_init(void)
         {
             uint16_t c = gfx_palette[i];
             palette_be[i] = (uint16_t)((c >> 8) | (c << 8));
+            palette_444[i] = (uint16_t)(((c >> 12) << 8) | (((c >> 7) & 0x0F) << 4) | ((c >> 1) & 0x0F));
         }
+        panel_bits = 16;
     }
     if (sram_pixels == NULL && lcd_mode == LCD_MODE_SRAM && !use_sram())
     {
@@ -219,6 +224,17 @@ void lcd_deinit(void)
     }
 }
 
+bool lcd_set_panel_bits(uint8_t bits)
+{
+    if (bits != 12 && bits != 16)
+        return false;
+    if (module_initialized)
+        lcd_set_pixel_format(bits);
+    panel_bits = bits;
+    full_refresh = true; // the panel's memory now holds the other format
+    return true;
+}
+
 void lcd_invalidate(void)
 {
     full_refresh = true;
@@ -235,6 +251,7 @@ static void send_rows(void *ctx, int y, int rows)
     {
         const int lines = rows - done < LCD_STREAM_LINES ? rows - done : LCD_STREAM_LINES;
         uint16_t *out = stream_buffer[which];
+        uint8_t *packed = (uint8_t *)out;
         for (int line = 0; line < lines; line++)
         {
             const int row = y + done + line;
@@ -246,11 +263,25 @@ static void send_rows(void *ctx, int y, int rows)
                 psram_get(image_addr(row, 0), row_buffer, DISPLAY_WIDTH);
                 src = row_buffer;
             }
+            if (panel_bits == 12)
+            {
+                // Two pixels in three bytes: R1G1 B1R2 G2B2.
+                uint8_t *dst = packed + line * (DISPLAY_WIDTH * 3 / 2);
+                for (int col = 0; col < DISPLAY_WIDTH; col += 2)
+                {
+                    const uint16_t a = palette_444[src[col]], b = palette_444[src[col + 1]];
+                    *dst++ = (uint8_t)(a >> 4);
+                    *dst++ = (uint8_t)(((a & 0x0F) << 4) | (b >> 8));
+                    *dst++ = (uint8_t)b;
+                }
+                continue;
+            }
             uint16_t *dst = out + line * DISPLAY_WIDTH;
             for (int col = 0; col < DISPLAY_WIDTH; col++)
                 dst[col] = palette_be[src[col]];
         }
-        lcd_stream_bytes((const uint8_t *)out, (size_t)lines * DISPLAY_WIDTH * 2);
+        const size_t row_bytes = panel_bits == 12 ? DISPLAY_WIDTH * 3 / 2 : DISPLAY_WIDTH * 2;
+        lcd_stream_bytes((const uint8_t *)out, (size_t)lines * row_bytes);
         which ^= 1;
     }
     lcd_stream_end();

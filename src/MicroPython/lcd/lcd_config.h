@@ -40,6 +40,7 @@
 #define LCD_MP_SET_BRIGHTNESS sb_write_lcd_backlight
 #define LCD_MP_SET_MODE lcd_set_mode
 #define LCD_MP_GET_MODE lcd_get_mode
+#define LCD_MP_SET_PANEL_BITS lcd_set_panel_bits
 #define LCD_SWAP lcd_swap
 #endif
 
@@ -53,6 +54,7 @@
 #define LCD_MP_SET_RGB_LED desktop_lcd_set_rgb_led
 #define LCD_MP_SET_MODE desktop_lcd_set_mode
 #define LCD_MP_GET_MODE desktop_lcd_get_mode
+#define LCD_MP_SET_PANEL_BITS desktop_lcd_set_panel_bits
 #define LCD_SWAP desktop_lcd_swap
 #define storage_file_open desktop_storage_file_open
 #define storage_file_read_file_chunk desktop_storage_file_read_file_chunk

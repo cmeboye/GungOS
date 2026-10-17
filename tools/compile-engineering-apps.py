@@ -31,7 +31,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     source = root / 'builds/MicroPython/apps_unfrozen'
     files = [source / name for name in ('Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py')]
-    files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','games/Tetris.py')]
+    files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','misc/Benchmark.py','games/Tetris.py')]
     files += [path for path in sorted((source / 'engtools').rglob('*.py')) if 'tools' not in path.relative_to(source).parts]
     files += sorted((source / 'desktopapps').rglob('*.py'))
     output = root / 'builds/MicroPython/apps'

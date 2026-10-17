@@ -38,6 +38,14 @@
 - The simulator runs the firmware's own drawing code, so it shows the
   device's exact pixels and colours, and reports how many display rows the
   device would have sent.
+- New **Apps > Misc > Benchmark** (SD app): times whole-screen, one-line
+  and identical-redraw swaps, drawing in SRAM and PSRAM modes, free memory
+  in each, an experimental 12-bit panel colour format (with a Y/N colour
+  check) and interpreted Python against ulab's C code. Results are saved to
+  `picoware/benchmark.txt`.
+- Experimental: `draw.set_panel_bits(12)` sends 12 instead of 16 bits per
+  pixel (a quarter less per frame) if the panel accepts it; it resets to 16
+  on power-up.
 
 These changes require a new UF2 and matching SD apps.
 

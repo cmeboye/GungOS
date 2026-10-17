@@ -156,6 +156,17 @@ void lcd_stream_bytes(const uint8_t *bytes, size_t len)
     dma_channel_configure(lcd_dma_chan, &lcd_dma_cfg, &LCD_PIO->txf[lcd_pio_sm], bytes, len, true);
 }
 
+// Panel pixel format: 16-bit RGB565 (power-on default) or 12-bit RGB444,
+// two pixels in three bytes. Some ST7365P panels may not accept 12-bit over
+// SPI; the setting is experimental and only lasts until the next reset.
+void lcd_set_pixel_format(uint8_t bits)
+{
+    lcd_acquire();
+    lcd_write_cmd(LCD_CMD_COLMOD);
+    lcd_write_data(1, bits == 12 ? 0x53 : 0x55);
+    lcd_release();
+}
+
 void lcd_stream_end(void)
 {
     if (lcd_dma_chan >= 0)
