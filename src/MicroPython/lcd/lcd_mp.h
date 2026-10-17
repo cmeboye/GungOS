@@ -23,8 +23,6 @@ typedef struct
     bool scale_position;
 } lcd_mp_obj_t;
 
-void lcd_mp_set_usb_video_callback(bool (*cb)(void)); // Register USB video stream callback, NULL to disable
-
 void lcd_mp_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind);                    // print function for the LCD object
 mp_obj_t lcd_mp_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args); // constructor for the LCD object
 mp_obj_t lcd_mp_del(mp_obj_t self_in);                                                                 // destructor for the LCD object
@@ -56,6 +54,7 @@ mp_obj_t lcd_mp_set_brightness(mp_obj_t self_in, mp_obj_t brightness);     // se
 mp_obj_t lcd_mp_set_rgb_led(size_t n_args, const mp_obj_t *args);          // set the RGB LED color (Flipper Zero, LP5562)
 mp_obj_t lcd_mp_set_mode(mp_obj_t self_in, mp_obj_t mode);                 // set the LCD mode (PSRAM or HEAP)
 mp_obj_t lcd_mp_set_scaling(size_t n_args, const mp_obj_t *args);          // set the LCD scaling parameters
-mp_obj_t lcd_mp_swap(mp_obj_t self_in);                                    // swap function to update the display with the current framebuffer contents
+mp_obj_t lcd_mp_swap(mp_obj_t self_in);                                    // send what changed to the display; returns rows sent
+mp_obj_t lcd_mp_read_row(mp_obj_t self_in, mp_obj_t row);                  // one row of the screen image as RGB332 bytes
 mp_obj_t lcd_mp_text(size_t n_args, const mp_obj_t *args);                 // draw text on the LCD
 mp_obj_t lcd_mp_triangle(size_t n_args, const mp_obj_t *args);             // draw a triangle on the LCD

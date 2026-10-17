@@ -5,6 +5,7 @@
 #include "pico/multicore.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
+#include "hardware/dma.h"
 
 #include "lcd.h"
 #include "st7789_lcd.pio.h"
@@ -15,6 +16,10 @@ static uint lcd_pio_sm = 0;
 static uint lcd_pio_offset = 0;
 
 static bool lcd_initialised = false; // flag to indicate if the LCD is initialised
+
+// DMA channel that feeds pixel bytes to the PIO, or -1 to feed them by CPU
+static int lcd_dma_chan = -1;
+static dma_channel_config lcd_dma_cfg;
 
 static uint16_t lcd_scroll_top = 0;                      // top fixed area for vertical scrolling
 static uint16_t lcd_memory_scroll_height = FRAME_HEIGHT; // scroll area height
@@ -122,6 +127,42 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len)
 
     st7789_lcd_wait_idle(LCD_PIO, lcd_pio_sm);
     lcd_set_dc_cs(0, 1); // CS=1 (inactive)
+}
+
+//
+//  Pixel streaming: one window, then any number of byte buffers sent by DMA
+//  while the CPU prepares the next one. Buffers hold pixels high byte first.
+//
+
+void lcd_stream_begin(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+    lcd_acquire();
+    lcd_set_window(x0, y0, x1, y1);
+    st7789_lcd_wait_idle(LCD_PIO, lcd_pio_sm);
+    lcd_set_dc_cs(1, 0); // DC=1 (data), CS=0 (active)
+}
+
+// Start sending len bytes; returns at once. The buffer must stay untouched
+// until the next lcd_stream_bytes or lcd_stream_end call returns.
+void lcd_stream_bytes(const uint8_t *bytes, size_t len)
+{
+    if (lcd_dma_chan < 0)
+    {
+        for (size_t i = 0; i < len; i++)
+            st7789_lcd_put(LCD_PIO, lcd_pio_sm, bytes[i]);
+        return;
+    }
+    dma_channel_wait_for_finish_blocking(lcd_dma_chan);
+    dma_channel_configure(lcd_dma_chan, &lcd_dma_cfg, &LCD_PIO->txf[lcd_pio_sm], bytes, len, true);
+}
+
+void lcd_stream_end(void)
+{
+    if (lcd_dma_chan >= 0)
+        dma_channel_wait_for_finish_blocking(lcd_dma_chan);
+    st7789_lcd_wait_idle(LCD_PIO, lcd_pio_sm);
+    lcd_set_dc_cs(0, 1); // CS=1 (inactive)
+    lcd_release();
 }
 
 //
@@ -276,6 +317,19 @@ void lcd_init()
         clkdiv = 1.0f;
 
     st7789_lcd_program_init(LCD_PIO, lcd_pio_sm, lcd_pio_offset, LCD_SDI, LCD_SCL, clkdiv);
+
+    // Byte-wide DMA into the PIO FIFO, paced by the PIO's TX request. A byte
+    // write reaches the FIFO replicated across the word, and the program
+    // shifts out the top byte, the same as the CPU path's 8-bit writes.
+    lcd_dma_chan = dma_claim_unused_channel(false);
+    if (lcd_dma_chan >= 0)
+    {
+        lcd_dma_cfg = dma_channel_get_default_config(lcd_dma_chan);
+        channel_config_set_transfer_data_size(&lcd_dma_cfg, DMA_SIZE_8);
+        channel_config_set_read_increment(&lcd_dma_cfg, true);
+        channel_config_set_write_increment(&lcd_dma_cfg, false);
+        channel_config_set_dreq(&lcd_dma_cfg, pio_get_dreq(LCD_PIO, lcd_pio_sm, true));
+    }
 
     // Set initial pin states
     lcd_set_dc_cs(0, 1); // CS high (inactive)

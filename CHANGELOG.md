@@ -26,6 +26,18 @@
 - Wi-Fi, SSH and access point passwords are kept in the Pico's internal
   flash instead of in plain text on the SD card; existing SD copies are
   moved automatically.
+- Display: the screen image now lives in on-chip SRAM by default (PSRAM
+  remains available with `draw.set_mode(draw.MODE_PSRAM)`, freeing about
+  100 KB of RAM), drawing writes whole row spans instead of single pixels,
+  and `swap()` sends only the rows that changed, by DMA. `swap()` returns
+  the number of rows sent. Not yet measured on the device.
+- Fixed drawing bugs: shapes and lines crossing the left or top edge no
+  longer reappear at the far side; rounded rectangles keep their shape when
+  clipped; JPEG and 16-bit images clipped at the right edge are no longer
+  sheared; methods on a plain `lcd.LCD()` object are reachable.
+- The simulator runs the firmware's own drawing code, so it shows the
+  device's exact pixels and colours, and reports how many display rows the
+  device would have sent.
 
 These changes require a new UF2 and matching SD apps.
 

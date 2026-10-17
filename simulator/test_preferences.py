@@ -49,7 +49,7 @@ app.__open_choice_brightness()
 app._choice.state=3
 vm._button=BUTTON_CENTER
 app.run(vm)
-assert vm.draw._brightness == 40
+assert sim_runtime.lcd_brightness == 40
 assert not app._menu.item_exists('Dark Mode')
 assert not app._menu.item_exists('Exit Button')
 assert Settings(vm.storage).update({'dark_mode':False})
@@ -78,7 +78,7 @@ for claim_success in (False, True):
     vm._button=BUTTON_CENTER
     app.run(vm)
     assert app._choice is not None
-    assert vm.draw._brightness==40 and Settings(storage).screen_brightness==40
+    assert sim_runtime.lcd_brightness==40 and Settings(storage).screen_brightness==40
     assert alerts and 'Could not save brightness' in alerts[-1]
     app.__open_choice()
     app._choice.state=1
@@ -99,7 +99,7 @@ app.stop(vm)
 del vm
 vm=ViewManager()
 assert vm.selected_color==red
-assert vm.draw._brightness==40
+assert sim_runtime.lcd_brightness==40
 assert vm.background_color==0
 assert vm.keyboard.show_keyboard
 assert Settings(vm.storage).wifi_settings['ssid']=='Updated'

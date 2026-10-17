@@ -2,7 +2,10 @@
 Run Picoware on your desktop. The simulator uses a native SDL2 window for display and input, while Picoware itself runs inside MicroPython.
 
 ## Features
-- Custom Picoware UI with framebuffer and keyboard input
+- The firmware's own C drawing code (`src/MicroPython/gfx`), so the screen
+  matches the device pixel for pixel, including its 256-colour palette
+- A display summary at exit: how many rows the device would have sent to
+  the panel, since `swap()` sends only rows that changed
 - Real network access via host DNS/TCP/TLS (or `--network offline` for fixtures)
 - The GungOS firmware for PicoCalc with Pico 2 W, with virtual Bluetooth
 - Simulated SD card at `simulator/sdcard` (auto-seeded on first run)

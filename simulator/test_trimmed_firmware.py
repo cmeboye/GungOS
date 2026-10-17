@@ -25,7 +25,7 @@ from picoware.system.usb import USBKeyboard, USBMedia
 import picoware_desktop
 
 assert picoware_desktop.native_modules() == (
-    "auto_complete", "font", "picoware_pcm", "response", "sim_raster", "ulab", "vector", "vt")
+    "auto_complete", "font", "lcd", "picoware_pcm", "response", "ulab", "vector", "vt")
 
 # Retired Picoware features and other boards must stay out of the firmware tree.
 for name in ("picoware.engine", "picoware.system.gameboy", "picoware.system.audio",
@@ -62,7 +62,7 @@ legacy = {"lvgl_mode": True, "usb_stream": True, "theme_color": 0xF800,
 assert vm.storage.serialize(legacy, "picoware/settings/picoware.json")
 del vm
 vm = ViewManager()
-assert vm.selected_color == 0xF800 and vm.draw._brightness == 40
+assert vm.selected_color == 0xF800 and sim_runtime.lcd_brightness == 40
 assert vm.background_color == 0 and vm.has_wifi and vm.has_bluetooth
 assert Settings(vm.storage).settings["custom_field"] == "preserve"
 from picoware.system.settings import RETIRED_SETTINGS

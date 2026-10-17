@@ -80,6 +80,15 @@ The source tree is checked separately with:
 python3 tools/check-public-repo.py
 ```
 
+Native code has host tests, and device-only C can be type-checked against the
+real pico-sdk headers without the Arm toolchain:
+
+```sh
+sh src/MicroPython/gfx/tests/run-tests.sh
+sh src/MicroPython/picosolve/tests/run-tests.sh
+sh tools/check-device-syntax.sh
+```
+
 Release checksum generation covers `firmware/`, `sd-card/` and `verification/`;
 it excludes local backups, personal SD trees and the Git database.
 

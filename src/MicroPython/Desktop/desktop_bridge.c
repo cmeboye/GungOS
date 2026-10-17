@@ -27,277 +27,6 @@ static mp_obj_t desktop_call_method(mp_obj_t object, qstr name,
     return mp_call_method_n_kw(argument_count, 0, destination);
 }
 
-static mp_obj_t desktop_call_function_0(mp_obj_t object, qstr name)
-{
-    return desktop_call_method(object, name, 0, NULL);
-}
-
-static mp_obj_t desktop_lcd(void)
-{
-    mp_obj_t runtime = desktop_import(MP_QSTR_sim_runtime);
-    return desktop_call_function_0(runtime, MP_QSTR_get_lcd);
-}
-
-static bool desktop_call_lcd(qstr name, size_t argument_count,
-                             const mp_obj_t *arguments)
-{
-    nlr_buf_t nlr;
-    if (nlr_push(&nlr) != 0)
-    {
-        mp_obj_t exception = MP_OBJ_FROM_PTR(nlr.ret_val);
-        // Native games swap through this bridge; quit/reload must reach run.py.
-        if (mp_obj_exception_match(exception, MP_OBJ_FROM_PTR(&mp_type_SystemExit)))
-            nlr_jump(nlr.ret_val);
-        return false;
-    }
-
-    mp_obj_t lcd = desktop_lcd();
-    if (lcd == mp_const_none)
-    {
-        nlr_pop();
-        return false;
-    }
-    desktop_call_method(lcd, name, argument_count, arguments);
-    nlr_pop();
-    return true;
-}
-
-void desktop_lcd_clear(uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__clear, 1, arguments);
-}
-
-static mp_obj_t desktop_polygon_points(uint16_t x[], uint16_t y[], int count)
-{
-    mp_obj_t result = mp_obj_new_tuple(count, NULL);
-    mp_obj_tuple_t *points = MP_OBJ_TO_PTR(result);
-    for (int i = 0; i < count; i++)
-    {
-        mp_obj_t pair[] = {mp_obj_new_int(x[i]), mp_obj_new_int(y[i])};
-        points->items[i] = mp_obj_new_tuple(2, pair);
-    }
-    return result;
-}
-
-void desktop_lcd_polygon(uint16_t x[], uint16_t y[], int count, uint16_t color)
-{
-    if (count < 2)
-        return;
-    mp_obj_t arguments[] = {desktop_polygon_points(x, y, count), mp_obj_new_int(color)};
-    desktop_call_lcd(DESKTOP_QSTR("_polygon"), 2, arguments);
-}
-
-void desktop_lcd_fill_polygon(uint16_t x[], uint16_t y[], int count, uint16_t color)
-{
-    if (count < 3)
-        return;
-    mp_obj_t arguments[] = {desktop_polygon_points(x, y, count), mp_obj_new_int(color)};
-    desktop_call_lcd(DESKTOP_QSTR("_fill_polygon"), 2, arguments);
-}
-
-void desktop_lcd_fill_polygon_alpha(uint16_t x[], uint16_t y[], int count,
-                                    uint16_t color, uint8_t alpha)
-{
-    if (count < 3 || alpha == 0)
-        return;
-    mp_obj_t arguments[] = {desktop_polygon_points(x, y, count),
-                            mp_obj_new_int(color), mp_obj_new_int(alpha)};
-    desktop_call_lcd(DESKTOP_QSTR("_fill_polygon_alpha"), 3, arguments);
-}
-
-uint16_t desktop_lcd_width(void)
-{
-    mp_obj_t lcd = desktop_lcd();
-    return lcd == mp_const_none ? 320 : mp_obj_get_int(mp_load_attr(lcd, MP_QSTR_width));
-}
-
-uint16_t desktop_lcd_height(void)
-{
-    mp_obj_t lcd = desktop_lcd();
-    return lcd == mp_const_none ? 320 : mp_obj_get_int(mp_load_attr(lcd, MP_QSTR_height));
-}
-
-void desktop_lcd_pixel(uint16_t x, uint16_t y, uint16_t color)
-{
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x), mp_obj_new_int(y), mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__pixel, 3, arguments);
-}
-
-void desktop_lcd_char(uint16_t x, uint16_t y, char character, uint16_t color,
-                      int font_size)
-{
-    char text[2] = {character, '\0'};
-    mp_obj_t arguments[] = {mp_obj_new_int(x), mp_obj_new_int(y),
-                            mp_obj_new_str(text, 1), mp_obj_new_int(color),
-                            mp_obj_new_int(font_size)};
-    desktop_call_lcd(DESKTOP_QSTR("_char"), 5, arguments);
-}
-
-void desktop_lcd_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2,
-                      uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(x1), mp_obj_new_int(y1),
-                            mp_obj_new_int(x2), mp_obj_new_int(y2),
-                            mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__line, 5, arguments);
-}
-
-void desktop_lcd_rectangle(uint16_t x, uint16_t y, uint16_t width,
-                           uint16_t height, uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(x), mp_obj_new_int(y),
-                            mp_obj_new_int(width), mp_obj_new_int(height),
-                            mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__rectangle, 5, arguments);
-}
-
-void desktop_lcd_triangle(uint16_t x1, uint16_t y1, uint16_t x2,
-                          uint16_t y2, uint16_t x3, uint16_t y3,
-                          uint16_t color)
-{
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x1), mp_obj_new_int(y1), mp_obj_new_int(x2),
-        mp_obj_new_int(y2), mp_obj_new_int(x3), mp_obj_new_int(y3),
-        mp_obj_new_int(color)};
-    desktop_call_lcd(DESKTOP_QSTR("_triangle"), 7, arguments);
-}
-
-void desktop_lcd_fill_rectangle(uint16_t x, uint16_t y, uint16_t width,
-                                uint16_t height, uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(x), mp_obj_new_int(y),
-                            mp_obj_new_int(width), mp_obj_new_int(height),
-                            mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__fill_rectangle, 5, arguments);
-}
-
-void desktop_lcd_fill_round_rectangle(uint16_t x, uint16_t y, uint16_t width,
-                                      uint16_t height, uint16_t radius,
-                                      uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(x), mp_obj_new_int(y),
-                            mp_obj_new_int(width), mp_obj_new_int(height),
-                            mp_obj_new_int(radius), mp_obj_new_int(color)};
-    desktop_call_lcd(DESKTOP_QSTR("_fill_round_rectangle"), 6, arguments);
-}
-
-void desktop_lcd_circle(uint16_t x, uint16_t y, uint16_t radius,
-                        uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(x), mp_obj_new_int(y),
-                            mp_obj_new_int(radius), mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__circle, 4, arguments);
-}
-
-void desktop_lcd_fill_circle(uint16_t x, uint16_t y, uint16_t radius,
-                             uint16_t color)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(x), mp_obj_new_int(y),
-                            mp_obj_new_int(radius), mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__fill_circle, 4, arguments);
-}
-
-void desktop_lcd_fill_triangle(uint16_t x1, uint16_t y1, uint16_t x2,
-                               uint16_t y2, uint16_t x3, uint16_t y3,
-                               uint16_t color)
-{
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x1), mp_obj_new_int(y1), mp_obj_new_int(x2),
-        mp_obj_new_int(y2), mp_obj_new_int(x3), mp_obj_new_int(y3),
-        mp_obj_new_int(color)};
-    desktop_call_lcd(MP_QSTR__fill_triangle, 7, arguments);
-}
-
-void desktop_lcd_fill_triangle_alpha(uint16_t x1, uint16_t y1, uint16_t x2,
-                                     uint16_t y2, uint16_t x3, uint16_t y3,
-                                     uint16_t color, uint8_t alpha)
-{
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x1), mp_obj_new_int(y1), mp_obj_new_int(x2),
-        mp_obj_new_int(y2), mp_obj_new_int(x3), mp_obj_new_int(y3),
-        mp_obj_new_int(color), mp_obj_new_int(alpha)};
-    desktop_call_lcd(DESKTOP_QSTR("_fill_triangle_alpha"), 8, arguments);
-}
-
-void desktop_lcd_blit(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
-                      const void *buffer)
-{
-    size_t buffer_size = (size_t)width * (size_t)height;
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x), mp_obj_new_int(y), mp_obj_new_int(width),
-        mp_obj_new_int(height), mp_obj_new_bytes((const byte *)buffer,
-                                                 buffer_size)};
-    desktop_call_lcd(DESKTOP_QSTR("_bytearray"), 5, arguments);
-}
-
-void desktop_lcd_blit_16bit(uint16_t x, uint16_t y, uint16_t width,
-                            uint16_t height, const void *buffer)
-{
-    size_t buffer_size = (size_t)width * (size_t)height * sizeof(uint16_t);
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x), mp_obj_new_int(y), mp_obj_new_int(width),
-        mp_obj_new_int(height), mp_obj_new_bytes((const byte *)buffer,
-                                                 buffer_size)};
-    desktop_call_lcd(DESKTOP_QSTR("_bytearray"), 5, arguments);
-}
-
-void desktop_lcd_text(uint16_t x, uint16_t y, const char *text,
-                      uint16_t color, int font_size)
-{
-    mp_obj_t arguments[] = {
-        mp_obj_new_int(x), mp_obj_new_int(y),
-        mp_obj_new_str(text, strlen(text)), mp_obj_new_int(color),
-        mp_obj_new_int(font_size)};
-    desktop_call_lcd(MP_QSTR__text, 5, arguments);
-}
-
-void desktop_lcd_read_row(uint16_t row, uint8_t *out_buffer)
-{
-    if (!out_buffer)
-        return;
-
-    memset(out_buffer, 0, 320);
-
-    nlr_buf_t nlr;
-    if (nlr_push(&nlr) != 0)
-        return;
-
-    mp_obj_t lcd = desktop_lcd();
-    if (lcd != mp_const_none)
-    {
-        mp_obj_t arguments[] = {mp_obj_new_int(row)};
-        mp_obj_t result = desktop_call_method(
-            lcd, DESKTOP_QSTR("_read_row"), 1, arguments);
-        mp_buffer_info_t source;
-        if (mp_get_buffer(result, &source, MP_BUFFER_READ))
-        {
-            size_t copy_size = source.len < 320 ? source.len : 320;
-            memcpy(out_buffer, source.buf, copy_size);
-        }
-    }
-    nlr_pop();
-}
-
-void desktop_lcd_set_brightness(uint8_t brightness)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(brightness)};
-    desktop_call_lcd(DESKTOP_QSTR("set_brightness"), 1, arguments);
-}
-
-void desktop_lcd_set_rgb_led(uint8_t red, uint8_t green, uint8_t blue)
-{
-    mp_obj_t arguments[] = {mp_obj_new_int(red), mp_obj_new_int(green),
-                            mp_obj_new_int(blue)};
-    desktop_call_lcd(DESKTOP_QSTR("set_rgb_led"), 3, arguments);
-}
-
-void desktop_lcd_swap(void)
-{
-    desktop_call_lcd(MP_QSTR_swap, 0, NULL);
-}
-
 void desktop_log_message(const char *message)
 {
     mp_printf(&mp_plat_print, "[desktop] %s\n", message ? message : "");
@@ -434,37 +163,51 @@ static bool desktop_storage_file_write_mode(const char *path,
     return desktop_module_bool(MP_QSTR_sd_mp, MP_QSTR_write, 3, arguments);
 }
 
+/* One handle type for reading and writing, so storage_file_close serves both. */
 typedef struct
 {
     char *path;
+    size_t offset; /* next read position */
 } desktop_storage_write_handle_t;
+
+static desktop_storage_write_handle_t *desktop_storage_handle(const char *path)
+{
+    desktop_storage_write_handle_t *handle =
+        m_malloc(sizeof(desktop_storage_write_handle_t));
+    size_t path_size = strlen(path) + 1;
+    handle->path = m_malloc(path_size);
+    memcpy(handle->path, path, path_size);
+    handle->offset = 0;
+    return handle;
+}
+
+void *desktop_storage_file_open(const char *path)
+{
+    if (!path)
+        return NULL;
+    mp_obj_t arguments[] = {mp_obj_new_str(path, strlen(path))};
+    if (!desktop_module_bool(MP_QSTR_sd_mp, MP_QSTR_exists, 1, arguments))
+        return NULL;
+    return desktop_storage_handle(path);
+}
+
+size_t desktop_storage_file_read_file_chunk(void *handle, void *buffer, size_t size)
+{
+    desktop_storage_write_handle_t *file = handle;
+    if (!file)
+        return 0;
+    size_t count = desktop_storage_file_read_at(file->path, buffer, size, file->offset);
+    file->offset += count;
+    return count;
+}
 
 void *desktop_storage_file_write_open(const char *path)
 {
     if (!path)
         return NULL;
-
-    desktop_storage_write_handle_t *handle =
-        m_malloc(sizeof(desktop_storage_write_handle_t));
-    if (!handle)
-        return NULL;
-
-    size_t path_size = strlen(path) + 1;
-    handle->path = m_malloc(path_size);
-    if (!handle->path)
-    {
-        m_free(handle);
-        return NULL;
-    }
-    memcpy(handle->path, path, path_size);
-
     if (!desktop_storage_file_write_mode(path, NULL, 0, true))
-    {
-        m_free(handle->path);
-        m_free(handle);
         return NULL;
-    }
-    return handle;
+    return desktop_storage_handle(path);
 }
 
 void desktop_storage_file_close(void *handle)

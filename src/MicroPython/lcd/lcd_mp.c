@@ -17,13 +17,6 @@ bool mp_engine_gc_ready = false;
 #include "../sd/storage.h"
 #endif
 
-bool (*_lcd_usb_video_cb)(void) = NULL; // USB video streaming callback, set by usb_video module
-
-void lcd_mp_set_usb_video_callback(bool (*cb)(void))
-{
-    _lcd_usb_video_cb = cb;
-}
-
 const mp_obj_type_t lcd_mp_type;
 
 static uint16_t lcd_scale_x(lcd_mp_obj_t *self, uint16_t v)
@@ -52,7 +45,7 @@ static inline int lcd_obj_to_int(mp_obj_t arg)
     return 0;
 }
 
-#if defined(PICOCALC)
+#if defined(PICOCALC) || defined(DESKTOP)
 static inline uint16_t lcd_u16_le(const uint8_t *p)
 {
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
@@ -142,6 +135,9 @@ mp_obj_t lcd_mp_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, 
     self->scale_position = n_args == 3 ? mp_obj_is_true(args[2]) : false;
     LCD_MP_INIT();
     self->initialized = true;
+#ifdef DESKTOP
+    desktop_lcd_register(MP_OBJ_FROM_PTR(self));
+#endif
     return MP_OBJ_FROM_PTR(self);
 }
 
@@ -181,9 +177,21 @@ void lcd_mp_attr(mp_obj_t self_in, qstr attribute, mp_obj_t *destination)
         {
             destination[0] = mp_obj_new_bool(self->scale_position);
         }
+#ifdef LCD_MP_GET_MODE
+        else if (attribute == MP_QSTR_mode)
+        {
+            destination[0] = mp_obj_new_int(LCD_MP_GET_MODE());
+        }
+#endif
         else if (attribute == MP_QSTR___del__)
         {
             destination[0] = MP_OBJ_FROM_PTR(&lcd_mp_del_obj);
+        }
+        else
+        {
+            // Continue to the method table, so methods work on a plain
+            // lcd.LCD() as well as on subclasses such as Draw.
+            destination[1] = MP_OBJ_SENTINEL;
         }
     }
     else if (destination[1] != MP_OBJ_NULL)
@@ -219,7 +227,7 @@ mp_obj_t lcd_mp_bmp(size_t n_args, const mp_obj_t *args)
         y = lcd_scale_y(self, y);
     }
 
-#if defined(PICOCALC)
+#if defined(PICOCALC) || defined(DESKTOP)
     void *file = storage_file_open(file_path);
     if (!file)
     {
@@ -1483,10 +1491,28 @@ mp_obj_t lcd_mp_swap(mp_obj_t self_in)
     {
         mp_raise_ValueError(MP_ERROR_TEXT("LCD object is not initialized"));
     }
-    LCD_MP_SWAP();
-    return mp_const_none;
+    return mp_obj_new_int(LCD_MP_SWAP());
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(lcd_mp_swap_obj, lcd_mp_swap);
+
+// One row of the screen image as bytes, RGB332 (1 byte per pixel).
+mp_obj_t lcd_mp_read_row(mp_obj_t self_in, mp_obj_t row_in)
+{
+    lcd_mp_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    if (!self->initialized)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("LCD object is not initialized"));
+    }
+    mp_int_t row = mp_obj_get_int(row_in);
+    if (row < 0 || row >= LCD_MP_HEIGHT)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("row outside the display"));
+    }
+    uint8_t buffer[LCD_MP_WIDTH];
+    LCD_MP_READ_ROW((uint16_t)row, buffer);
+    return mp_obj_new_bytes(buffer, LCD_MP_WIDTH);
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(lcd_mp_read_row_obj, lcd_mp_read_row);
 
 mp_obj_t lcd_mp_text(size_t n_args, const mp_obj_t *args)
 {
@@ -1587,7 +1613,10 @@ static const mp_rom_map_elem_t lcd_mp_locals_dict_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_rgb_led), MP_ROM_PTR(&lcd_mp_set_rgb_led_obj)},                    // self.set_rgb_led()
     {MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&lcd_mp_set_mode_obj)},                          // self.set_mode()
     {MP_ROM_QSTR(MP_QSTR_set_scaling), MP_ROM_PTR(&lcd_mp_set_scaling_obj)},                    // self.set_scaling()
-    {MP_ROM_QSTR(MP_QSTR_swap), MP_ROM_PTR(&lcd_mp_swap_obj)},                                  // self.swap()
+    {MP_ROM_QSTR(MP_QSTR_swap), MP_ROM_PTR(&lcd_mp_swap_obj)},                                  // self.swap() -> rows sent
+    {MP_ROM_QSTR(MP_QSTR__read_row), MP_ROM_PTR(&lcd_mp_read_row_obj)},                          // self._read_row(y) -> RGB332 bytes
+    {MP_ROM_QSTR(MP_QSTR_MODE_PSRAM), MP_ROM_INT(0)},                                            // screen image in PSRAM
+    {MP_ROM_QSTR(MP_QSTR_MODE_SRAM), MP_ROM_INT(1)},                                             // screen image in SRAM (default)
     {MP_ROM_QSTR(MP_QSTR__text), MP_ROM_PTR(&lcd_mp_text_obj)},                                 // self._text()
     {MP_ROM_QSTR(MP_QSTR__triangle), MP_ROM_PTR(&lcd_mp_triangle_obj)},                         // self._triangle()
 

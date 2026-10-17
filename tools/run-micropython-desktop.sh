@@ -6,7 +6,7 @@ picoware_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 build_dir=${PICOWARE_DESKTOP_BUILD_DIR:-"$picoware_dir/builds/MicroPython/desktop"}
 binary="$build_dir/micropython"
 
-if [ ! -x "$binary" ] || ! "$binary" -X heapsize=16M -c 'import picoware_desktop; from ulab import numpy as np; assert picoware_desktop.native_modules() == ("auto_complete", "font", "picoware_pcm", "response", "sim_raster", "ulab", "vector", "vt"); assert np.zeros(1).itemsize == 4; assert hasattr(np, "sort"); assert not hasattr(np.linalg, "inv")' >/dev/null 2>&1; then
+if [ ! -x "$binary" ] || ! "$binary" -X heapsize=16M -c 'import picoware_desktop; from ulab import numpy as np; assert picoware_desktop.native_modules() == ("auto_complete", "font", "lcd", "picoware_pcm", "response", "ulab", "vector", "vt"); assert np.zeros(1).itemsize == 4; assert hasattr(np, "sort"); assert not hasattr(np.linalg, "inv")' >/dev/null 2>&1; then
     sh "$script_dir/micropython-desktop.sh"
 fi
 

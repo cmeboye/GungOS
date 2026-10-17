@@ -214,7 +214,7 @@ home.error=''
 vm.background_color,vm.foreground_color=0xFFFF,0
 key(k.BUTTON_NONE)
 vm.draw.screenshot('/private/tmp/picoware-dashboard-light.bmp')
-assert vm.draw._framebuffer.pixel(0,200)==0xFFFF
+assert vm.draw._read_row(200)[0]==0xFF  # white in the RGB332 screen image
 # Deterministic simulator launch routes execute against the new direct tabs.
 vm.input_manager.reset()
 sim_runtime.request_open('Settings')

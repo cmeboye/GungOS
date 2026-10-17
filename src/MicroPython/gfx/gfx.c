@@ -86,12 +86,13 @@ void gfx_surface_init(gfx_surface *s, int width, int height,
     s->height = height > GFX_MAX_HEIGHT ? GFX_MAX_HEIGHT : height;
     s->storage = storage;
     s->ctx = ctx;
-    memset(s->dirty, 0, sizeof(s->dirty));
+    for (int y = 0; y < GFX_MAX_HEIGHT; y++)
+        s->dirty[y] = 0;
 }
 
 static inline void touch(gfx_surface *s, int y)
 {
-    s->dirty[y >> 5] |= 1u << (y & 31);
+    s->dirty[y] = 1;
 }
 
 void gfx_mark_all_dirty(gfx_surface *s)
@@ -821,8 +822,11 @@ int gfx_present(gfx_surface *s, uint32_t *hash, bool force, gfx_send_rows send, 
     for (int y = 0; y <= s->height; y++)
     {
         bool changed = false;
-        if (y < s->height && (force || (s->dirty[y >> 5] & (1u << (y & 31)))))
+        if (y < s->height && (force || s->dirty[y]))
         {
+            /* Clear the mark first: drawing that lands after this read marks
+             * the row again for the next present. */
+            s->dirty[y] = 0;
             s->storage->read(s->ctx, y, 0, s->width, row);
             const uint32_t h = row_hash(row, s->width);
             changed = force || h != hash[y];
@@ -837,6 +841,5 @@ int gfx_present(gfx_surface *s, uint32_t *hash, bool force, gfx_send_rows send, 
             run_start = -1;
         }
     }
-    memset(s->dirty, 0, sizeof(s->dirty));
     return sent;
 }

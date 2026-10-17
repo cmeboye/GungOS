@@ -49,8 +49,9 @@ typedef struct
     int width, height;
     const gfx_storage *storage;
     void *ctx;
-    /* Rows drawn on since the last present, one bit per row. */
-    uint32_t dirty[GFX_MAX_HEIGHT / 32];
+    /* Rows drawn on since the last present. One byte per row, so both
+     * cores may draw at once (the JPEG decoder does) without losing marks. */
+    volatile uint8_t dirty[GFX_MAX_HEIGHT];
 } gfx_surface;
 
 /* An image in ordinary memory, rows stride bytes apart. */

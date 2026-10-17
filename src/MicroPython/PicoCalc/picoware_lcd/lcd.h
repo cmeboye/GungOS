@@ -97,6 +97,11 @@ extern "C"
     // Display window and drawing functions
     void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
     void lcd_blit(uint16_t *pixels, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+    // Stream pixels into a window: begin, any number of byte buffers (high
+    // byte first, sent by DMA while the caller prepares the next), end.
+    void lcd_stream_begin(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
+    void lcd_stream_bytes(const uint8_t *bytes, size_t len);
+    void lcd_stream_end(void);
     void lcd_solid_rectangle(uint16_t colour, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
     // Initialization

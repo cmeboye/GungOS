@@ -538,6 +538,66 @@ def get_lcd():
     return _lcd
 
 
+# Display state reported by the lcd module (the same C drawing code as the device).
+lcd_brightness = 100
+lcd_rgb_led = (0, 0, 0)
+# Rows the device would have sent to the panel: last swap and all swaps.
+rows_sent_last = 0
+rows_sent_total = 0
+swaps_total = 0
+
+
+def lcd_set_brightness(level):
+    global lcd_brightness
+    lcd_brightness = int(level)
+
+
+def lcd_set_rgb_led(red, green, blue):
+    global lcd_rgb_led
+    lcd_rgb_led = (int(red), int(green), int(blue))
+
+
+def lcd_present(frame, rows):
+    """Show a presented RGB565 frame and count the rows that changed."""
+    global rows_sent_last, rows_sent_total, swaps_total
+    rows_sent_last = rows
+    rows_sent_total += rows
+    swaps_total += 1
+    if viewer and viewer_frame_path:
+        tmp_path = viewer_frame_path + ".tmp"
+        with open(tmp_path, "wb") as handle:
+            handle.write(frame)
+        try:
+            os.rename(tmp_path, viewer_frame_path)
+        except OSError:
+            pass
+    frame_swapped()
+
+
+def display_summary():
+    """How much of the screen the device would have sent, versus full frames."""
+    if not swaps_total:
+        return ""
+    full = swaps_total * 320
+    return "[display] %d swaps, %d of %d rows sent (%.1f%%), %.1f rows per swap" % (
+        swaps_total, rows_sent_total, full, 100.0 * rows_sent_total / full,
+        rows_sent_total / swaps_total)
+
+
+def lcd_screenshot(host_file):
+    """Save a BMP screenshot to a host path through the device's own encoder."""
+    if _lcd is None:
+        return False
+    root = sd_root.rstrip("/") + "/"
+    if host_file.startswith(root):
+        _lcd.screenshot(host_file[len(root):])
+        return True
+    name = "sim_screenshot_tmp.bmp"
+    _lcd.screenshot(name)
+    os.rename(host_path(name), host_file)
+    return True
+
+
 def clear_ir_waveform():
     """Discard captured simulated infrared carrier segments."""
     _ir_waveform[:] = []
@@ -1029,8 +1089,6 @@ def _host_command_exists(name):
 
 
 def poll_events():
-    if _lcd is not None:
-        _lcd.poll_events()
     if viewer and viewer_frame_path:
         try:
             os.stat(viewer_frame_path + ".quit")
@@ -1069,7 +1127,7 @@ def poll_viewer_controls():
             path = sd_root + "/sim_screenshot_" + str(frame_count) + ".bmp"
             if _lcd is not None:
                 try:
-                    _lcd.screenshot(path)
+                    lcd_screenshot(path)
                     _log_event("screenshot " + path)
                 except Exception as e:
                     _log_event("screenshot failed " + str(e))
@@ -1148,7 +1206,7 @@ def frame_swapped():
     frame_count += 1
     _write_status(False)
     if screenshot_path and _lcd is not None:
-        _lcd.screenshot(screenshot_path)
+        lcd_screenshot(screenshot_path)
     if max_frames and frame_count >= max_frames:
         _check_expectations(True)
         raise StopSimulation()

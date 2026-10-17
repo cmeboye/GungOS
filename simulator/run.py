@@ -805,38 +805,59 @@ def _run_keyboard_background_check():
     print("[sim-check:ok] picocalc background keyboard callbacks")
 
 
+def _panel_color(value):
+    """RGB565 the panel shows for an RGB332 image byte (the firmware palette)."""
+    r8 = ((value >> 5) & 7) * 255 // 7
+    g8 = ((value >> 2) & 7) * 255 // 7
+    b8 = (value & 3) * 255 // 3
+    return ((r8 & 0xF8) << 8) | ((g8 & 0xFC) << 3) | (b8 >> 3)
+
+
+def _quantized(color):
+    """RGB565 the panel shows after the firmware stores color as RGB332."""
+    return _panel_color(((color & 0xE000) >> 8) | ((color & 0x0700) >> 6) | ((color & 0x0018) >> 3))
+
+
+def _pixel(display, x, y):
+    return _panel_color(display._read_row(y)[x])
+
+
 def _run_lcd_parity_check():
-    """Verify LCD APIs added by the current Picoware runtime."""
+    """Verify the lcd binding the simulator shares with the firmware."""
     import lcd
+    import sim_runtime
 
     display = lcd.LCD()
     display.set_brightness(37)
-    if display._brightness != 37:
+    if sim_runtime.lcd_brightness != 37:
         raise RuntimeError("simulator LCD brightness state mismatch")
     display.set_rgb_led(17, 34, 51)
-    if display._rgb_led != (17, 34, 51):
+    if sim_runtime.lcd_rgb_led != (17, 34, 51):
         raise RuntimeError("simulator LCD RGB LED state mismatch")
+    if (display.MODE_PSRAM, display.MODE_SRAM, display.mode) != (0, 1, 1):
+        raise RuntimeError("simulator LCD mode constants mismatch")
 
     display._clear(0)
     display._bytearray(0, 0, 2, 1, bytearray((0x00, 0xFF)), True)
-    if display._get_pixel(0, 0) != 0xFFFF or display._get_pixel(1, 0) != 0x0000:
+    if _pixel(display, 0, 0) != 0xFFFF or _pixel(display, 1, 0) != 0x0000:
         raise RuntimeError("simulator LCD bytearray inversion mismatch")
 
     display._clear(0x001F)
     display._fill_triangle_alpha(1, 1, 5, 1, 1, 5, 0xF800, 128)
-    blended = display._get_pixel(2, 2)
-    if blended in (0x001F, 0xF800):
+    blended = _pixel(display, 2, 2)
+    if blended in (_quantized(0x001F), _quantized(0xF800)):
         raise RuntimeError("simulator LCD alpha triangle mismatch")
 
     display._clear(0)
     display._polygon(((1, 1), (5, 1), (5, 5), (1, 5)), 0xFFFF)
-    if display._get_pixel(1, 1) != 0xFFFF or display._get_pixel(3, 3) != 0:
+    if _pixel(display, 1, 1) != 0xFFFF or _pixel(display, 3, 3) != 0:
         raise RuntimeError("simulator LCD polygon outline mismatch")
     display._fill_polygon(((1, 1), (5, 1), (5, 5), (1, 5)), 0x07E0)
-    if display._get_pixel(3, 3) != 0x07E0:
+    if _pixel(display, 3, 3) != 0x07E0:
         raise RuntimeError("simulator LCD polygon fill mismatch")
     _run_polygon_parity_check(display)
-    print("[sim-check:ok] lcd brightness RGB LED bytearray inversion alpha triangle polygon")
+    _run_present_check(display)
+    print("[sim-check:ok] lcd brightness RGB LED bytearray inversion alpha triangle polygon present")
 
 
 def _run_polygon_parity_check(display):
@@ -848,31 +869,31 @@ def _run_polygon_parity_check(display):
         for y in range(1, 9):
             for x in range(1, 10):
                 expected = 0xFFFF if y < 3 or x <= 3 or x >= 7 else 0
-                if display._get_pixel(x, y) != expected:
+                if _pixel(display, x, y) != expected:
                     raise RuntimeError("simulator concave polygon coverage mismatch")
 
     # Every covered pixel must be blended once, including the former fan seam.
-    for alpha, expected in ((0, 0), (128, 0x7BEF), (255, 0xFFFF)):
+    for alpha, expected in ((0, 0), (128, _quantized(0x7BEF)), (255, 0xFFFF)):
         display._clear(0)
         display._fill_polygon_alpha(square, 0xFFFF, alpha)
         for y in range(1, 9):
             for x in range(1, 10):
-                if display._get_pixel(x, y) != expected:
+                if _pixel(display, x, y) != expected:
                     raise RuntimeError("simulator polygon alpha coverage mismatch")
-        if display._get_pixel(5, 9) != 0:
+        if _pixel(display, 5, 9) != 0:
             raise RuntimeError("simulator polygon bottom edge must be excluded")
 
     display._clear(0)
     display._fill_polygon(((display.width - 2, 1), (display.width + 5, 1),
                            (display.width + 5, 4), (display.width - 2, 4)), 0xFFFF)
-    if display._get_pixel(display.width - 1, 2) != 0xFFFF or display._get_pixel(0, 2):
+    if _pixel(display, display.width - 1, 2) != 0xFFFF or _pixel(display, 0, 2):
         raise RuntimeError("simulator polygon clipping mismatch")
 
     display._clear(0)
     for points in ((), ((2, 2),), ((2, 2), (5, 5))):
         display._fill_polygon(points, 0xFFFF)
     display._polygon(((2, 2),), 0xFFFF)
-    if any(display._buffer):
+    if any(any(display._read_row(y)) for y in range(display.height)):
         raise RuntimeError("simulator degenerate polygon mismatch")
 
     try:
@@ -884,10 +905,24 @@ def _run_polygon_parity_check(display):
             for method in (display._polygon, display._fill_polygon):
                 display._clear(0)
                 method(points, 0xFFFF)
-                if display._get_pixel(corner, corner) != 0xFFFF or display._get_pixel(2, 2):
+                if _pixel(display, corner, corner) != 0xFFFF or _pixel(display, 2, 2):
                     raise RuntimeError("simulator polygon scaling mismatch")
     finally:
         display.set_scaling(1, 1, False)
+
+
+def _run_present_check(display):
+    """swap() sends only rows whose content changed."""
+    display._clear(0)
+    display.swap()
+    display._clear(0)
+    display._text(10, 100, "Menu", 0xFFFF)
+    first = display.swap()
+    display._clear(0)
+    display._text(10, 100, "Menu", 0xFFFF)
+    again = display.swap()
+    if not 0 < first <= 16 or again != 0:
+        raise RuntimeError("simulator LCD change-only present mismatch")
 
 
 def _run_uart_parity_check():
@@ -1264,6 +1299,9 @@ def main():
             _write_error_file(opts["sd"] + "/sim_error.txt", e)
         raise SystemExit(1)
     finally:
+        summary = sim_runtime.display_summary()
+        if summary:
+            print(summary)
         try:
             sim_runtime.shutdown_audio_sidecars()
         except Exception:
