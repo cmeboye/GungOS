@@ -143,6 +143,24 @@ The tests are also run under AddressSanitizer and UBSan.
 
 ## Next
 
+0. Refactor before the binding, while only beams exist (the host tests
+   guard it):
+   - extract a generic DOF map (numbering, profile, ordering) and an element
+     function table from `fe/model.c`, so frames, trusses, thermal links and
+     circuit stamps can plug in;
+   - put the solvers behind one interface, with the stored precision as a
+     parameter;
+   - add float32 skyline storage with double-precision iterative refinement
+     (residual computed element by element). The M33 FPU is single precision
+     only, so this should be faster and halve memory. Fall back to double
+     storage when refinement stalls;
+   - add a results cache built once after the solve: end forces per element
+     and case, loads indexed by element, elements indexed by node, and
+     whole-buffer diagram sampling. Today's on-demand queries are O(n²) over
+     a full model;
+   - later solvers: banded/dense LU with pivoting, real and complex (circuits);
+     matrix-free preconditioned CG (2-D thermal grids); time-stepping, Newton
+     and eigen drivers.
 1. `mp/` binding: a `picosolve.Beam` object, the three blocks on the heap, a
    blocking `solve()` plus `start()` on core 1 with progress and cancel,
    status codes mapped to messages that name the node or element. Build it
