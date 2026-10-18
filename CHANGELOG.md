@@ -35,6 +35,11 @@
   faster drawing for 100 KB of RAM (266 KB free). Graph3D and Tetris borrow
   the SRAM screen while open (`view_manager.request_fast_drawing()`); it is
   returned when they close, also after a crash.
+- Graph3D draws each frame with a C renderer (`gfx_mesh`: rotate, project,
+  depth-sort, clip, shade and outline in one call). It produces exactly the
+  Python renderer's image except that colours come from a 256-step table;
+  firmware without it falls back to Python. The benchmark times one frame
+  both ways.
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer

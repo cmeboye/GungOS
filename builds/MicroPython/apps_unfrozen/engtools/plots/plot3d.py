@@ -513,11 +513,47 @@ def _mesh_vertex(index):
     return (_mesh[index],_mesh[index+1],_mesh[index+2])
 
 
-def _draw_mesh(draw,preview=False):
+_ramp=None
+
+
+def _mesh_ramp():
+    """The heat and cool colour scales as 256-step RGB tables for the C renderer."""
+    global _ramp
+    if _ramp is None:
+        _ramp=bytearray(1536)
+        for i in range(256):
+            t=i/255
+            for k,rgb in enumerate((_heat(t),_cool(t))):
+                offset=k*768+i*3
+                for c in range(3):_ramp[offset+c]=max(0,min(255,rgb[c]))
+    return _ramp
+
+
+def _draw_mesh(draw,preview=False,native=True):
     from array import array
     draw.fill_screen(C_BG)
     style=0 if preview else _style
     count=len(_mesh_colors)
+    stride=max(1,count//1200) if preview else 1
+    mesh3d=getattr(draw,'_mesh3d',None) if native else None
+    if mesh3d:
+        # One C call projects, sorts, clips, shades and outlines every triangle.
+        center=0 if _has_implicit else (_zmin+_zmax)/2
+        mesh3d(_mesh,_mesh_colors,(_yaw,_pitch,_cam,_focal*_zoom,_cx+_pan_x,_cy+_pan_y,center,_zscale,
+                                   _zmin,_zmax,_px0,_py0,_px1,_py1,style,C_WIRE,C_WIRE2,stride),_mesh_ramp())
+    else:
+        _draw_mesh_python(draw,style,count,stride)
+    _draw_gizmo(draw)
+    draw._rectangle(_px0,_py0,_px1-_px0,_py1-_py0,C_FRAME)
+    status='preview' if preview else 'ready'
+    sub=(_plot_title+' '+status) if _plot_title else '{} {:.2f}x {} {}'.format(status,_zoom,_navigation,'implicit' if _has_implicit else '')
+    _paint_chrome(draw,_toast or sub,'ARROWS {}  +/- zoom  SPACE mode'.format(_navigation),'F fit  W settings  ESC return' if _embedded else 'F fit  W settings  ENTER edit  ESC menu')
+    draw.swap()
+
+
+def _draw_mesh_python(draw,style,count,stride):
+    """Python renderer, for firmware without the C one."""
+    from array import array
     depths=array('f')
     for i in range(count):
         offset=i*9
@@ -526,7 +562,6 @@ def _draw_mesh(draw,preview=False):
         depths.append(p[2] if p else -1)
     order=list(range(count))
     order.sort(key=lambda i:depths[i],reverse=True)
-    stride=max(1,count//1200) if preview else 1
     for index in order[::stride]:
         offset=index*9
         a,b,c=(_world_point(_mesh_vertex(offset+i)) for i in (0,3,6))
@@ -539,12 +574,6 @@ def _draw_mesh(draw,preview=False):
             _fill_clipped_triangle(draw,a,b,c,_shade_color(height,_face_shade(a,b,c),cool))
         wire=(_shade_color(height,1,cool) if not style else (C_WIRE2 if cool else C_WIRE))
         _clip_line(draw,a,b,wire); _clip_line(draw,b,c,wire); _clip_line(draw,c,a,wire)
-    _draw_gizmo(draw)
-    draw._rectangle(_px0,_py0,_px1-_px0,_py1-_py0,C_FRAME)
-    status='preview' if preview else 'ready'
-    sub=(_plot_title+' '+status) if _plot_title else '{} {:.2f}x {} {}'.format(status,_zoom,_navigation,'implicit' if _has_implicit else '')
-    _paint_chrome(draw,_toast or sub,'ARROWS {}  +/- zoom  SPACE mode'.format(_navigation),'F fit  W settings  ESC return' if _embedded else 'F fit  W settings  ENTER edit  ESC menu')
-    draw.swap()
 
 
 def _draw_sampling(draw,progress):

@@ -197,6 +197,45 @@ def _stage_panel_answer(vm, answer):
     _record('12-bit colours looked right', 'yes' if answer else 'no', '')
 
 
+def _stage_3d(vm):
+    """One Graph3D frame of its default surface, Python renderer versus C."""
+    try:
+        from engtools.plots import plot3d as g
+    except ImportError:
+        _record('3-D frame', 'Graph3D not installed', '')
+        return
+    draw = vm.draw
+    if not hasattr(draw, '_mesh3d'):
+        _record('3-D frame, C renderer', 'not in this firmware', '')
+    fast = _use_mode(vm, True)  # Graph3D draws with the SRAM screen
+    try:
+        if not g.start(vm):
+            _record('3-D frame', 'Graph3D did not start', '')
+            return
+        vm._button = k.BUTTON_NONE
+        for _ in range(5000):
+            if g._state != g.ST_SAMPLING:
+                break
+            g.run(vm)
+        if g._state != g.ST_PLOT:
+            _record('3-D frame', 'surface not ready', '')
+            return
+        triangles = len(g._mesh_colors)
+        python = _best(lambda: g._draw_mesh(draw, False, native=False), 1)
+        _record('3-D frame, Python, %d triangles' % triangles, python / 1000, 'ms')
+        if hasattr(draw, '_mesh3d'):
+            native = _best(lambda: g._draw_mesh(draw, False, native=True), 3)
+            _record('3-D frame, C, %d triangles' % triangles, native / 1000, 'ms')
+            if native:
+                _record('3-D frame speed-up', python // native, 'x')
+        _record('3-D frame screen', 'SRAM' if fast else 'PSRAM', '')
+    finally:
+        try:
+            g.stop(vm)
+        finally:
+            _restore_mode(vm)
+
+
 def _stage_compute(vm):
     from array import array
     n = 2000
@@ -272,6 +311,7 @@ STAGES = (
     ('SRAM screen (fast drawing)', lambda vm: _stage_mode(vm, True)),
     ('PSRAM screen (default)', lambda vm: _stage_mode(vm, False)),
     ('12-bit colour (experimental)', _stage_panel_start),
+    ('3-D plot frame', _stage_3d),
     ('Python versus C', _stage_compute),
 )
 

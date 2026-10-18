@@ -8,6 +8,7 @@ target_sources(usermod_picoware_lcd INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/lcd.c
     ${GFX_DIR}/gfx.c
     ${GFX_DIR}/gfx_lcd.c
+    ${GFX_DIR}/gfx_mesh.c
 )
 
 target_include_directories(usermod_picoware_lcd INTERFACE
@@ -22,7 +23,7 @@ target_compile_definitions(usermod_picoware_lcd INTERFACE
 )
 
 # The firmware is built for size; drawing and presenting are hot paths.
-set_source_files_properties(${GFX_DIR}/gfx.c ${CMAKE_CURRENT_LIST_DIR}/picoware_lcd.c
+set_source_files_properties(${GFX_DIR}/gfx.c ${GFX_DIR}/gfx_mesh.c ${CMAKE_CURRENT_LIST_DIR}/picoware_lcd.c
     PROPERTIES COMPILE_OPTIONS "-O2")
 
 target_link_libraries(usermod INTERFACE usermod_picoware_lcd)

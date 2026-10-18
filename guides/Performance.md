@@ -61,6 +61,12 @@ First device measurements (v1.1 performance test):
 The benchmark now measures sending and drawing in both modes, and restores
 the mode it found.
 
+Graph3D renders frames with `draw._mesh3d` (src/MicroPython/gfx/gfx_mesh.c):
+projection, depth sort, clipping, shading and outlines in C. The simulator
+test renders several views both ways and requires identical images when both
+use the same 256-step colour table. The benchmark's "3-D plot frame" step
+times the default surface with the Python and C renderers.
+
 Panel transfers default to 16 bits. The benchmark saves partial measurements between stages. If an enabled colour
 test stops updating the display, press N to restore 16-bit mode. An unanswered
 Y/N prompt also restores the format after 20 seconds, provided the app loop is

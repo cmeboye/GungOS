@@ -12,6 +12,7 @@ sim_runtime.mkdir_p(sim_runtime.sd_root)
 from picoware.system.view_manager import ViewManager
 from picoware.system import buttons as k
 vm=ViewManager();vm._wifi=None
+sys.path.insert(0,root+'/builds/MicroPython/apps_unfrozen')  # engtools, as on the SD card
 sys.path.insert(0,sys.argv[1] if len(sys.argv)>1 else root+'/builds/MicroPython/apps_unfrozen/misc')
 import Benchmark as bench
 # A black status screen previously produced a cheap partial first sample,
@@ -58,6 +59,8 @@ report=vm.storage.read(bench.RESULT_PATH)
 assert 'Status: complete' in report and 'disabled by default' in report
 assert 'Free heap, SRAM screen' in report and 'Free heap, PSRAM screen' in report
 assert 'Python / C speed ratio' in report
+assert '3-D frame, C, ' in report and '3-D frame speed-up' in report and '3-D frame screen: SRAM' in report
+assert vm.draw.mode==vm.draw.MODE_PSRAM, 'The 3-D stage must restore the screen mode'
 print('PASS: default run skips experimental format and saves complete memory/timing results')
 
 assert bench.start(vm)

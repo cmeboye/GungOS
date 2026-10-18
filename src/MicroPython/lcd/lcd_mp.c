@@ -17,6 +17,10 @@ bool mp_engine_gc_ready = false;
 #include "../sd/storage.h"
 #endif
 
+#if defined(PICOCALC) || defined(DESKTOP)
+#include "../gfx/gfx_mesh.h"
+#endif
+
 const mp_obj_type_t lcd_mp_type;
 
 static uint16_t lcd_scale_x(lcd_mp_obj_t *self, uint16_t v)
@@ -1505,6 +1509,70 @@ mp_obj_t lcd_mp_set_panel_bits(mp_obj_t self_in, mp_obj_t bits)
 static MP_DEFINE_CONST_FUN_OBJ_2(lcd_mp_set_panel_bits_obj, lcd_mp_set_panel_bits);
 #endif
 
+#if defined(PICOCALC) || defined(DESKTOP)
+// Draw a 3-D triangle mesh in one call (see gfx/gfx_mesh.h):
+//   self._mesh3d(triangles, flags, view, ramp) -> triangles drawn
+// triangles: array('f'), 9 floats per triangle; flags: one byte per triangle;
+// view: (yaw, pitch, cam, focal, cx, cy, z_center, z_scale, z_min, z_max,
+//        x0, y0, x1, y1, solid, wire, wire_alt, stride);
+// ramp: 1536 bytes, two 256-step RGB colour tables.
+mp_obj_t lcd_mp_mesh3d(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    mp_buffer_info_t tri, flags, ramp;
+    mp_get_buffer_raise(args[1], &tri, MP_BUFFER_READ);
+    mp_get_buffer_raise(args[2], &flags, MP_BUFFER_READ);
+    mp_get_buffer_raise(args[4], &ramp, MP_BUFFER_READ);
+    const size_t count = flags.len;
+    if (tri.typecode != 'f' || tri.len < count * 9 * sizeof(float))
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("triangles must be array('f') with 9 floats per flag"));
+    }
+    if (ramp.len < 1536)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("ramp needs 1536 bytes"));
+    }
+    size_t n;
+    mp_obj_t *v;
+    mp_obj_get_array(args[3], &n, &v);
+    if (n != 18)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("view needs 18 values"));
+    }
+    gfx_mesh_view view;
+    view.yaw = mp_obj_get_float(v[0]);
+    view.pitch = mp_obj_get_float(v[1]);
+    view.cam = mp_obj_get_float(v[2]);
+    view.focal = mp_obj_get_float(v[3]);
+    view.cx = mp_obj_get_float(v[4]);
+    view.cy = mp_obj_get_float(v[5]);
+    view.z_center = mp_obj_get_float(v[6]);
+    view.z_scale = mp_obj_get_float(v[7]);
+    view.z_min = mp_obj_get_float(v[8]);
+    view.z_max = mp_obj_get_float(v[9]);
+    view.clip_x0 = mp_obj_get_int(v[10]);
+    view.clip_y0 = mp_obj_get_int(v[11]);
+    view.clip_x1 = mp_obj_get_int(v[12]);
+    view.clip_y1 = mp_obj_get_int(v[13]);
+    view.solid = mp_obj_is_true(v[14]);
+    view.wire = (uint16_t)mp_obj_get_int(v[15]);
+    view.wire_alt = (uint16_t)mp_obj_get_int(v[16]);
+    view.stride = mp_obj_get_int(v[17]);
+    if (count == 0)
+    {
+        return MP_OBJ_NEW_SMALL_INT(0);
+    }
+    int32_t *order = m_new(int32_t, count);
+    float *depth = m_new(float, count);
+    int drawn = gfx_mesh(&gfx_screen, (const float *)tri.buf, (const uint8_t *)flags.buf, (int)count,
+                         &view, (const uint8_t *)ramp.buf, order, depth);
+    m_del(float, depth, count);
+    m_del(int32_t, order, count);
+    return mp_obj_new_int(drawn);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lcd_mp_mesh3d_obj, 5, 5, lcd_mp_mesh3d);
+#endif
+
 // One row of the screen image as bytes, RGB332 (1 byte per pixel).
 mp_obj_t lcd_mp_read_row(mp_obj_t self_in, mp_obj_t row_in)
 {
@@ -1624,7 +1692,10 @@ static const mp_rom_map_elem_t lcd_mp_locals_dict_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&lcd_mp_set_mode_obj)},                          // self.set_mode()
     {MP_ROM_QSTR(MP_QSTR_set_scaling), MP_ROM_PTR(&lcd_mp_set_scaling_obj)},                    // self.set_scaling()
     {MP_ROM_QSTR(MP_QSTR_swap), MP_ROM_PTR(&lcd_mp_swap_obj)},                                  // self.swap() -> rows sent
-    {MP_ROM_QSTR(MP_QSTR__read_row), MP_ROM_PTR(&lcd_mp_read_row_obj)},                          // self._read_row(y) -> RGB332 bytes
+    {MP_ROM_QSTR(MP_QSTR__read_row), MP_ROM_PTR(&lcd_mp_read_row_obj)},
+#if defined(PICOCALC) || defined(DESKTOP)
+    {MP_ROM_QSTR(MP_QSTR__mesh3d), MP_ROM_PTR(&lcd_mp_mesh3d_obj)},                              // self._mesh3d(...) -> triangles drawn
+#endif                          // self._read_row(y) -> RGB332 bytes
 #ifdef LCD_MP_SET_PANEL_BITS
     {MP_ROM_QSTR(MP_QSTR_set_panel_bits), MP_ROM_PTR(&lcd_mp_set_panel_bits_obj)},                // self.set_panel_bits(12 or 16) -> bool
 #endif
