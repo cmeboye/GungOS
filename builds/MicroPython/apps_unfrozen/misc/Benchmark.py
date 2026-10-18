@@ -229,6 +229,16 @@ def _stage_3d(vm):
             if native:
                 _record('3-D frame speed-up', python // native, 'x')
         _record('3-D frame screen', 'SRAM' if fast else 'PSRAM', '')
+        # Building an implicit surface: formula sampling plus meshing.
+        g._expr, g._expr2, g._grid_n = 'x^2+y^2+z^2=4', '', 12
+
+        def build(native):
+            for _ in g._sample_job(native):
+                pass
+        _record('Implicit sphere mesh, Python', _best(lambda: build(False), 1) / 1000, 'ms')
+        if hasattr(g, '_geometry') and g._geometry():
+            _record('Implicit sphere mesh, C', _best(lambda: build(True), 1) / 1000,
+                    'ms (%d triangles)' % len(g._mesh_colors))
     finally:
         try:
             g.stop(vm)

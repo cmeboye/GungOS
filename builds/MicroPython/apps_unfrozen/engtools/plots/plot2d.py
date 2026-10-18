@@ -32,6 +32,18 @@ SAFE.update({'abs': abs, 'min': min, 'max': max, 'pow': pow,
              'round': round, 'pi': math.pi, 'e': math.e, '__builtins__': {}})
 
 
+# Use the firmware's C contour tracer when present (tests switch it off).
+NATIVE_GEOMETRY = True
+
+
+def _geometry():
+    try:
+        import picosolve
+    except ImportError:
+        return None
+    return picosolve if hasattr(picosolve, 'contour_segments') else None
+
+
 def finite(value):
     return not math.isnan(value) and not math.isinf(value)
 
@@ -501,6 +513,58 @@ class GraphApp:
         return job['row'] > n
 
     def implicit_row(self, e, job):
+        geom = _geometry() if NATIVE_GEOMETRY else None
+        if geom is None:
+            return self.implicit_row_python(e, job)
+        # Formulas are evaluated here; C finds where the curve crosses each cell.
+        from array import array
+        nan = float('nan')
+        step = job['step']
+        row = job['row']
+        py = self.top+row*step
+        if py >= self.bottom: return True
+        py2 = min(self.bottom,py+step)
+        xs = list(range(self.left,self.right,step))+[self.right]
+        def values(y):
+            out = array('f')
+            for px in xs:
+                v = e.value(*self.xy(px,y))
+                out.append(nan if v is None else v)
+            return out
+        upper = job['gridrow'] if job['gridrow'] is not None else values(py)
+        lower = values(py2)
+        cells = len(xs)-1
+        centres = array('f')
+        for col in range(cells):
+            x1,x2 = xs[col],xs[col+1]
+            center = e.value(*self.xy((x1+x2)/2,(py+py2)/2))
+            centres.append(nan if center is None else center)
+            if e.relation != '=' and e.inside(center):
+                color = shade_color(e.color)
+                # Sparse, stable stipple preserves overlapping inequality colors.
+                phase = self.items.index(e)%3
+                for sy in range(py,py2):
+                    for sx in range(x1+(phase-sy-x1)%3,x2,3):
+                        self.draw._pixel(sx,sy,color)
+        xsf = array('f',xs)
+        queries = array('f',[0.0]*(8*cells))
+        q = geom.contour_queries(upper,lower,centres,xsf,py,py2,queries)
+        mids = array('f')
+        for i in range(q):
+            v = e.value(*self.xy(queries[2*i],queries[2*i+1]))
+            mids.append(nan if v is None else v)
+        segments = array('f',[0.0]*(8*cells))
+        dashed = e.relation in ('<','>')
+        for i in range(geom.contour_segments(upper,lower,centres,xsf,py,py2,mids,segments)):
+            a,b = (segments[4*i],segments[4*i+1]),(segments[4*i+2],segments[4*i+3])
+            self.line(a,b,e.color,dashed)
+            e.include(*self.xy(*a)); e.include(*self.xy(*b))
+        job['gridrow'] = lower
+        job['row'] += 1
+        return py2 >= self.bottom
+
+    def implicit_row_python(self, e, job):
+        """Python contour tracer, for firmware without the C one."""
         step = job['step']
         row = job['row']
         py = self.top+row*step

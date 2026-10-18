@@ -26,6 +26,8 @@
 #include "py/objexcept.h"
 #include "py/mpthread.h"
 #include "../fe/model.h"
+#include "../geom/mesh.h"
+#include "../geom/contour.h"
 
 MP_DEFINE_EXCEPTION(SolveError, ValueError)
 
@@ -561,7 +563,142 @@ MP_DEFINE_CONST_OBJ_TYPE(
     make_new, beam_make_new,
     locals_dict, &beam_locals);
 
+/* ------------------------------------------------------------------------ */
+/* Geometry for plots: sampled surfaces and implicit (iso)surfaces           */
+/* ------------------------------------------------------------------------ */
+
+static float *floats(mp_obj_t obj, size_t need, bool write, const char *what)
+{
+    mp_buffer_info_t info;
+    mp_get_buffer_raise(obj, &info, write ? MP_BUFFER_WRITE : MP_BUFFER_READ);
+    if (info.typecode != 'f' || info.len < need * sizeof(float))
+        mp_raise_msg_varg(&mp_type_ValueError, MP_ERROR_TEXT("%s must be array('f') of at least %d floats"),
+                          what, (int)need);
+    return info.buf;
+}
+
+/* grid_strip(row0, row1, xs, y0, y1, out) -> triangles written to out
+ * (9 floats each, room for 2 * (len(xs) - 1)). */
+static mp_obj_t geom_grid_strip(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    mp_buffer_info_t xs_info;
+    mp_get_buffer_raise(args[2], &xs_info, MP_BUFFER_READ);
+    const size_t n = xs_info.len / sizeof(float);
+    const float *xs = floats(args[2], n, false, "xs");
+    const float *row0 = floats(args[0], n, false, "row0");
+    const float *row1 = floats(args[1], n, false, "row1");
+    mp_buffer_info_t out_info;
+    mp_get_buffer_raise(args[5], &out_info, MP_BUFFER_WRITE);
+    const int capacity = (int)(out_info.len / (9 * sizeof(float)));
+    float *out = floats(args[5], 9, true, "out");
+    if (n < 2 || capacity < 2 * ((int)n - 1))
+        mp_raise_ValueError(MP_ERROR_TEXT("out needs room for 2 * (len(xs) - 1) triangles"));
+    return mp_obj_new_int(ps_grid_strip(row0, row1, xs, (int)n, (float)mp_obj_get_float(args[3]),
+                                        (float)mp_obj_get_float(args[4]), out, capacity));
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(geom_grid_strip_obj, 6, 6, geom_grid_strip);
+
+/* iso_slab(prev, cur, coords, z0, z1, triangles, centres, limits, cube) ->
+ * (count, next_cube): marching tetrahedra between two sampled planes. */
+static mp_obj_t geom_iso_slab(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    mp_buffer_info_t c_info;
+    mp_get_buffer_raise(args[2], &c_info, MP_BUFFER_READ);
+    const size_t n = c_info.len / sizeof(float);
+    if (n < 2)
+        mp_raise_ValueError(MP_ERROR_TEXT("need at least 2 coordinates"));
+    const float *coords = floats(args[2], n, false, "coords");
+    const float *prev = floats(args[0], n * n, false, "prev");
+    const float *cur = floats(args[1], n * n, false, "cur");
+    mp_buffer_info_t t_info;
+    mp_get_buffer_raise(args[5], &t_info, MP_BUFFER_WRITE);
+    const int capacity = (int)(t_info.len / (9 * sizeof(float)));
+    if (capacity < PS_MESH_PER_CUBE)
+        mp_raise_ValueError(MP_ERROR_TEXT("triangles needs room for at least 12 triangles"));
+    float *triangles = floats(args[5], (size_t)capacity * 9, true, "triangles");
+    float *centres = floats(args[6], (size_t)capacity * 3, true, "centres");
+    float *limits = floats(args[7], (size_t)capacity, true, "limits");
+    int32_t cube = (int32_t)mp_obj_get_int(args[8]);
+    if (cube < 0)
+        cube = 0;
+    const int count = ps_iso_slab(prev, cur, coords, (int)n, (float)mp_obj_get_float(args[3]),
+                                  (float)mp_obj_get_float(args[4]), triangles, centres, limits, capacity, &cube);
+    mp_obj_t items[2] = {mp_obj_new_int(count), mp_obj_new_int(cube)};
+    return mp_obj_new_tuple(2, items);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(geom_iso_slab_obj, 9, 9, geom_iso_slab);
+
+typedef struct
+{
+    const float *upper, *lower, *centres, *xs;
+    int n;
+    float y0, y1;
+} contour_args;
+
+static void contour_inputs(const mp_obj_t *args, contour_args *c)
+{
+    mp_buffer_info_t xs_info;
+    mp_get_buffer_raise(args[3], &xs_info, MP_BUFFER_READ);
+    c->n = (int)(xs_info.len / sizeof(float));
+    if (c->n < 2)
+        mp_raise_ValueError(MP_ERROR_TEXT("need at least 2 samples"));
+    c->xs = floats(args[3], (size_t)c->n, false, "xs");
+    c->upper = floats(args[0], (size_t)c->n, false, "upper");
+    c->lower = floats(args[1], (size_t)c->n, false, "lower");
+    c->centres = floats(args[2], (size_t)c->n - 1, false, "centres");
+    c->y0 = (float)mp_obj_get_float(args[4]);
+    c->y1 = (float)mp_obj_get_float(args[5]);
+}
+
+/* contour_queries(upper, lower, centres, xs, y0, y1, queries) -> count of
+ * edge midpoints (x, y pairs) to evaluate for the pole check. */
+static mp_obj_t geom_contour_queries(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    contour_args c;
+    contour_inputs(args, &c);
+    mp_buffer_info_t q;
+    mp_get_buffer_raise(args[6], &q, MP_BUFFER_WRITE);
+    const int capacity = (int)(q.len / (2 * sizeof(float)));
+    if (capacity < 4 * (c.n - 1))
+        mp_raise_ValueError(MP_ERROR_TEXT("queries needs room for 4 points per cell"));
+    float *queries = floats(args[6], (size_t)capacity * 2, true, "queries");
+    return mp_obj_new_int(ps_contour_queries(c.upper, c.lower, c.centres, c.xs, c.n, c.y0, c.y1, queries, capacity));
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(geom_contour_queries_obj, 7, 7, geom_contour_queries);
+
+/* contour_segments(upper, lower, centres, xs, y0, y1, mids, segments) ->
+ * count of segments (x0, y0, x1, y1). mids: the queried values, or None. */
+static mp_obj_t geom_contour_segments(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    contour_args c;
+    contour_inputs(args, &c);
+    const float *mids = NULL;
+    if (args[6] != mp_const_none)
+    {
+        mp_buffer_info_t m;
+        mp_get_buffer_raise(args[6], &m, MP_BUFFER_READ);
+        mids = floats(args[6], m.len / sizeof(float), false, "mids");
+    }
+    mp_buffer_info_t s;
+    mp_get_buffer_raise(args[7], &s, MP_BUFFER_WRITE);
+    const int capacity = (int)(s.len / (4 * sizeof(float)));
+    if (capacity < 2 * (c.n - 1))
+        mp_raise_ValueError(MP_ERROR_TEXT("segments needs room for 2 per cell"));
+    float *segments = floats(args[7], (size_t)capacity * 4, true, "segments");
+    return mp_obj_new_int(ps_contour_segments(c.upper, c.lower, c.centres, c.xs, c.n, c.y0, c.y1, mids,
+                                              segments, capacity));
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(geom_contour_segments_obj, 8, 8, geom_contour_segments);
+
 static const mp_rom_map_elem_t picosolve_globals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_grid_strip), MP_ROM_PTR(&geom_grid_strip_obj)},
+    {MP_ROM_QSTR(MP_QSTR_contour_queries), MP_ROM_PTR(&geom_contour_queries_obj)},
+    {MP_ROM_QSTR(MP_QSTR_contour_segments), MP_ROM_PTR(&geom_contour_segments_obj)},
+    {MP_ROM_QSTR(MP_QSTR_iso_slab), MP_ROM_PTR(&geom_iso_slab_obj)},
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_picosolve)},
     {MP_ROM_QSTR(MP_QSTR_Beam), MP_ROM_PTR(&picosolve_beam_type)},
     {MP_ROM_QSTR(MP_QSTR_SolveError), MP_ROM_PTR(&mp_type_SolveError)},

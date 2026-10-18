@@ -84,6 +84,10 @@ src/MicroPython/picosolve/README.md). The benchmark's "Beam solver" step builds
 a 600-element continuous beam from Python and times solving it in double and
 in single precision; those two numbers set the automatic precision threshold.
 
+Implicit plots evaluate the user's formula in Python and build their
+geometry in C. The benchmark's 3-D step also times building an implicit
+sphere with the Python and C mesh builders.
+
 Full-screen benchmark samples now establish an untimed baseline and verify that
 every timed swap sends all 320 rows. Each timing is paired with its own row
 count. Earlier full-screen numbers may describe a partial initial update.

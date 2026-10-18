@@ -414,11 +414,21 @@ def _mesh_triangle(triangle,cool):
     _mesh_colors.append(1 if cool else 0)
 
 
-def _sample_job():
+def _geometry():
+    """The firmware's C mesh builder (picosolve), or None on older firmware."""
+    try:
+        import picosolve
+    except ImportError:
+        return None
+    return picosolve if hasattr(picosolve, 'iso_slab') else None
+
+
+def _sample_job(native=True):
     """Yield bounded work units; stream two volume planes instead of N cubed RAM."""
     global _zs,_zs2,_zmin,_zmax,_zscale,_has_implicit,_mesh,_mesh_colors,_mesh_limit
     from array import array
     from gc import mem_free
+    geom=_geometry() if native else None
     _zs,_zs2=None,None
     _mesh=array('f'); _mesh_colors=bytearray()
     collect()
@@ -430,6 +440,11 @@ def _sample_job():
     n,r=_grid_n,_range
     step=2*r/(n-1)
     coords=[-r+i*step for i in range(n)]
+    if geom:
+        # Formulas are evaluated here; the C code builds the triangles.
+        xs=array('f',coords)
+        strip=array('f',[0.0]*(18*(n-1)))
+        tris,centres,limits=array('f',[0.0]*(9*256)),array('f',[0.0]*(3*256)),array('f',[0.0]*256)
     for surface,(implicit,code) in enumerate(specs):
         env=dict(_SAFE)
         if not implicit:
@@ -445,6 +460,15 @@ def _sample_job():
                 yield ('sampling function',len(rows),n)
             if surface==0: _zs=rows
             else: _zs2=rows
+            if geom:
+                for j in range(n-1):
+                    count=geom.grid_strip(rows[j],rows[j+1],xs,coords[j],coords[j+1],strip)
+                    if len(_mesh_colors)+count>_mesh_limit:
+                        raise ValueError('Mesh too detailed; lower resolution/range')
+                    _mesh.extend(strip[:9*count])
+                    _mesh_colors.extend(bytes((surface,))*count)
+                    yield ('building mesh',j+1,n-1)
+                continue
             for j in range(n-1):
                 for i in range(n-1):
                     a=(coords[i],coords[j],rows[j][i]); b=(coords[i+1],coords[j],rows[j][i+1])
@@ -461,7 +485,24 @@ def _sample_job():
                         value=_field(code,env,x,y,z)
                         current.append(value if value is not None else float('nan'))
                     yield ('sampling volume',k*n+len(current)//n,n*n)
-                if previous is not None:
+                if previous is not None and geom:
+                    cube,cubes=0,(n-1)*(n-1)
+                    while cube<cubes:
+                        count,cube=geom.iso_slab(previous,current,xs,coords[k-1],z,tris,centres,limits,cube)
+                        for t in range(count):
+                            # Avoid joining sign changes across undefined poles.
+                            middle=_field(code,env,centres[3*t],centres[3*t+1],centres[3*t+2])
+                            if middle is None or abs(middle)>limits[t]: continue
+                            if len(_mesh_colors)>=_mesh_limit:
+                                raise ValueError('Mesh too detailed; lower resolution/range')
+                            o=9*t
+                            _mesh.extend(tris[o:o+9])
+                            _mesh_colors.append(surface)
+                            for zz in (tris[o+2],tris[o+5],tris[o+8]):
+                                if zz<_zmin:_zmin=zz
+                                if zz>_zmax:_zmax=zz
+                        yield ('extracting surface',k*(n-1)+cube//(n-1),(n-1)**2)
+                elif previous is not None:
                     for j in range(n-1):
                         for i in range(n-1):
                             indices=(j*n+i,j*n+i+1,(j+1)*n+i+1,(j+1)*n+i)

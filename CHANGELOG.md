@@ -47,6 +47,12 @@
   and picks single precision with refinement or double automatically.
   Problems raise `picosolve.SolveError` naming what is at fault. The
   benchmark times a 600-element beam in both precisions.
+- Implicit plots build their geometry in C (`picosolve` geometry
+  functions): Graph3D's surfaces and implicit isosurfaces (marching
+  tetrahedra) and Graph's implicit curves (marching squares). Output is
+  identical to the Python builders; implicit surfaces build 2–4× faster in
+  the simulator, implicit curves 1.1–1.6× (their remaining time is formula
+  evaluation).
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer

@@ -9,6 +9,8 @@ set(PICOSOLVE_KERNEL
     ${PICOSOLVE_DIR}/core/dofmap.c
     ${PICOSOLVE_DIR}/fe/beam.c
     ${PICOSOLVE_DIR}/fe/model.c
+    ${PICOSOLVE_DIR}/geom/mesh.c
+    ${PICOSOLVE_DIR}/geom/contour.c
 )
 
 target_sources(usermod_picosolve INTERFACE

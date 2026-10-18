@@ -33,6 +33,10 @@ core/   pure C, no MicroPython headers
 fe/     element library and models
   beam.*        Euler–Bernoulli element: stiffness, consistent loads, exact sections
   model.*       beam model: build, prepare, solve, results
+geom/   geometry for plots and contour views
+  mesh.*        triangles from sampled surfaces and implicit isosurfaces
+                (marching tetrahedra)
+  contour.*     contour segments of a sampled 2-D field (marching squares)
 mp/     the MicroPython binding (the only part with MicroPython headers)
 tests/  host tests (tests/run-tests.sh)
 ```
@@ -74,6 +78,15 @@ while b.busy(): show(b.progress())           # (done, total); b.cancel()
 while not b.finish():                        # False: retrying in double
     _thread.start_new_thread(b.compute, ())
 ```
+
+Geometry for plots (the caller samples the formula; C builds the shapes):
+`grid_strip(row0, row1, xs, y0, y1, out)` triangulates a strip of a z(x, y)
+surface; `iso_slab(prev, cur, coords, z0, z1, triangles, centres, limits,
+cube)` runs marching tetrahedra between two sampled planes and returns each
+triangle's centre for an optional pole check; `contour_queries` and
+`contour_segments` trace f = 0 across a row of cells, with or without that
+check. Graph3D and Graph use them and match their earlier Python output
+exactly; they are also the basis for isotherm and contour plots.
 
 `b.info()` reports equations, stored values, the precision used, refinement
 steps, the smallest pivot ratio and memory; `b.free()` releases the memory.
