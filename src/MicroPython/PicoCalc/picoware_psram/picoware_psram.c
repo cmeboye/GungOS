@@ -1017,10 +1017,11 @@ mp_obj_t picoware_psram_init(size_t n_args, const mp_obj_t *args)
         PIO pio = (pio_num == 0) ? pio0 : pio1;
         psram_instance = psram_qspi_init(pio, sm_num, 1.0f);
         psram_initialized = true;
+        psram_init_allocator();
     }
 
-    psram_init_allocator();
-
+    // The bus and allocator are shared with the display and other interfaces.
+    // Constructing an interface must preserve live allocations.
     return mp_const_none;
 }
 
@@ -2268,7 +2269,7 @@ void psram_mp_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t k
 mp_obj_t psram_mp_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args)
 {
     mp_arg_check_num(n_args, n_kw, 0, 0, false);
-    psram_mp_obj_t *self = mp_obj_malloc_with_finaliser(psram_mp_obj_t, &psram_mp_type);
+    psram_mp_obj_t *self = mp_obj_malloc(psram_mp_obj_t, &psram_mp_type);
     self->base.type = &psram_mp_type;
     picoware_psram_init(n_args, args);
     self->initialized = psram_initialized;
@@ -2277,8 +2278,9 @@ mp_obj_t psram_mp_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw
 mp_obj_t psram_mp_del(mp_obj_t self_in)
 {
     psram_mp_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    // This is an interface to shared hardware, not its owner. Releasing it
+    // must not stop the display's PSRAM or invalidate other live objects.
     self->initialized = false;
-    picoware_psram_deinit();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(psram_mp_del_obj, psram_mp_del);
@@ -2292,10 +2294,15 @@ void psram_mp_attr(mp_obj_t self_in, qstr attribute, mp_obj_t *destination)
         if (attribute == MP_QSTR___del__)
         {
             destination[0] = MP_OBJ_FROM_PTR(&psram_mp_del_obj);
+            destination[1] = self_in;
         }
         else if (attribute == MP_QSTR_initialized)
         {
-            destination[0] = mp_obj_new_bool(self->initialized);
+            destination[0] = mp_obj_new_bool(self->initialized && psram_initialized);
+        }
+        else
+        {
+            destination[1] = MP_OBJ_SENTINEL; // continue to public methods
         }
     }
 }

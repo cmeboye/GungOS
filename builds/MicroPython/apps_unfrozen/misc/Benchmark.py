@@ -109,6 +109,13 @@ def _stage_memory(vm):
         _record('Processor clock', machine.freq() // 1000000, 'MHz')
     except (ImportError, AttributeError):
         pass
+    import gc
+    import sys
+    gc.collect()
+    free, used = gc.mem_free(), gc.mem_alloc()
+    _record('Heap total', (free + used) // 1024, 'KB')
+    _record('Heap in use when the benchmark started', used // 1024,
+            'KB (%d modules loaded; lowest right after a restart)' % len(sys.modules))
 
 
 def _stage_swaps(vm, label):
@@ -329,8 +336,47 @@ def _stage_formula(vm):
                 'ms (%dx)' % (slow // fast) if fast else 'ms')
 
 
+class _QuietVM:
+    """The view manager as an app sees it, without the keyboard: a key pressed
+    while a plot is timed must not reach the plot."""
+    button = k.BUTTON_NONE
+
+    def __init__(self, vm):
+        self._vm = vm
+
+    def __getattr__(self, name):
+        return getattr(self._vm, name)
+
+
+class _Timed:
+    """Forwards to an object, adding up the time spent in the named methods."""
+
+    def __init__(self, target, names, totals):
+        self._target, self._names, self._totals = target, names, totals
+
+    def __getattr__(self, name):
+        value = getattr(self._target, name)
+        if name not in self._names:
+            return value
+        totals = self._totals
+
+        def timed(*args):
+            start = ticks_us()
+            result = value(*args)
+            totals[name] = totals.get(name, 0) + ticks_diff(ticks_us(), start)
+            return result
+        return timed
+
+    def __call__(self, *args):
+        start = ticks_us()
+        result = self._target(*args)
+        self._totals['call'] = self._totals.get('call', 0) + ticks_diff(ticks_us(), start)
+        return result
+
+
 def _stage_graph(vm):
-    """Graph: the same plots drawn with its Python loops and with the C ones."""
+    """Graph: the same plots drawn with its Python loops and with the C ones,
+    then where the C version spends its time."""
     try:
         from engtools.plots import plot2d as G
     except ImportError:
@@ -339,27 +385,62 @@ def _stage_graph(vm):
     if not hasattr(G, 'NATIVE_DRAW'):
         _record('Graph', 'older version without C drawing', '')
         return
-    app = G.GraphApp(vm, persistent=False)
-    vm._button = k.BUTTON_NONE
+    import gc
+    draw = vm.draw
+    _record('Graph C functions in firmware', ' '.join(
+        name for name in ('_plot_curve', '_plot_segments', '_stipple') if hasattr(draw, name)) or 'none', '')
+    quiet = _QuietVM(vm)
+    app = G.GraphApp(quiet, persistent=False)
 
-    def draw(texts, native):
+    def render(texts, native, totals=None):
+        """Draw to completion: (microseconds, run() calls, finished)."""
         G.NATIVE_FORMULA = G.NATIVE_GEOMETRY = G.NATIVE_DRAW = native
         app.items = [G.Expression(t, G.COLORS[i % len(G.COLORS)]) for i, t in enumerate(texts)]
+        if totals is not None:
+            app.draw = _Timed(draw, ('swap', '_plot_curve', '_plot_segments', '_stipple', '_line', '_pixel'), totals)
+            for e in app.items:
+                for name in ('formula', 'formula2'):
+                    if getattr(e, name, None) is not None:
+                        setattr(e, name, _Timed(getattr(e, name), ('map',), totals))
         app.dirty, app.refine = True, None
+        calls = 0
         start = ticks_us()
-        for _ in range(20000):
-            app.run()
-            if app.job is None and not app.dirty and app.refine is None:
-                break
-        return ticks_diff(ticks_us(), start)
+        try:
+            while ticks_diff(ticks_us(), start) < 30000000:
+                app.run()
+                calls += 1
+                if app.job is None and not app.dirty and app.refine is None:
+                    return ticks_diff(ticks_us(), start), calls, True
+            return ticks_diff(ticks_us(), start), calls, False
+        finally:
+            app.draw = draw
+
+    def note(took, calls, finished):
+        return 'ms (%d runs%s)' % (calls, '' if finished else ', DID NOT FINISH')
     try:
         for label, texts in (('3 curves', ('sin(x)', 'cos(x)', 'y=x^2/4')),
                              ('shaded band', ('y>=sin(x)', 'y<=sin(x)+2')),
                              ('disk and circle', ('x^2+y^2<=9', 'x^2+y^2=25')),
                              ('heart', ('16*sin(t)^3;13*cos(t)-5*cos(2*t)-2*cos(3*t)-cos(4*t)',))):
-            slow, fast = draw(texts, False), draw(texts, True)
-            _record('Graph %s, Python' % label, slow / 1000, 'ms')
-            _record('Graph %s, C' % label, fast / 1000, 'ms (%dx)' % (slow // fast) if fast else 'ms')
+            slow = render(texts, False)
+            fast = render(texts, True)
+            _record('Graph %s, Python' % label, slow[0] / 1000, note(*slow))
+            _record('Graph %s, C' % label, fast[0] / 1000, note(*fast))
+            # Where the C version's time goes.
+            totals = {}
+            took = render(texts, True, totals)[0]
+            parts = ', '.join('%s %d' % (name.strip('_'), totals[name] // 1000) for name in sorted(totals))
+            rest = took - sum(totals.values())
+            _record('Graph %s, C time split' % label, parts + ', Python %d' % (rest // 1000), 'ms')
+            gc.collect()
+            gc.disable()
+            try:
+                no_gc = render(texts, True)
+                _record('Graph %s, C, garbage collector paused' % label, no_gc[0] / 1000, note(*no_gc))
+            except MemoryError:
+                _record('Graph %s, C, garbage collector paused' % label, 'ran out of memory', '')
+            finally:
+                gc.enable()
         _record('Graph screen', _mode_name(vm.draw), '')
     finally:
         G.NATIVE_FORMULA = G.NATIVE_GEOMETRY = G.NATIVE_DRAW = True
@@ -503,7 +584,7 @@ def run(vm):
         if _waiting:
             _stage_panel_answer(vm, False)
             _waiting = False
-        if _stage >= 0:
+        if 0 <= _stage < len(STAGES):
             _restore_mode(vm)
             _checkpoint(vm, 'cancelled')
         vm.back()

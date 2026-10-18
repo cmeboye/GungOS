@@ -2,6 +2,11 @@
 
 ## v1.1 performance hardware test — 2026-10-18
 
+- Display recovery: native PSRAM interfaces share the bus and allocator.
+  Constructing an interface for resource counters preserves existing allocations;
+  collecting an interface no longer tears down hardware used by the LCD. Public
+  methods remain available on the native type. A host regression runs the actual
+  device binding with an emulated QSPI chip; physical blackout verification is pending.
 - GungOS now targets only the PicoCalc with a Raspberry Pi Pico 2 W. Code for
   other boards (Flipper Zero, Cardputer, Waveshare, CrowPanel, Pancake, V8,
   PicoDuo, POOM, other PicoCalc Pico variants) is removed from the firmware,
