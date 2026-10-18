@@ -19,6 +19,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/../vector/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../vt/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../ulab/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../pcm/micropython.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../picosolve/micropython.cmake)
 
 # GCC 15 diagnoses the unreachable byte tail of Mbed TLS's fixed 16-byte XOR
 # as one-past-end in AES/GCM. Keep the diagnostic visible for these upstream

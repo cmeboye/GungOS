@@ -79,8 +79,10 @@ internal flash. This is storage separation, not encryption; moving an SD card
 to another device or returning to older firmware may require entering passwords
 again. Existing settings, documents and audio should be retained during upgrade.
 
-The picosolve C solver sources and host tests are preserved. They are not linked
-into this UF2 because the MicroPython binding has not been implemented.
+The built-in `picosolve` module provides the beam solver to Python (see
+src/MicroPython/picosolve/README.md). The benchmark's "Beam solver" step builds
+a 600-element continuous beam from Python and times solving it in double and
+in single precision; those two numbers set the automatic precision threshold.
 
 Full-screen benchmark samples now establish an untimed baseline and verify that
 every timed swap sends all 320 rows. Each timing is paired with its own row

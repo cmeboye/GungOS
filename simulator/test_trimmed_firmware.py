@@ -25,7 +25,7 @@ from picoware.system.usb import USBKeyboard, USBMedia
 import picoware_desktop
 
 assert picoware_desktop.native_modules() == (
-    "auto_complete", "font", "lcd", "picoware_pcm", "response", "ulab", "vector", "vt")
+    "auto_complete", "font", "lcd", "picoware_pcm", "picosolve", "response", "ulab", "vector", "vt")
 
 # Retired Picoware features and other boards must stay out of the firmware tree.
 for name in ("picoware.engine", "picoware.system.gameboy", "picoware.system.audio",

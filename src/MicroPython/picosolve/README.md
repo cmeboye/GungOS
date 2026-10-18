@@ -24,17 +24,72 @@ curves. Stiffness matrices are never exposed.
 ```
 core/   pure C, no MicroPython headers
   ps_base.h     status codes, the shared progress/cancel block, PS_HOT
-  skyline.*     symmetric skyline storage, LDLᵀ factorization, solve
+  skyline.*     symmetric skyline storage, LDLᵀ factorization and solve, in
+                double or single precision from one template (skyline_real.h)
+  dofmap.*      equation numbering for any element type: DOF marks, node
+                reordering, skyline profile
   order.*       reverse Cuthill–McKee node ordering
   dense.*       hinge condensation and recovery on element systems
 fe/     element library and models
   beam.*        Euler–Bernoulli element: stiffness, consistent loads, exact sections
   model.*       beam model: build, prepare, solve, results
+mp/     the MicroPython binding (the only part with MicroPython headers)
 tests/  host tests (tests/run-tests.sh)
 ```
 
-The MicroPython binding (`mp/`) and its build files come next. It is the
-only part that will include MicroPython headers.
+The firmware builds it through `micropython.cmake` (kernel at `-O2`); the
+simulator compiles the same sources (`Desktop/modules/picosolve`).
+
+## From Python
+
+```python
+import picosolve as ps
+b = ps.Beam(nodes=5, elements=4, sections=1, loads=8, cases=1)
+b.section(0, 210e9, 8.36e-5)                 # E (Pa), I (m^4)
+for i in range(5):
+    b.node(i, 1.5 * i)                       # x (m)
+for e in range(4):
+    b.element(e, e, e + 1)                   # section=0, releases=0
+    b.line(0, e, 0.0, 1.5, -5e3)             # case, element, a, b, w1 (N/m)
+b.support(0, ps.UY)
+b.support(4, ps.UY)
+b.solve()                                    # ps.AUTO, ps.DOUBLE or ps.SINGLE
+b.reaction(0)                                # (fy, mz) in N, N·m
+b.at(1, 0.75)                                # (shear, moment, slope, deflection)
+b.diagram(1, 64, None, moments, None, None)  # fill array('f') buffers
+```
+
+Other loads: `point(case, e, a, P)`, `moment(case, e, a, M)`,
+`node_load(case, node, ps.UY or ps.RZ, value)`, `settle(case, node, flag,
+delta)`. Hinges: `element(e, a, b, section, ps.RELEASE_START | ps.RELEASE_END)`.
+Springs: `spring(node, flag, k)`. Problems raise `picosolve.SolveError`
+naming the node, element, load or section at fault.
+
+To keep the interface responsive, solve on the second core:
+
+```python
+b.begin()                                    # checks and allocates here
+_thread.start_new_thread(b.compute, ())      # touches no Python objects
+while b.busy(): show(b.progress())           # (done, total); b.cancel()
+while not b.finish():                        # False: retrying in double
+    _thread.start_new_thread(b.compute, ())
+```
+
+`b.info()` reports equations, stored values, the precision used, refinement
+steps, the smallest pivot ratio and memory; `b.free()` releases the memory.
+
+## Precision
+
+`ps.AUTO` factors in single precision when the average skyline column is at
+least 16 values high, and in double otherwise. Single precision halves the
+matrix and uses the M33's hardware floating point; iterative refinement with
+double-precision residuals (computed element by element) recovers full
+accuracy, typically in 4 steps. For narrow bands such as beams the extra
+refinement vectors outweigh the halved matrix, so double is used. If
+refinement converges too slowly (a badly conditioned model) the solve is
+repeated in double automatically. Only the double-precision factorization
+decides that a structure is a mechanism. The threshold is to be calibrated
+with the device benchmark.
 
 ## Memory
 
@@ -84,7 +139,8 @@ codes, and the binding raises them as Python exceptions on core 0.
 4. Every load case is solved against the same factorization, so extra cases
    cost only two triangular solves each. Later, influence lines will use the
    same mechanism.
-5. Results are computed on demand from the stored displacements:
+5. Results are computed on demand from the stored displacements, using lookups
+   built once at prepare (loads by element and by node, element ends by node):
    - hinge rotations are recovered from element equilibrium;
    - end forces = k·u − f (in double precision);
    - reactions come from node equilibrium.
@@ -143,30 +199,11 @@ The tests are also run under AddressSanitizer and UBSan.
 
 ## Next
 
-0. Refactor before the binding, while only beams exist (the host tests
-   guard it):
-   - extract a generic DOF map (numbering, profile, ordering) and an element
-     function table from `fe/model.c`, so frames, trusses, thermal links and
-     circuit stamps can plug in;
-   - put the solvers behind one interface, with the stored precision as a
-     parameter;
-   - add float32 skyline storage with double-precision iterative refinement
-     (residual computed element by element). The M33 FPU is single precision
-     only, so this should be faster and halve memory. Fall back to double
-     storage when refinement stalls;
-   - add a results cache built once after the solve: end forces per element
-     and case, loads indexed by element, elements indexed by node, and
-     whole-buffer diagram sampling. Today's on-demand queries are O(n²) over
-     a full model;
-   - later solvers: banded/dense LU with pivoting, real and complex (circuits);
-     matrix-free preconditioned CG (2-D thermal grids); time-stepping, Newton
-     and eigen drivers.
-1. `mp/` binding: a `picosolve.Beam` object, the three blocks on the heap, a
-   blocking `solve()` plus `start()` on core 1 with progress and cancel,
-   status codes mapped to messages that name the node or element. Build it
-   into the firmware with `-O2` for these files, as the rp2 port already does
-   for its float libraries, and into the desktop simulator from the same
-   source.
-2. A benchmark on the device.
-3. The beam suite in picoLAB: model editor, diagrams, max/min values,
+1. Calibrate the AUTO precision threshold with the device benchmark.
+2. The beam suite in picoLAB: model editor, diagrams, max/min values,
    load cases.
+3. 2-D frames on the same DOF map (3 DOF per node, element rotation), then
+   trusses.
+4. Later solvers: banded/dense LU with pivoting, real and complex (circuits);
+   matrix-free preconditioned CG (2-D thermal grids); time-stepping, Newton
+   and eigen drivers.

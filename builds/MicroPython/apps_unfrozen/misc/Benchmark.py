@@ -236,6 +236,45 @@ def _stage_3d(vm):
             _restore_mode(vm)
 
 
+def _stage_beam(vm):
+    """The built-in beam solver: building from Python, solving, diagrams."""
+    try:
+        import picosolve as ps
+    except ImportError:
+        _record('Beam solver', 'not in this firmware', '')
+        return
+    import gc
+    from array import array
+    spans = 600
+    gc.collect()
+    start = ticks_us()
+    b = ps.Beam(spans + 1, spans, loads=spans)
+    b.section(0, 2.1e11, 8.36e-5)
+    for i in range(spans + 1):
+        b.node(i, float(i))
+    for e in range(spans):
+        b.element(e, e, e + 1)
+        b.line(0, e, 0.0, 1.0, -5e3)
+    for i in range(0, spans + 1, 4):
+        b.support(i, ps.UY)
+    _record('Beam model built from Python, %d elements' % spans, ticks_diff(ticks_us(), start) / 1000, 'ms')
+    try:
+        for name, precision in (('double', ps.DOUBLE), ('single', ps.SINGLE)):
+            took = _best(lambda: b.solve(precision), 3)
+            info = b.info()
+            _record('Beam solve, %s' % name, took / 1000,
+                    'ms (%d equations, %d refinements)' % (info['equations'], info['refinements']))
+        moments = array('f', [0.0] * 64)
+
+        def diagrams():
+            for e in range(spans):
+                b.diagram(e, 64, None, moments, None, None)
+        _record('Moment diagrams, %d elements x 64 points' % spans, _best(diagrams, 1) / 1000, 'ms')
+        _record('Beam model memory', b.info()['bytes'] // 1024, 'KB')
+    finally:
+        b.free()
+
+
 def _stage_compute(vm):
     from array import array
     n = 2000
@@ -312,6 +351,7 @@ STAGES = (
     ('PSRAM screen (default)', lambda vm: _stage_mode(vm, False)),
     ('12-bit colour (experimental)', _stage_panel_start),
     ('3-D plot frame', _stage_3d),
+    ('Beam solver', _stage_beam),
     ('Python versus C', _stage_compute),
 )
 

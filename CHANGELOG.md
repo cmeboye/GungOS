@@ -40,6 +40,13 @@
   Python renderer's image except that colours come from a 256-step table;
   firmware without it falls back to Python. The benchmark times one frame
   both ways.
+- The built-in `picosolve` module (beam solver) is now part of the firmware:
+  `picosolve.Beam` with supports, springs, hinges, settlement, point, moment
+  and line loads, load cases, reactions, end forces, exact sections and
+  diagram buffers. It can solve on the second core with progress and cancel,
+  and picks single precision with refinement or double automatically.
+  Problems raise `picosolve.SolveError` naming what is at fault. The
+  benchmark times a 600-element beam in both precisions.
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer
@@ -59,8 +66,7 @@
 These changes require a new UF2 and matching SD apps.
 
 The final released v1.1 desktop, logo, status icons, themes and 238 × 238
-widget canvas are retained. Release version remains 1.1. `picosolve` remains
-host-tested source; its MicroPython binding is not part of this firmware.
+widget canvas are retained. Release version remains 1.1.
 
 ## v1.1 — 2026-10-17
 

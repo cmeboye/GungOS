@@ -59,6 +59,7 @@ report=vm.storage.read(bench.RESULT_PATH)
 assert 'Status: complete' in report and 'disabled by default' in report
 assert 'Free heap, SRAM screen' in report and 'Free heap, PSRAM screen' in report
 assert 'Python / C speed ratio' in report
+assert 'Beam solve, single' in report and 'Moment diagrams' in report
 assert '3-D frame, C, ' in report and '3-D frame speed-up' in report and '3-D frame screen: SRAM' in report
 assert vm.draw.mode==vm.draw.MODE_PSRAM, 'The 3-D stage must restore the screen mode'
 print('PASS: default run skips experimental format and saves complete memory/timing results')
