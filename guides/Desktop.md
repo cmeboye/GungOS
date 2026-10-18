@@ -16,7 +16,7 @@ rollback.
 | Area | Position (x, y) | Size (width × height) |
 | --- | --- | --- |
 | Status bar | 0, 0 | 320 × 16 |
-| Logo | 8, 20 | 78 × 20 |
+| Logo | 4, 20 | 84 × 19 |
 | System summary | 93, 17 | 226 × 25 |
 | Category bar | 1, 43 | 318 × 18 |
 | Menu panel | 1, 62 | 77 × 240 |
@@ -26,12 +26,18 @@ rollback.
 
 Coordinates count pixels from the top left. Panel sizes include their one-pixel
 outlines. The native widget fills the square interior. Menu items always use the
-smallest font; longer names wrap at word boundaries to remain readable. The logo is packed from `assets/gungOS_logo_large.png` without resizing, using
-`python3 tools/convert-dashboard-assets.py` (`--check` verifies the result). The
-large source artwork keeps its native resolution and is centered between the
-left edge and system summary, one pixel above its source position. Category/footer bars and body panels
-have a one-pixel outer margin; a one-pixel gap separates the menu, widget and
-bars. The small alternative is kept in `assets/gungOS_logo_small.png`.
+smallest font; longer names wrap at word boundaries to remain readable. The logo is packed from `assets/logos/gungOS_large.png` without resizing, using
+`python3 tools/convert-dashboard-assets.py` (`--check` verifies all four logos).
+The native artwork is centered between the left edge and system summary.
+Category/footer bars and body panels have a one-pixel outer margin; a one-pixel
+gap separates the menu, widget and bars.
+
+Menu headers use `assets/logos/gungOS_small.png`, `picodesk.png` and `picolab.png`.
+The red lettering and underline in the PicoDESK/PicoLAB PNGs follow the current
+system accent; their white pixels and the GungOS brand colours are preserved.
+Transparent pixels use the destination panel colour. Old artwork is archived in
+`assets/legacy/`.
+
 
 ## Navigation
 

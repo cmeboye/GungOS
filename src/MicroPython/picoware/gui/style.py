@@ -62,8 +62,16 @@ def chrome(draw, subtitle, hint1, hint2, brand='PicoLAB', palette=None):
     draw._fill_rectangle(0, 0, width, HEAD_HEIGHT, p.PANEL)
     draw._fill_rectangle(0, 0, width, 2, p.ACCENT)
     from picoware.system.font import FONT_SMALL
-    text(draw, 7, 7, brand, p.ACCENT)
-    offset = 7+draw.len(brand, FONT_SMALL)+8
+    names = {'GungOS': 'gungOS_small', 'PicoDESK': 'picodesk', 'PicoLAB': 'picolab'}
+    name = names.get(brand)
+    if name is not None:
+        from picoware.assets.logos import LOGOS, paint
+        logo_width, logo_height = LOGOS[name][:2]
+        paint(draw, name, 7, 2+(HEAD_HEIGHT-2-logo_height)//2, p.PANEL, p.ACCENT)
+        offset = 7+logo_width+8
+    else:
+        text(draw, 7, 7, brand, p.ACCENT)
+        offset = 7+draw.len(brand, FONT_SMALL)+8
     text(draw, offset, 7, subtitle[:columns(draw, width-offset-6)],p.TEXT)
     bottom = height-FOOT_HEIGHT
     draw._fill_rectangle(0, bottom, width, FOOT_HEIGHT, p.PANEL)

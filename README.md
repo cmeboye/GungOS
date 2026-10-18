@@ -3,7 +3,7 @@
 A handheld engineering computer for **PicoCalc with Raspberry Pi Pico 2 W**.
 By Cem Gungor, based on [Picoware by jblanked](https://github.com/jblanked/Picoware).
 
-![GungOS desktop in the simulator](assets/desktop.png)
+![GungOS desktop in the simulator](assets/legacy/desktop.png)
 
 *Simulator preview; resource figures reflect the host.*
 

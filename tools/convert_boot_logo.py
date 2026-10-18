@@ -1,6 +1,6 @@
 """Convert a 320x320 PNG to an embedded RGB332 logo with transparent RLE runs.
 
-Run: python3 tools/convert_boot_logo.py assets/testimg.png
+Run: python3 tools/convert_boot_logo.py assets/legacy/testimg.png
 Requires Pillow on the build computer; the firmware needs no PNG decoder.
 """
 import argparse
