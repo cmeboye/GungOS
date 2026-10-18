@@ -8,6 +8,7 @@ GPL notice does not override a component's own license.
 |---|---|
 | Picoware | `src/MicroPython/`; original copyright headers; root GPLv3 license |
 | MicroPython | `vendor/micropython/LICENSE` (MIT), `ACKNOWLEDGEMENTS` and component notices |
+| Lenia Orbium seed and parameters | Bert Chan (2018), MIT; `guides/Lenia-LICENSE.txt`; [original dataset](https://github.com/Chakazul/Lenia/blob/master/Python/animals.json), preset O2u |
 | ulab | `src/MicroPython/ulab/upstream/LICENSE` (MIT), `source.json` |
 | Pico SDK | `vendor/micropython/lib/pico-sdk/LICENSE.TXT`; component SPDX headers |
 | picotool | `vendor/picotool/LICENSE.TXT`; bundled component notices such as clipp |

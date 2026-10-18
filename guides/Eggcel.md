@@ -246,3 +246,29 @@ sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w \
 Use F1 → Load example to populate the grid. The simulator checks navigation,
 rendering and calculations; physical Pico testing is still needed for timing
 and available heap on large workbooks.
+
+
+## Planned: larger workbooks and CSV browsing
+
+The current 200-row, 512-populated-cell, 16 KiB cell-text and 48 KiB file
+limits are software safeguards, not measured Pico hardware ceilings. An
+oversized CSV is rejected with an error; the current workbook is retained.
+Import does not currently truncate, sample or page through the source file.
+
+For a following update:
+
+- Separate large CSV inspection from loading a complete editable workbook.
+  Add a streaming SD-backed viewer with a bounded row window, navigation and
+  explicit row/column selection for import. Preserve the original CSV.
+- Offer deliberate sampling for large-data plots, showing the chosen range
+  and sampling policy instead of silently discarding data.
+- Evaluate a larger logical row range independently from the populated-cell,
+  text, file, clipboard, formula-work and chart budgets. Sparse empty rows are
+  cheap; populated cells, caches, undo state and calculation work use heap.
+- Replace whole-file import reads with bounded parsing before substantially
+  increasing supported CSV sizes. Keep cancellation and transactional errors.
+- Measure peak heap, import time, recalculation and keyboard responsiveness
+  on physical PicoCalc hardware before choosing new defaults. Update address
+  validation, limit messages, chart limits and regression coverage together.
+
+These are planned SD application changes. No limits are raised by this note.

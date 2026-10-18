@@ -151,6 +151,9 @@ using the shared scientific editor and evaluator. Its `.mpy` is packaged in
 `builds/MicroPython/engineering-preview.zip` alongside the shared `engtools`
 modules. The full-screen calculator remains available through PicoLAB.
 
+Lenia also supports native widget sizing, editable simulation parameters and a
+random seed control; see [Lenia](Lenia.md).
+
 ## Preview and firmware
 
 ```sh

@@ -22,6 +22,16 @@ Graph3D. Space pauses/resumes, F5 resets and Back/Escape exits.
 The display is an animated numerical demonstration, not a precision simulation
 or a measured physical signal.
 
+## Lenia screensaver and widget
+
+Open **Apps → Misc → Screensavers → Lenia**, or select Lenia in
+**System → Settings → Screensaver**. It is a native-size single-channel Lenia
+demo using ulab FFTs, with an Orbium preset, editable rules and performance
+settings, and independent pause/single-step controls. F2 opens Settings, F3
+randomizes the seed, F5 resets, and F9 opens scrollable help. The desktop's
+first F3 gives widget focus; subsequent F3 presses randomize it. See
+[Lenia.md](Lenia.md) for parameters, memory bounds and installation notes.
+
 ## Tetris
 
 Open **Apps → Games → Tetris**, or launch the simulator with `--game Tetris`.

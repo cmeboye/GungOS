@@ -576,7 +576,7 @@ def _run_selected_profile_check(opts):
         "test_picolab_hierarchy.py", "test_beamlab.py", "test_beamlab_ui.py", "test_beam_eggcel_csv.py",
         "test_calculator.py",
         "test_calculator_modes.py",
-        "test_release_demos.py", "test_lorenz_settings.py",
+        "test_release_demos.py", "test_lorenz_settings.py", "test_lenia.py",
         "test_tetris_audio.py", "test_tetris_ui.py", "test_tetris_scores.py",
         "test_ulab.py",
         "test_trimmed_firmware.py", "test_menu.py", "test_menu_headers.py", "test_home_visual.py",

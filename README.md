@@ -13,7 +13,7 @@ keyboard-driven applications on a 320 × 320 display.
 - **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint drawing.
 - **PicoLAB:** scientific calculator, statistics, solvers, complex/Base-N/matrix modes,
   Graph and Graph3D, backed by a selected float32 ulab build.
-- **Games and Misc:** Tetris, a Lorenz screensaver and calculator widget.
+- **Games and Misc:** Tetris, Lorenz and Lenia screensavers, and a calculator widget.
 - **System and connectivity:** SD file manager, PicoIDE, Wi-Fi, Bluetooth and USB.
 
 The latest Eggcel sources include Range→Go, fill down/right, one-step undo,
@@ -63,7 +63,7 @@ headless checks use `--headless --network offline --audio silent`.
 Escape returns/cancels. Back and Del erase before the cursor. F6–F10 use
 Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot from any screen. Menus and app chrome follow the system accent.
 
-[Desktop](guides/Desktop.md) · [Menu headers](guides/MenuHeaders.md) · [Themes](guides/Themes.md) · [Lorenz](guides/Lorenz.md) · [Eggcel](guides/Eggcel.md) ·
+[Desktop](guides/Desktop.md) · [Menu headers](guides/MenuHeaders.md) · [Themes](guides/Themes.md) · [Lorenz](guides/Lorenz.md) · [Lenia](guides/Lenia.md) · [Eggcel](guides/Eggcel.md) ·
 [PicoLAB](guides/PicoLAB.md) · [Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
 [Graph3D](guides/Graph3D.md) · [Tetris](guides/Tetris.md) · [Audio](guides/TetrisAudio.md) ·
 [Connectivity review](guides/Connectivity.md) · [Comms and service independence](guides/Comms.md)
