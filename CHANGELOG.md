@@ -53,6 +53,13 @@
   identical to the Python builders; implicit surfaces build 2–4× faster in
   the simulator, implicit curves 1.1–1.6× (their remaining time is formula
   evaluation).
+- Formula compiler: `picosolve.Formula` compiles a plot formula once and
+  evaluates it in C, a row or plane at a time. Graph and Graph3D use it for
+  every curve, inequality, parametric pair and surface; results are
+  bit-identical to Python's `eval` (60,000 random evaluations, and every test
+  plot pixel for pixel), and a formula it cannot match exactly keeps using
+  `eval`. In the simulator, formulas evaluate 23–74× faster and implicit plots
+  draw 4–7× faster. The benchmark has a "Formula compiler" step.
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer

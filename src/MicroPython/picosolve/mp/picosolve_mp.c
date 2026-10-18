@@ -12,6 +12,11 @@
  *   b.end_forces(e, case=0); b.at(e, x, case=0) -> (shear, moment, slope, deflection)
  *   b.diagram(e, samples, shear, moment, slope, deflection, case=0)
  *
+ *   f = ps.Formula("sin(x)*cos(y)", ("x", "y"), constants={"pi": math.pi})
+ *   f(1.0, 2.0) -> float, or None where Python would raise or not be finite
+ *   f.map(out, xs, 0.5)      # array('f') inputs or scalars -> results kept
+ *   f.points(out, xyz, n)    # n interleaved points
+ *
  * Units are SI. Problems in the model raise picosolve.SolveError with a
  * message naming the node, element, load or section at fault.
  *
@@ -28,6 +33,9 @@
 #include "../fe/model.h"
 #include "../geom/mesh.h"
 #include "../geom/contour.h"
+#include "../expr/formula.h"
+#include <math.h>
+#include "py/parsenum.h"
 
 MP_DEFINE_EXCEPTION(SolveError, ValueError)
 
@@ -694,6 +702,177 @@ static mp_obj_t geom_contour_segments(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(geom_contour_segments_obj, 8, 8, geom_contour_segments);
 
+/* ------------------------------------------------------------------------ */
+/* Formulas: compiled once, evaluated at many points (see expr/formula.h)    */
+/* ------------------------------------------------------------------------ */
+
+#define FORMULA_MAX_NAMES 16
+
+typedef struct
+{
+    mp_obj_base_t base;
+    float limit;
+    void *scratch;
+    psf_program program;
+} formula_obj_t;
+
+const mp_obj_type_t picosolve_formula_type;
+
+/* Number literals become floats exactly as the interpreter's lexer makes them. */
+static float formula_number(const char *text, int length, bool integer, void *context)
+{
+    (void)context;
+    mp_obj_t v = integer ? mp_parse_num_integer(text, (size_t)length, 10, NULL)
+                         : mp_parse_num_float(text, (size_t)length, false, NULL);
+    return (float)mp_obj_get_float(v);
+}
+
+/* A dict of names: keys into names[], values as floats or strings. */
+static int formula_names(mp_obj_t dict, const char **names, float *values, const char **texts)
+{
+    if (dict == mp_const_none)
+        return 0;
+    mp_map_t *map = mp_obj_dict_get_map(dict);
+    int count = 0;
+    for (size_t i = 0; i < map->alloc; i++)
+    {
+        if (!mp_map_slot_is_filled(map, i))
+            continue;
+        if (count >= FORMULA_MAX_NAMES)
+            mp_raise_ValueError(MP_ERROR_TEXT("too many names"));
+        names[count] = mp_obj_str_get_str(map->table[i].key);
+        if (values)
+            values[count] = (float)mp_obj_get_float(map->table[i].value);
+        else
+            texts[count] = mp_obj_str_get_str(map->table[i].value);
+        count++;
+    }
+    return count;
+}
+
+static mp_obj_t formula_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args)
+{
+    enum { ARG_text, ARG_variables, ARG_constants, ARG_derived, ARG_limit };
+    static const mp_arg_t allowed[] = {
+        {MP_QSTR_text, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+        {MP_QSTR_variables, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+        {MP_QSTR_constants, MP_ARG_OBJ, {.u_obj = mp_const_none}},
+        {MP_QSTR_derived, MP_ARG_OBJ, {.u_obj = mp_const_none}},
+        {MP_QSTR_limit, MP_ARG_OBJ, {.u_obj = mp_const_none}},
+    };
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed)];
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed), allowed, args);
+
+    size_t length;
+    const char *text = mp_obj_str_get_data(args[ARG_text].u_obj, &length);
+    size_t variable_count;
+    mp_obj_t *variable_objs;
+    mp_obj_get_array(args[ARG_variables].u_obj, &variable_count, &variable_objs);
+    if (variable_count > PSF_MAX_VARIABLES)
+        mp_raise_ValueError(MP_ERROR_TEXT("too many variables"));
+    const char *variables[PSF_MAX_VARIABLES];
+    for (size_t i = 0; i < variable_count; i++)
+        variables[i] = mp_obj_str_get_str(variable_objs[i]);
+    const char *constant_names[FORMULA_MAX_NAMES], *derived_names[FORMULA_MAX_NAMES];
+    const char *derived_texts[FORMULA_MAX_NAMES];
+    float constant_values[FORMULA_MAX_NAMES];
+
+    psf_options o = {0};
+    o.variables = variables;
+    o.variable_count = (int)variable_count;
+    o.constant_names = constant_names;
+    o.constant_values = constant_values;
+    o.constant_count = formula_names(args[ARG_constants].u_obj, constant_names, constant_values, NULL);
+    o.derived_names = derived_names;
+    o.derived_texts = derived_texts;
+    o.derived_count = formula_names(args[ARG_derived].u_obj, derived_names, NULL, derived_texts);
+    o.number = formula_number;
+    o.pow_fix_nan = MICROPY_PY_MATH_POW_FIX_NAN;
+    o.atan2_fix_infnan = MICROPY_PY_MATH_ATAN2_FIX_INFNAN;
+
+    formula_obj_t *f = mp_obj_malloc(formula_obj_t, type);
+    f->limit = args[ARG_limit].u_obj == mp_const_none ? INFINITY : (float)mp_obj_get_float(args[ARG_limit].u_obj);
+    int at = 0;
+    const psf_status status = psf_compile(&f->program, text, (int)length, &o, &at);
+    if (status != PSF_OK)
+    {
+        static const char *const reasons[] = {"", "syntax", "name", "arguments", "unsupported", "too long"};
+        mp_raise_msg_varg(&mp_type_ValueError, MP_ERROR_TEXT("formula not compiled (%s at %d)"),
+                          reasons[status], at);
+    }
+    f->scratch = m_new(uint8_t, psf_scratch_bytes(&f->program));
+    return MP_OBJ_FROM_PTR(f);
+}
+
+/* f(*values) -> float, or None when undefined there. */
+static mp_obj_t formula_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args)
+{
+    formula_obj_t *f = MP_OBJ_TO_PTR(self_in);
+    mp_arg_check_num(n_args, n_kw, f->program.variable_count, f->program.variable_count, false);
+    psf_input inputs[PSF_MAX_VARIABLES];
+    for (size_t i = 0; i < n_args; i++)
+        inputs[i] = (psf_input){NULL, 0, (float)mp_obj_get_float(args[i])};
+    float out;
+    if (!psf_eval(&f->program, inputs, 1, f->limit, &out, f->scratch))
+        return mp_const_none;
+    return mp_obj_new_float(out);
+}
+
+/* map(out, *inputs) -> results kept; each input is array('f') or a number. */
+static mp_obj_t formula_map(size_t n_args, const mp_obj_t *args)
+{
+    formula_obj_t *f = MP_OBJ_TO_PTR(args[0]);
+    if (n_args != 2 + (size_t)f->program.variable_count)
+        mp_raise_TypeError(MP_ERROR_TEXT("map(out, one input per variable)"));
+    mp_buffer_info_t out_info;
+    mp_get_buffer_raise(args[1], &out_info, MP_BUFFER_WRITE);
+    const size_t count = out_info.len / sizeof(float);
+    float *out = floats(args[1], count, true, "out");
+    psf_input inputs[PSF_MAX_VARIABLES];
+    for (size_t i = 0; i < (size_t)f->program.variable_count; i++)
+    {
+        mp_obj_t a = args[2 + i];
+        if (mp_obj_is_float(a) || mp_obj_is_int(a))
+            inputs[i] = (psf_input){NULL, 0, (float)mp_obj_get_float(a)};
+        else
+            inputs[i] = (psf_input){floats(a, count, false, "input"), 1, 0.0f};
+    }
+    return mp_obj_new_int(psf_eval(&f->program, inputs, (int)count, f->limit, out, f->scratch));
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(formula_map_obj, 2, 2 + PSF_MAX_VARIABLES, formula_map);
+
+/* points(out, flat, count) -> results kept; flat holds count interleaved points. */
+static mp_obj_t formula_points(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    formula_obj_t *f = MP_OBJ_TO_PTR(args[0]);
+    const mp_int_t count = mp_obj_get_int(args[3]);
+    if (count < 0)
+        mp_raise_ValueError(MP_ERROR_TEXT("count must not be negative"));
+    const int stride = f->program.variable_count;
+    float *out = floats(args[1], (size_t)count, true, "out");
+    const float *flat = floats(args[2], (size_t)count * (size_t)stride, false, "points");
+    psf_input inputs[PSF_MAX_VARIABLES];
+    for (int i = 0; i < stride; i++)
+        inputs[i] = (psf_input){flat + i, stride, 0.0f};
+    return mp_obj_new_int(psf_eval(&f->program, inputs, (int)count, f->limit, out, f->scratch));
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(formula_points_obj, 4, 4, formula_points);
+
+static const mp_rom_map_elem_t formula_locals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_map), MP_ROM_PTR(&formula_map_obj)},
+    {MP_ROM_QSTR(MP_QSTR_points), MP_ROM_PTR(&formula_points_obj)},
+};
+static MP_DEFINE_CONST_DICT(formula_locals, formula_locals_table);
+
+MP_DEFINE_CONST_OBJ_TYPE(
+    picosolve_formula_type,
+    MP_QSTR_Formula,
+    MP_TYPE_FLAG_NONE,
+    make_new, formula_make_new,
+    call, formula_call,
+    locals_dict, &formula_locals);
+
 static const mp_rom_map_elem_t picosolve_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_grid_strip), MP_ROM_PTR(&geom_grid_strip_obj)},
     {MP_ROM_QSTR(MP_QSTR_contour_queries), MP_ROM_PTR(&geom_contour_queries_obj)},
@@ -701,6 +880,7 @@ static const mp_rom_map_elem_t picosolve_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_iso_slab), MP_ROM_PTR(&geom_iso_slab_obj)},
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_picosolve)},
     {MP_ROM_QSTR(MP_QSTR_Beam), MP_ROM_PTR(&picosolve_beam_type)},
+    {MP_ROM_QSTR(MP_QSTR_Formula), MP_ROM_PTR(&picosolve_formula_type)},
     {MP_ROM_QSTR(MP_QSTR_SolveError), MP_ROM_PTR(&mp_type_SolveError)},
     {MP_ROM_QSTR(MP_QSTR_UY), MP_ROM_INT(PS_UY)},
     {MP_ROM_QSTR(MP_QSTR_RZ), MP_ROM_INT(PS_RZ)},

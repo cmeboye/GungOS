@@ -37,6 +37,9 @@ geom/   geometry for plots and contour views
   mesh.*        triangles from sampled surfaces and implicit isosurfaces
                 (marching tetrahedra)
   contour.*     contour segments of a sampled 2-D field (marching squares)
+expr/   formulas
+  formula.*     compiles a Python arithmetic expression once, evaluates it at
+                many points; results bit-identical to MicroPython's eval
 mp/     the MicroPython binding (the only part with MicroPython headers)
 tests/  host tests (tests/run-tests.sh)
 ```
@@ -87,6 +90,21 @@ triangle's centre for an optional pole check; `contour_queries` and
 `contour_segments` trace f = 0 across a row of cells, with or without that
 check. Graph3D and Graph use them and match their earlier Python output
 exactly; they are also the basis for isotherm and contour plots.
+
+Formulas: `Formula(text, variables, constants=None, derived=None, limit=None)`
+compiles a Python arithmetic expression (numbers, `+ - * / // % **`, the math
+functions the plot tools offer, `min`, `max`, `abs`, `round`, `int`, `float`,
+`pow`) once. `f(x, y)` evaluates one point and returns a float, or None where
+Python would raise or the result is not finite or exceeds `limit`.
+`f.map(out, xs, 0.5)` fills `out` from `array('f')` inputs or numbers and
+returns how many results were kept (NaN marks the rest); `f.points(out, xyz,
+n)` takes n interleaved points. `derived={'r': 'sqrt(x*x+y*y+z*z)'}` defines a
+name by another expression. Results match MicroPython's own evaluation bit for
+bit; a formula that cannot be matched exactly (for example `abs()` of a power
+that may be complex) raises ValueError, and the caller keeps using `eval`.
+The two remaining differences are documented in `expr/formula.h`: whole
+numbers beyond 2^24 and, in rare min/max mixes of whole and fractional
+numbers, the sign of a zero result.
 
 `b.info()` reports equations, stored values, the precision used, refinement
 steps, the smallest pivot ratio and memory; `b.free()` releases the memory.
@@ -217,6 +235,8 @@ The tests are also run under AddressSanitizer and UBSan.
    load cases.
 3. 2-D frames on the same DOF map (3 DOF per node, element rotation), then
    trusses.
-4. Later solvers: banded/dense LU with pivoting, real and complex (circuits);
+4. Formulas as solver inputs: load functions w(x) and other user-written
+   data for the suites, through `Formula`.
+5. Later solvers: banded/dense LU with pivoting, real and complex (circuits);
    matrix-free preconditioned CG (2-D thermal grids); time-stepping, Newton
    and eigen drivers.

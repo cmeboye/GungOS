@@ -318,7 +318,29 @@ def _compile_arithmetic(text):
             i = end
         elif c in ' +-*/%(),\t': i += 1
         else: raise ValueError('Unsupported character: '+c)
-    return compile(text,'<surface>','eval')
+    code = compile(text,'<surface>','eval')
+    return _formula(text) or code
+
+
+# Use the firmware's formula compiler when present (tests switch it off).
+NATIVE_FORMULA = True
+_CODE = type(compile('0','<t>','eval'))
+
+
+def _formula(text):
+    """text compiled to C (picosolve.Formula), or None to keep using eval.
+
+    Its results are identical to eval's through _field, including r and the
+    1e12 limit; None also covers older firmware and the rare formula the
+    compiler cannot reproduce exactly.
+    """
+    if not NATIVE_FORMULA:
+        return None
+    try:
+        from picosolve import Formula
+        return Formula(text, ('x','y','z'), {'pi':pi,'e':e}, {'r':'sqrt(x*x+y*y+z*z)'}, 1e12)
+    except (ImportError, ValueError):
+        return None
 
 
 def _surface_expression(text):
@@ -350,6 +372,8 @@ def _finite(value):
 
 
 def _field(code, env, x, y, z=0):
+    if type(code) is not _CODE:
+        return code(x, y, z)
     env['x'],env['y'],env['z'] = x,y,z
     env['r'] = sqrt(x*x+y*y+z*z)
     try:
@@ -440,22 +464,34 @@ def _sample_job(native=True):
     n,r=_grid_n,_range
     step=2*r/(n-1)
     coords=[-r+i*step for i in range(n)]
+    xs=array('f',coords)
+    plane=array('f',bytes(4*n))
     if geom:
         # Formulas are evaluated here; the C code builds the triangles.
-        xs=array('f',coords)
         strip=array('f',[0.0]*(18*(n-1)))
         tris,centres,limits=array('f',[0.0]*(9*256)),array('f',[0.0]*(3*256)),array('f',[0.0]*256)
+        middles=array('f',[0.0]*256)
     for surface,(implicit,code) in enumerate(specs):
         env=dict(_SAFE)
+        native=type(code) is not _CODE
         if not implicit:
             rows=[]
             for y in coords:
-                row=array('f')
-                for x in coords:
-                    z=_field(code,env,x,y)
-                    row.append(z if z is not None else float('nan'))
-                    if z is not None:
-                        _zmin,_zmax=min(_zmin,z),max(_zmax,z)
+                if native:
+                    # One call per row; NaN marks undefined points.
+                    row=array('f',bytes(4*n))
+                    code.map(row,xs,y,0.0)
+                    for z in row:
+                        if z==z:
+                            if z<_zmin:_zmin=z
+                            if z>_zmax:_zmax=z
+                else:
+                    row=array('f')
+                    for x in coords:
+                        z=_field(code,env,x,y)
+                        row.append(z if z is not None else float('nan'))
+                        if z is not None:
+                            _zmin,_zmax=min(_zmin,z),max(_zmax,z)
                 rows.append(row)
                 yield ('sampling function',len(rows),n)
             if surface==0: _zs=rows
@@ -481,18 +517,28 @@ def _sample_job(native=True):
             for k,z in enumerate(coords):
                 current=array('f')
                 for y in coords:
-                    for x in coords:
-                        value=_field(code,env,x,y,z)
-                        current.append(value if value is not None else float('nan'))
+                    if native:
+                        code.map(plane,xs,y,z)
+                        current.extend(plane)
+                    else:
+                        for x in coords:
+                            value=_field(code,env,x,y,z)
+                            current.append(value if value is not None else float('nan'))
                     yield ('sampling volume',k*n+len(current)//n,n*n)
                 if previous is not None and geom:
                     cube,cubes=0,(n-1)*(n-1)
                     while cube<cubes:
                         count,cube=geom.iso_slab(previous,current,xs,coords[k-1],z,tris,centres,limits,cube)
+                        if native: code.points(middles,centres,count)
                         for t in range(count):
                             # Avoid joining sign changes across undefined poles.
-                            middle=_field(code,env,centres[3*t],centres[3*t+1],centres[3*t+2])
-                            if middle is None or abs(middle)>limits[t]: continue
+                            if native:
+                                middle=middles[t]
+                                if middle!=middle: continue
+                            else:
+                                middle=_field(code,env,centres[3*t],centres[3*t+1],centres[3*t+2])
+                                if middle is None: continue
+                            if abs(middle)>limits[t]: continue
                             if len(_mesh_colors)>=_mesh_limit:
                                 raise ValueError('Mesh too detailed; lower resolution/range')
                             o=9*t

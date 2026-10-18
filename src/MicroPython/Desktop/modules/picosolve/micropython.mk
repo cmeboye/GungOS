@@ -7,4 +7,5 @@ SRC_USERMOD += $(USERMOD_DIR)/beam.c
 SRC_USERMOD += $(USERMOD_DIR)/model.c
 SRC_USERMOD += $(USERMOD_DIR)/mesh.c
 SRC_USERMOD += $(USERMOD_DIR)/contour.c
+SRC_USERMOD += $(USERMOD_DIR)/formula.c
 SRC_USERMOD += $(USERMOD_DIR)/picosolve_mp.c

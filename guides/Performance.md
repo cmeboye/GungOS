@@ -84,9 +84,13 @@ src/MicroPython/picosolve/README.md). The benchmark's "Beam solver" step builds
 a 600-element continuous beam from Python and times solving it in double and
 in single precision; those two numbers set the automatic precision threshold.
 
-Implicit plots evaluate the user's formula in Python and build their
-geometry in C. The benchmark's 3-D step also times building an implicit
-sphere with the Python and C mesh builders.
+Plots compile the user's formula once with `picosolve.Formula` and evaluate
+whole rows in C; their geometry is built in C too. Results are bit-identical
+to Python's `eval` (tested on about 60,000 random evaluations and on every
+Graph and Graph3D test plot); a formula the compiler cannot reproduce exactly
+keeps using `eval`. The benchmark's "Formula compiler" step times three
+formulas at 4096 points both ways, and its 3-D step builds an implicit sphere
+in pure Python, with the C mesh builder, and with C mesh and formula.
 
 Full-screen benchmark samples now establish an untimed baseline and verify that
 every timed swap sends all 320 rows. Each timing is paired with its own row

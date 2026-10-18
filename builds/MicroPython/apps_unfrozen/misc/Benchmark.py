@@ -232,13 +232,20 @@ def _stage_3d(vm):
         # Building an implicit surface: formula sampling plus meshing.
         g._expr, g._expr2, g._grid_n = 'x^2+y^2+z^2=4', '', 12
 
-        def build(native):
+        def build(native, formula):
+            g.NATIVE_FORMULA = formula
             for _ in g._sample_job(native):
                 pass
-        _record('Implicit sphere mesh, Python', _best(lambda: build(False), 1) / 1000, 'ms')
-        if hasattr(g, '_geometry') and g._geometry():
-            _record('Implicit sphere mesh, C', _best(lambda: build(True), 1) / 1000,
-                    'ms (%d triangles)' % len(g._mesh_colors))
+        compiled = hasattr(g, '_formula') and g._formula('x') is not None
+        try:
+            _record('Implicit sphere mesh, Python', _best(lambda: build(False, False), 1) / 1000, 'ms')
+            if hasattr(g, '_geometry') and g._geometry():
+                _record('Implicit sphere mesh, C mesh', _best(lambda: build(True, False), 1) / 1000,
+                        'ms (%d triangles)' % len(g._mesh_colors))
+                if compiled:
+                    _record('Implicit sphere mesh, C mesh + formula', _best(lambda: build(True, True), 1) / 1000, 'ms')
+        finally:
+            g.NATIVE_FORMULA = True
     finally:
         try:
             g.stop(vm)
@@ -283,6 +290,38 @@ def _stage_beam(vm):
         _record('Beam model memory', b.info()['bytes'] // 1024, 'KB')
     finally:
         b.free()
+
+
+def _stage_formula(vm):
+    """A plot formula at 4096 points: Python's eval versus picosolve.Formula."""
+    try:
+        from picosolve import Formula
+    except ImportError:
+        _record('Formula compiler', 'not in this firmware', '')
+        return
+    import math
+    from array import array
+    n = 4096
+    xs = array('f', [-4 + 8 * i / (n - 1) for i in range(n)])
+    out = array('f', bytes(4 * n))
+    env = {'sin': math.sin, 'cos': math.cos, 'sqrt': math.sqrt, '__builtins__': {}}
+    for text in ('0.6*sin(x)*cos(y)', 'x*x+y*y-9', 'sqrt(x*x+y*y)-2'):
+        code = compile(text, '<f>', 'eval')
+        f = Formula(text, ('x', 'y'))
+
+        def python():
+            env['y'] = 0.75
+            for x in xs:
+                env['x'] = x
+                try:
+                    eval(code, env)
+                except Exception:
+                    pass
+        slow = _best(python, 1)
+        fast = _best(lambda: f.map(out, xs, 0.75), 3)
+        _record('Formula %s, 4096 points, eval' % text, slow / 1000, 'ms')
+        _record('Formula %s, 4096 points, C' % text, fast / 1000,
+                'ms (%dx)' % (slow // fast) if fast else 'ms')
 
 
 def _stage_compute(vm):
@@ -362,6 +401,7 @@ STAGES = (
     ('12-bit colour (experimental)', _stage_panel_start),
     ('3-D plot frame', _stage_3d),
     ('Beam solver', _stage_beam),
+    ('Formula compiler', _stage_formula),
     ('Python versus C', _stage_compute),
 )
 

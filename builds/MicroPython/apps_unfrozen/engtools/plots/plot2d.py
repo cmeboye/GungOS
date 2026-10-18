@@ -32,8 +32,10 @@ SAFE.update({'abs': abs, 'min': min, 'max': max, 'pow': pow,
              'round': round, 'pi': math.pi, 'e': math.e, '__builtins__': {}})
 
 
-# Use the firmware's C contour tracer when present (tests switch it off).
+# Use the firmware's C contour tracer and formula compiler when present
+# (tests switch them off).
 NATIVE_GEOMETRY = True
+NATIVE_FORMULA = True
 
 
 def _geometry():
@@ -42,6 +44,25 @@ def _geometry():
     except ImportError:
         return None
     return picosolve if hasattr(picosolve, 'contour_segments') else None
+
+
+def native_formula(text):
+    """text compiled to C (picosolve.Formula), or None to keep using eval.
+
+    Results are identical to eval's; None also covers older firmware and the
+    rare formula the compiler cannot reproduce exactly.
+    """
+    if not NATIVE_FORMULA:
+        return None
+    try:
+        from picosolve import Formula
+        return Formula(text.strip().replace('^', '**'), ('x', 'y', 't'), {'pi': math.pi, 'e': math.e})
+    except (ImportError, ValueError):
+        return None
+
+
+def compiled(text, variables):
+    return expression_code(text, variables), native_formula(text)
 
 
 def finite(value):
@@ -92,6 +113,7 @@ class Expression:
         self.relation = '='
         self.kind = 'implicit'
         self.code2 = None
+        self.formula = self.formula2 = None
         self.error = ''
         self.bbox = None
         self.valid = 0
@@ -102,8 +124,8 @@ class Expression:
                 if len(parts) != 2:
                     raise ValueError('Parametric: x(t);y(t)')
                 self.kind = 'param'
-                self.code = expression_code(parts[0], ('t',))
-                self.code2 = expression_code(parts[1], ('t',))
+                self.code, self.formula = compiled(parts[0], ('t',))
+                self.code2, self.formula2 = compiled(parts[1], ('t',))
                 return
             parts = None
             for relation in ('<=', '>=', '=', '<', '>'):
@@ -113,7 +135,7 @@ class Expression:
                     break
             if parts is None:
                 self.kind = 'y'
-                self.code = expression_code(self.text, ('x',))
+                self.code, self.formula = compiled(self.text, ('x',))
                 return
             if len(parts) != 2 or not all(part.strip() for part in parts):
                 raise ValueError('Use one =, <, >, <= or >=')
@@ -122,17 +144,22 @@ class Expression:
             if lhs in ('x', 'y'):
                 other = 'x' if lhs == 'y' else 'y'
                 try:
-                    self.code = expression_code(rhs, (other,))
+                    self.code, self.formula = compiled(rhs, (other,))
                     self.kind = lhs
                     return
                 except ValueError:
                     pass
-            self.code = expression_code('(' + lhs + ')-(' + rhs + ')', ('x', 'y'))
+            self.code, self.formula = compiled('(' + lhs + ')-(' + rhs + ')', ('x', 'y'))
         except Exception as exc:
             self.error = str(exc)
             self.code = None
 
     def value(self, x=0, y=0, t=0):
+        if self.formula is not None:
+            value = self.formula(x, y, t)
+            if value is None: self.invalid += 1
+            else: self.valid += 1
+            return value
         self.env['x'], self.env['y'], self.env['t'] = x, y, t
         try:
             value = eval(self.code, self.env)
@@ -143,6 +170,25 @@ class Expression:
             pass
         self.invalid += 1
         return None
+
+    def second(self, t):
+        """y(t) of a parametric pair; value(t=t) has set the environment."""
+        if self.formula2 is not None:
+            return self.formula2(0, 0, t)
+        try:
+            second = eval(self.code2, self.env)
+            return second if isinstance(second, (int, float)) and finite(second) else None
+        except Exception:
+            return None
+
+    def row(self, xs, y):
+        """Values at world xs (array('f')) and one y, NaN where undefined."""
+        from array import array
+        out = array('f', bytes(4 * len(xs)))
+        kept = self.formula.map(out, xs, y, 0.0)
+        self.valid += kept
+        self.invalid += len(xs) - kept
+        return out
 
     def inside(self, value):
         if value is None:
@@ -472,12 +518,7 @@ class GraphApp:
             x,y = self.xy(px,py)
             if param:
                 t = self.trange[0]+(self.trange[1]-self.trange[0])*i/n
-                value = e.value(t=t)
-                try:
-                    second = eval(e.code2,e.env)
-                    if not isinstance(second,(int,float)) or not finite(second): second = None
-                except Exception: second = None
-                x,y = value,second
+                x,y = e.value(t=t),e.second(t)
             else:
                 value = e.value(x=x,y=y)
                 if vertical: x = value
@@ -525,21 +566,30 @@ class GraphApp:
         if py >= self.bottom: return True
         py2 = min(self.bottom,py+step)
         xs = list(range(self.left,self.right,step))+[self.right]
-        def values(y):
-            out = array('f')
-            for px in xs:
-                v = e.value(*self.xy(px,y))
-                out.append(nan if v is None else v)
-            return out
+        cells = len(xs)-1
+        if e.formula is not None:
+            # Whole rows in one call; world x depends only on the column.
+            if job.get('wx') is None:
+                job['wx'] = array('f',[self.xy(px,0)[0] for px in xs])
+                job['wc'] = array('f',[self.xy((xs[col]+xs[col+1])/2,0)[0] for col in range(cells)])
+            values = lambda y: e.row(job['wx'],self.xy(0,y)[1])
+            centres = e.row(job['wc'],self.xy(0,(py+py2)/2)[1])
+        else:
+            def values(y):
+                out = array('f')
+                for px in xs:
+                    v = e.value(*self.xy(px,y))
+                    out.append(nan if v is None else v)
+                return out
+            centres = array('f')
+            for col in range(cells):
+                v = e.value(*self.xy((xs[col]+xs[col+1])/2,(py+py2)/2))
+                centres.append(nan if v is None else v)
         upper = job['gridrow'] if job['gridrow'] is not None else values(py)
         lower = values(py2)
-        cells = len(xs)-1
-        centres = array('f')
         for col in range(cells):
             x1,x2 = xs[col],xs[col+1]
-            center = e.value(*self.xy((x1+x2)/2,(py+py2)/2))
-            centres.append(nan if center is None else center)
-            if e.relation != '=' and e.inside(center):
+            if e.relation != '=' and e.inside(centres[col]):
                 color = shade_color(e.color)
                 # Sparse, stable stipple preserves overlapping inequality colors.
                 phase = self.items.index(e)%3

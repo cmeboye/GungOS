@@ -11,6 +11,7 @@ set(PICOSOLVE_KERNEL
     ${PICOSOLVE_DIR}/fe/model.c
     ${PICOSOLVE_DIR}/geom/mesh.c
     ${PICOSOLVE_DIR}/geom/contour.c
+    ${PICOSOLVE_DIR}/expr/formula.c
 )
 
 target_sources(usermod_picosolve INTERFACE
