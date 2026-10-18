@@ -221,6 +221,9 @@ class Game:
 _game=None
 def start(vm):
     global _game
+    # Borrow the faster SRAM screen while playing; returned when the view stops.
+    fast=getattr(vm,'request_fast_drawing',None)
+    if fast:fast()
     _game=Game(vm);_game.draw();return True
 def run(vm):
     if _game is not None:_game.run(vm.button)

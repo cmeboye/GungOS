@@ -1628,8 +1628,8 @@ static const mp_rom_map_elem_t lcd_mp_locals_dict_table[] = {
 #ifdef LCD_MP_SET_PANEL_BITS
     {MP_ROM_QSTR(MP_QSTR_set_panel_bits), MP_ROM_PTR(&lcd_mp_set_panel_bits_obj)},                // self.set_panel_bits(12 or 16) -> bool
 #endif
-    {MP_ROM_QSTR(MP_QSTR_MODE_PSRAM), MP_ROM_INT(0)},                                            // screen image in PSRAM
-    {MP_ROM_QSTR(MP_QSTR_MODE_SRAM), MP_ROM_INT(1)},                                             // screen image in SRAM (default)
+    {MP_ROM_QSTR(MP_QSTR_MODE_PSRAM), MP_ROM_INT(0)},                                            // screen image in PSRAM (default)
+    {MP_ROM_QSTR(MP_QSTR_MODE_SRAM), MP_ROM_INT(1)},                                             // screen image in SRAM (fast drawing)
     {MP_ROM_QSTR(MP_QSTR__text), MP_ROM_PTR(&lcd_mp_text_obj)},                                 // self._text()
     {MP_ROM_QSTR(MP_QSTR__triangle), MP_ROM_PTR(&lcd_mp_triangle_obj)},                         // self._triangle()
 

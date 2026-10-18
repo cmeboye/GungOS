@@ -15,8 +15,8 @@ extern "C"
 #define DISPLAY_HEIGHT 320
 #define PALETTE_SIZE 256
 
-// Where the screen image lives. SRAM is the default: drawing is plain memory
-// writes. PSRAM frees about 100 KB of RAM for large jobs, at slower drawing.
+// Where the screen image lives. PSRAM is the default and keeps 100 KB of RAM
+// free; SRAM draws about 2.5x faster (Settings > Fast Drawing, or per app).
 #define LCD_MODE_PSRAM 0
 #define LCD_MODE_SRAM 1
 

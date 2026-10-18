@@ -37,10 +37,29 @@ changing source checkout or compiler installation.
 5. Exercise the calculator, graphs and Lorenz widget, then restart the device
    and check settings persistence.
 
-The default image lives in on-chip SRAM and costs 102,400 bytes. PSRAM mode can
-release that buffer for larger workloads, at slower drawing speed. Drawing uses
-the shared C gfx core, and presentation converts and sends only changed rows
-through DMA. `draw.swap()` reports how many rows were sent.
+Drawing uses the shared C gfx core, and presentation converts and sends only
+changed rows through DMA. `draw.swap()` reports how many rows were sent.
+
+The screen image lives in PSRAM by default. **System > Settings > Fast Drawing**
+moves it to on-chip SRAM: drawing is about 2.5× faster, but the 102,400-byte
+image comes out of the Python heap. Animated apps borrow SRAM only while open
+by calling `view_manager.request_fast_drawing()` in `start`; the view manager
+returns it when the view stops, including after a crash. Graph3D and Tetris do
+this. If there is no free 100 KB block, the screen stays in PSRAM and the
+Settings choice applies after a restart.
+
+First device measurements (v1.1 performance test):
+
+| | SRAM screen | PSRAM screen |
+|---|---|---|
+| Free heap | 266 KB | 366 KB |
+| Whole screen sent | 23.2 ms | 25.4 ms |
+| One text line changed | 0.46 ms | measured by the next benchmark |
+| 150 shapes drawn | 11.4 ms | 27.8 ms |
+| Python loop vs ulab (C) | 88× slower | |
+
+The benchmark now measures sending and drawing in both modes, and restores
+the mode it found.
 
 Panel transfers default to 16 bits. The benchmark saves partial measurements between stages. If an enabled colour
 test stops updating the display, press N to restore 16-bit mode. An unanswered

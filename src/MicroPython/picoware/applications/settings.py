@@ -6,8 +6,9 @@ from micropython import const
 STATE_DEBUG = const(0)  # toggle (enable/disable)
 STATE_ONSCREEN_KEYBOARD = const(1)  # toggle (show/hide)
 STATE_SCREEN_BRIGHTNESS = const(2)  # choice (10 - 100)
-STATE_THEME_COLOR = const(3)  # choice (select from predefined colors)
-STATE_TIME = const(4)  # menu with date (date picker), GMT offset (keyboard)
+STATE_FAST_DRAWING = const(3)  # toggle: screen image in SRAM (faster, uses 100 KB RAM)
+STATE_THEME_COLOR = const(4)  # choice (select from predefined colors)
+STATE_TIME = const(5)  # menu with date (date picker), GMT offset (keyboard)
 
 # modes
 _MODE_THEME = const(19)
@@ -45,6 +46,7 @@ def __config() -> tuple:
         ("Debug", "debug", False),
         ("Onscreen Keyboard", "onscreen_keyboard", True),
         ("Screen Brightness", "screen_brightness", 100),
+        ("Fast Drawing", "fast_drawing", False),
         ("Theme Color", "theme_color", None),
         ("Time", "time", None),
     )
@@ -59,6 +61,10 @@ def __apply_toggle_setting(index: int, state: bool) -> None:
     """
     if index == STATE_ONSCREEN_KEYBOARD:
         _view_manager.keyboard.show_keyboard = state
+    elif index == STATE_FAST_DRAWING:
+        if not _view_manager.set_fast_drawing(state):
+            _view_manager.alert("Saved. Not enough free memory now;\nFast Drawing applies after a restart.")
+            _toggle.draw()
 
 
 def __open_toggle(setting_index: int) -> None:

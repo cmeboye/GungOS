@@ -104,6 +104,9 @@ class View:
             except Exception as e:
                 self.__alert("stopping", e, view_manager)
         self.active = False
+        stopped = getattr(view_manager, "view_stopped", None)
+        if stopped is not None:
+            stopped(self)
 
     def run(self, view_manager):
         """Run the view's per-frame callback.

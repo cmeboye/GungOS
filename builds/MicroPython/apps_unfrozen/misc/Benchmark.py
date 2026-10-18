@@ -16,6 +16,7 @@ _waiting = False
 _saved = ''
 _panel_test = False
 _prompt_started = 0
+_start_mode = None
 
 
 def _best(function, repeat):
@@ -75,17 +76,40 @@ def _swap_full(draw):
     return min(samples)
 
 
-def _stage_memory(vm):
+def _mode_name(draw):
+    if not hasattr(draw, 'MODE_SRAM'):
+        return 'unknown'
+    return 'SRAM' if draw.mode == draw.MODE_SRAM else 'PSRAM'
+
+
+def _use_mode(vm, sram):
+    """Move the screen image; True if it ended up where asked."""
     import gc
-    gc.collect()
-    _record('Free heap, SRAM screen', gc.mem_free() // 1024, 'KB')
-    _record('Screen mode at start', 'SRAM' if getattr(vm.draw, 'mode', 1) == 1 else 'PSRAM', '')
+    draw = vm.draw
+    if not hasattr(draw, 'MODE_SRAM'):
+        return False
+    target = draw.MODE_SRAM if sram else draw.MODE_PSRAM
+    if draw.mode != target:
+        gc.collect()
+        draw.set_mode(target)
+    return draw.mode == target
 
 
-def _stage_swaps(vm):
+def _restore_mode(vm):
+    if _start_mode is not None:
+        _use_mode(vm, _start_mode == 'SRAM')
+
+
+def _stage_memory(vm):
+    global _start_mode
+    _start_mode = _mode_name(vm.draw)
+    _record('Screen mode at start', _start_mode, '')
+
+
+def _stage_swaps(vm, label):
     draw = vm.draw
     took, rows = _swap_full(draw)
-    _record('Swap, whole screen changed', took / 1000, 'ms (%d rows)' % rows)
+    _record('Swap, whole screen changed, ' + label, took / 1000, 'ms (%d rows)' % rows)
     # One text line changes: what a menu cursor or typing costs.
     draw._clear(BLACK)
     _text_screen(draw)
@@ -98,7 +122,7 @@ def _stage_swaps(vm):
         rows = draw.swap()
         samples.append((ticks_diff(ticks_us(), start), rows))
     took, rows = min(samples)
-    _record('Swap, one text line changed', took / 1000, 'ms (%d rows)' % rows)
+    _record('Swap, one text line changed, ' + label, took / 1000, 'ms (%d rows)' % rows)
     # Establish the exact baseline before timing identical redraws.
     draw._clear(BLACK)
     _text_screen(draw)
@@ -111,7 +135,7 @@ def _stage_swaps(vm):
         rows = draw.swap()
         samples.append((ticks_diff(ticks_us(), start), rows))
     took, rows = min(samples)
-    _record('Swap, identical redraw', took / 1000, 'ms (%d rows)' % rows)
+    _record('Swap, identical redraw, ' + label, took / 1000, 'ms (%d rows)' % rows)
 
 
 def _stage_drawing(vm, label):
@@ -123,21 +147,17 @@ def _stage_drawing(vm, label):
     draw.swap()
 
 
-def _stage_psram(vm):
+def _stage_mode(vm, sram):
+    """Everything measured with the screen image in one place."""
     import gc
-    draw = vm.draw
-    if not hasattr(draw, 'MODE_PSRAM'):
-        _record('PSRAM screen mode', 'not available', '')
+    label = 'SRAM' if sram else 'PSRAM'
+    if not _use_mode(vm, sram):
+        _record(label + ' screen mode', 'not available (not enough free memory?)', '')
         return
-    draw.set_mode(draw.MODE_PSRAM)
-    try:
-        gc.collect()
-        _record('Free heap, PSRAM screen', gc.mem_free() // 1024, 'KB')
-        _stage_drawing(vm, 'PSRAM')
-        took, rows = _swap_full(draw)
-        _record('Swap whole screen, PSRAM', took / 1000, 'ms (%d rows)' % rows)
-    finally:
-        draw.set_mode(draw.MODE_SRAM)
+    gc.collect()
+    _record('Free heap, %s screen' % label, gc.mem_free() // 1024, 'KB')
+    _stage_swaps(vm, label)
+    _stage_drawing(vm, label)
 
 
 def _test_pattern(draw):
@@ -222,6 +242,7 @@ def _checkpoint(vm, status):
 
 
 def _report(vm):
+    _restore_mode(vm)
     lines = _checkpoint(vm, 'complete')
     draw = vm.draw
     draw._clear(BLACK)
@@ -248,17 +269,16 @@ def _intro(vm):
 
 STAGES = (
     ('Memory', _stage_memory),
-    ('Sending changes', _stage_swaps),
-    ('Drawing in SRAM', lambda vm: _stage_drawing(vm, 'SRAM')),
-    ('PSRAM screen mode', _stage_psram),
+    ('SRAM screen (fast drawing)', lambda vm: _stage_mode(vm, True)),
+    ('PSRAM screen (default)', lambda vm: _stage_mode(vm, False)),
     ('12-bit colour (experimental)', _stage_panel_start),
     ('Python versus C', _stage_compute),
 )
 
 
 def start(vm):
-    global _stage, _results, _waiting, _saved, _panel_test, _prompt_started
-    _stage, _results, _waiting, _saved = -1, [], False, ''
+    global _stage, _results, _waiting, _saved, _panel_test, _prompt_started, _start_mode
+    _stage, _results, _waiting, _saved, _start_mode = -1, [], False, '', None
     _panel_test, _prompt_started = False, 0
     _intro(vm)
     return True
@@ -272,6 +292,7 @@ def run(vm):
             _stage_panel_answer(vm, False)
             _waiting = False
         if _stage >= 0:
+            _restore_mode(vm)
             _checkpoint(vm, 'cancelled')
         vm.back()
         return
@@ -311,3 +332,4 @@ def stop(vm):
     if _waiting:
         vm.draw.set_panel_bits(16)
         _waiting = False
+    _restore_mode(vm)

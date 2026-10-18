@@ -93,7 +93,7 @@ print('PASS: unanswered experiment restores 16-bit mode after twenty seconds')
 
 assert bench.start(vm)
 step(k.BUTTON_F2);step(k.BUTTON_CENTER)
-for _ in range(4):step()
+for _ in range(3):step()
 def failed_format(bits):
     if bits==12:raise RuntimeError('simulated native display failure')
     return original(bits)
@@ -102,7 +102,7 @@ try:step()
 except RuntimeError:pass
 else:raise AssertionError('Failed format was not attempted')
 report=vm.storage.read(bench.RESULT_PATH)
-assert 'running step 5' in report
+assert 'running step 4' in report
 assert 'Free heap, SRAM screen' in report and 'Free heap, PSRAM screen' in report
 assert 'Draw 26 text rows, PSRAM' in report
 vm.draw.set_panel_bits=original

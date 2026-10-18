@@ -41,6 +41,7 @@ class Settings:
         self._path = SETTINGS_PATH
         self._settings = {
             "debug": False,
+            "fast_drawing": False,
             "gmt_offset": 0,
             "onscreen_keyboard": False,
             "screen_brightness": 100,
@@ -89,6 +90,11 @@ class Settings:
         """
         if not self.update({'debug': value}):
             raise OSError("Could not save device settings")
+
+    @property
+    def fast_drawing(self) -> bool:
+        """Return True if the screen image should live in fast on-chip SRAM."""
+        return bool(self._settings.get("fast_drawing", False))
 
     @property
     def gmt_offset(self) -> int:

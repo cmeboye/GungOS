@@ -79,6 +79,12 @@ class ViewManager:
         # Initialize drawing system
         self._draw = Draw(self._foreground_color, self._background_color)
 
+        # Screen image: PSRAM by default, SRAM ("fast drawing") when chosen in
+        # Settings or borrowed by an animated app (request_fast_drawing).
+        self._fast_drawing = settings.fast_drawing
+        self._fast_owner = None
+        self.__apply_screen_mode(self._fast_drawing)
+
         # theme color
         self._selected_color = settings.theme_color
         self._draw.theme_color = self._selected_color
@@ -497,6 +503,58 @@ class ViewManager:
         for i in range(self._stack_depth):
             self.view_stack[i] = None
         self._stack_depth = 0
+
+    @property
+    def fast_drawing(self) -> bool:
+        """The user's preference: keep the screen image in SRAM."""
+        return self._fast_drawing
+
+    def set_fast_drawing(self, enabled: bool) -> bool:
+        """Apply the Fast Drawing preference.
+
+        Returns:
+            bool: False if SRAM mode was wanted but there was not enough free
+                memory; the preference is kept and applies on the next start.
+        """
+        self._fast_drawing = bool(enabled)
+        if self._fast_owner is not None:
+            return True  # an app holds SRAM; the preference applies when it stops
+        return self.__apply_screen_mode(self._fast_drawing)
+
+    def request_fast_drawing(self) -> bool:
+        """Let the current view draw in SRAM until it stops (animations, games).
+
+        The screen image moves from PSRAM to on-chip SRAM, which draws about
+        2.5x faster but takes 100 KB of RAM. It moves back automatically when
+        the view stops, even after a crash.
+
+        Returns:
+            bool: True if the screen image is in SRAM.
+        """
+        if self._current_view is None:
+            return False
+        self._fast_owner = self._current_view.name
+        return self.__apply_screen_mode(True)
+
+    def view_stopped(self, view) -> None:
+        """Called by View.stop: return a borrowed SRAM screen."""
+        if self._fast_owner is not None and view.name == self._fast_owner:
+            self._fast_owner = None
+            self.__apply_screen_mode(self._fast_drawing)
+
+    def __apply_screen_mode(self, sram: bool) -> bool:
+        """Move the screen image to SRAM or PSRAM; True if it ended there."""
+        draw = self._draw
+        if draw is None or not hasattr(draw, "MODE_SRAM"):
+            return not sram
+        target = draw.MODE_SRAM if sram else draw.MODE_PSRAM
+        if draw.mode != target:
+            if sram:
+                from gc import collect
+
+                collect()  # SRAM mode needs one free 100 KB block
+            draw.set_mode(target)
+        return draw.mode == target
 
     def freq(self, use_default: bool = False, frequency: int = None) -> int:
         """Set the CPU frequency.

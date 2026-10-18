@@ -12,7 +12,8 @@ static gfx_sram image = {pixels, WIDTH};
 static uint16_t frame[WIDTH * HEIGHT]; /* what the simulated panel shows */
 static bool ready = false;
 static bool full_refresh = true;
-static uint8_t mode = 1; /* the simulator always draws in SRAM */
+static uint8_t mode = 0; /* reported as on the device (PSRAM by default); the
+                             simulator always draws in ordinary memory */
 
 /* sim_runtime, or MP_OBJ_NULL when running outside the simulator. */
 static mp_obj_t runtime(void)

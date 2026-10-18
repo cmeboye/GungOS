@@ -5,6 +5,11 @@ _engine = None
 
 def start(view_manager):
     global _engine
+    # Rotation redraws the whole plot: borrow the faster SRAM screen while
+    # open (returned automatically when this view stops).
+    fast = getattr(view_manager, 'request_fast_drawing', None)
+    if fast:
+        fast()
     from engtools.plots import plot3d
     _engine = plot3d
     return _engine.start(view_manager)

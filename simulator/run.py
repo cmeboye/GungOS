@@ -834,7 +834,7 @@ def _run_lcd_parity_check():
     display.set_rgb_led(17, 34, 51)
     if sim_runtime.lcd_rgb_led != (17, 34, 51):
         raise RuntimeError("simulator LCD RGB LED state mismatch")
-    if (display.MODE_PSRAM, display.MODE_SRAM, display.mode) != (0, 1, 1):
+    if (display.MODE_PSRAM, display.MODE_SRAM, display.mode) != (0, 1, 0):  # PSRAM default
         raise RuntimeError("simulator LCD mode constants mismatch")
 
     display._clear(0)

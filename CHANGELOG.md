@@ -26,11 +26,15 @@
 - Wi-Fi, SSH and access point passwords are kept in the Pico's internal
   flash instead of in plain text on the SD card; existing SD copies are
   moved automatically.
-- Display: the screen image now lives in on-chip SRAM by default (PSRAM
-  remains available with `draw.set_mode(draw.MODE_PSRAM)`, freeing about
-  100 KB of RAM), drawing writes whole row spans instead of single pixels,
-  and `swap()` sends only the rows that changed, by DMA. `swap()` returns
-  the number of rows sent. Not yet measured on the device.
+- Display: `swap()` sends only the rows that changed, by DMA, and returns
+  the number of rows sent; drawing writes whole row spans instead of single
+  pixels. Measured on the device: a whole screen takes 23.2 ms (the panel
+  link's limit is 21.8 ms), one changed text line 0.46 ms.
+- The screen image stays in PSRAM by default, keeping 366 KB of heap free.
+  **System > Settings > Fast Drawing** moves it to on-chip SRAM, about 2.5×
+  faster drawing for 100 KB of RAM (266 KB free). Graph3D and Tetris borrow
+  the SRAM screen while open (`view_manager.request_fast_drawing()`); it is
+  returned when they close, also after a crash.
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer

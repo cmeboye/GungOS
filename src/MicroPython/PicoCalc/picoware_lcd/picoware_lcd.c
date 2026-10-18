@@ -3,8 +3,9 @@
  *
  * Drawing itself is the shared gfx core (../../gfx), the same code the desktop
  * simulator runs. This file provides:
- *   - storage for the 8-bit (RGB332) image: on-chip SRAM by default, or the
- *     external PSRAM to free about 100 KB of RAM for large jobs;
+ *   - storage for the 8-bit (RGB332) image: external PSRAM by default, or
+ *     on-chip SRAM for about 2.5x faster drawing at a cost of 100 KB of RAM
+ *     (Settings > Fast Drawing, or apps via ViewManager.request_fast_drawing);
  *   - presenting: only rows that changed since the last swap are converted
  *     to RGB565 and sent, by DMA, while the CPU converts the next block.
  *
@@ -23,7 +24,7 @@
 #define LCD_STREAM_LINES 8
 
 static bool module_initialized = false;
-static uint8_t lcd_mode = LCD_MODE_SRAM; // requested, and current once initialized
+static uint8_t lcd_mode = LCD_MODE_PSRAM; // requested, and current once initialized
 static bool full_refresh = true;          // panel content unknown: send everything
 
 static uint8_t *sram_pixels = NULL;
