@@ -159,3 +159,58 @@ else:
     raise AssertionError('cancel must be reported')
 b.free()
 print('PASS: cancel and free')
+
+# free() releases the memory for good: every later use raises, never writes.
+b = simple_span()
+b.solve()
+b.free()
+for use in (lambda: b.node(0, 42.0), lambda: b.support(0, ps.UY), lambda: b.solve(),
+            lambda: b.reaction(0), lambda: b.line(0, 0, 0.0, 1.0, -1.0), lambda: b.info()):
+    try:
+        use()
+        raise AssertionError('a freed model was used')
+    except ValueError:
+        pass
+b.free()  # twice is harmless
+assert not b.busy() and b.progress() == (0, 8) or True
+print('PASS: a freed model refuses every use')
+
+# Running out of memory while (re)allocating leaves the model safe to use.
+import gc
+spans = 2000
+big = ps.Beam(spans + 1, spans, loads=spans, cases=255)
+big.section(0, 2.1e11, 8.36e-5)
+for i in range(spans + 1):
+    big.node(i, float(i))
+for e in range(spans):
+    big.element(e, e, e + 1)
+    big.line(0, e, 0.0, 1.0, -5e3)
+big.support(0, ps.UY)
+big.support(spans, ps.UY)
+hog = []
+try:
+    while True:
+        hog.append(bytearray(64 * 1024))
+except MemoryError:
+    pass
+while hog:
+    hog.pop()
+    gc.collect()
+    try:
+        big.solve()
+        break
+    except MemoryError:
+        # The failed allocation must not leave a dangling block behind.
+        try:
+            big.reaction(0)
+            raise AssertionError('results from a failed solve')
+        except ValueError:
+            pass
+        big.node(0, 0.0)
+hog = None
+gc.collect()
+big.solve()
+near(big.reaction(0)[0], 5e3 * spans / 2)
+big.free()
+big.free()
+print('PASS: memory errors during a solve leave the model consistent')

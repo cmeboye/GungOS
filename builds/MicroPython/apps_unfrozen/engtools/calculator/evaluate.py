@@ -177,11 +177,19 @@ def native_function(node, variables, angle='DEG', local='x'):
     """
     if not NATIVE_FORMULA: return None
     constants = {}
+
+    def python(x):
+        # Points whose whole numbers outgrow float32 come back here.
+        try:
+            value = Evaluator(variables, angle).run(node, {local: x})
+            return None if isinstance(value, complex) else value
+        except Exception:
+            return None
     try:
         text = _formula_text(node, variables, angle, local, constants)
         from picosolve import Formula
-        return Formula(text, ('x',), constants)
-    except (_Unsupported, ImportError, ValueError):
+        return Formula(text, ('x',), constants, fallback=python)
+    except (_Unsupported, ImportError, ValueError, TypeError):
         return None
 
 

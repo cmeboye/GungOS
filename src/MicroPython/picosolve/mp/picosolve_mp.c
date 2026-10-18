@@ -16,6 +16,8 @@
  *   f(1.0, 2.0) -> float, or None where Python would raise or not be finite
  *   f.map(out, xs, 0.5)      # array('f') inputs or scalars -> results kept
  *   f.points(out, xyz, n)    # n interleaved points
+ *   Formula(..., fallback=fn) # fn(*values): Python's answer for points whose
+ *                             # whole numbers outgrow float32 (else undefined)
  *
  * Units are SI. Problems in the model raise picosolve.SolveError with a
  * message naming the node, element, load or section at fault.
@@ -59,9 +61,13 @@ typedef struct
 
 const mp_obj_type_t picosolve_beam_type;
 
+/* The model, refusing one whose memory free() released. */
 static beam_obj_t *beam(mp_obj_t self)
 {
-    return MP_OBJ_TO_PTR(self);
+    beam_obj_t *b = MP_OBJ_TO_PTR(self);
+    if (b->model_block == NULL)
+        mp_raise_ValueError(MP_ERROR_TEXT("model memory was released by free()"));
+    return b;
 }
 
 static void editable(beam_obj_t *b)
@@ -120,12 +126,20 @@ static void check(ps_status status)
         mp_raise_ValueError(MP_ERROR_TEXT("invalid index or value"));
 }
 
-static void *renew(void *old, size_t old_bytes, size_t bytes)
+/* Replace a block. The old one goes first, since memory is tight; the slot
+ * is empty while the new one is requested, so if that raises MemoryError
+ * nothing is left pointing at freed memory. */
+static void replace(void **slot, size_t *slot_bytes, size_t bytes)
 {
-    if (old)
-        m_free(old);
-    (void)old_bytes;
-    return bytes ? m_malloc(bytes) : NULL;
+    if (*slot)
+        m_free(*slot);
+    *slot = NULL;
+    *slot_bytes = 0;
+    if (bytes)
+    {
+        *slot = m_malloc(bytes);
+        *slot_bytes = bytes;
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -298,9 +312,8 @@ static ps_precision choose(beam_obj_t *b)
 
 static void allocate_values(beam_obj_t *b, ps_precision precision)
 {
-    const size_t bytes = ps_model_value_bytes(&b->m, precision) + 8;
-    b->value_block = renew(b->value_block, b->value_bytes, bytes);
-    b->value_bytes = bytes;
+    b->ready = false; /* until the block exists */
+    replace(&b->value_block, &b->value_bytes, ps_model_value_bytes(&b->m, precision) + 8);
     b->m.sky.precision = precision; /* the precision compute() uses */
 }
 
@@ -314,9 +327,11 @@ static mp_obj_t beam_begin(size_t n, const mp_obj_t *args)
     b->precision = n > 1 ? mp_obj_get_int(args[1]) : PRECISION_AUTO;
     if (b->precision != PRECISION_AUTO && b->precision != PS_DOUBLE && b->precision != PS_SINGLE)
         mp_raise_ValueError(MP_ERROR_TEXT("precision must be AUTO, DOUBLE or SINGLE"));
-    const size_t index_bytes = ps_model_index_bytes(&b->m);
-    b->index_block = renew(b->index_block, b->index_bytes, index_bytes);
-    b->index_bytes = index_bytes;
+    /* The numbering and values are rebuilt: nothing may use the old ones. */
+    b->ready = false;
+    b->m.state = PS_STATE_EDITED;
+    replace(&b->value_block, &b->value_bytes, 0);
+    replace(&b->index_block, &b->index_bytes, ps_model_index_bytes(&b->m));
     raise_status(b, ps_model_prepare(&b->m, b->index_block));
     allocate_values(b, choose(b));
     b->ctl.cancel = 0;
@@ -332,7 +347,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_begin_obj, 1, 2, beam_begin);
  * may run on another core; it records its status instead of raising. */
 static mp_obj_t beam_compute(mp_obj_t self)
 {
-    beam_obj_t *b = beam(self);
+    beam_obj_t *b = MP_OBJ_TO_PTR(self); /* never raises: may run on core 1 */
     if (!b->ready || b->busy)
     {
         b->status = PS_ERR_STATE;
@@ -358,6 +373,7 @@ static mp_obj_t beam_finish(mp_obj_t self)
     {
         allocate_values(b, PS_DOUBLE);
         b->status = PS_OK;
+        b->ready = true;
         return mp_const_false;
     }
     raise_status(b, b->status);
@@ -383,7 +399,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_solve_obj, 1, 2, beam_solve);
 /* progress() -> (done, total) work units of the current factorization. */
 static mp_obj_t beam_progress(mp_obj_t self)
 {
-    beam_obj_t *b = beam(self);
+    beam_obj_t *b = MP_OBJ_TO_PTR(self);
     mp_obj_t items[2] = {mp_obj_new_int(b->ctl.done), mp_obj_new_int(b->ctl.total)};
     return mp_obj_new_tuple(2, items);
 }
@@ -391,14 +407,14 @@ static MP_DEFINE_CONST_FUN_OBJ_1(beam_progress_obj, beam_progress);
 
 static mp_obj_t beam_cancel(mp_obj_t self)
 {
-    beam(self)->ctl.cancel = 1;
+    ((beam_obj_t *)MP_OBJ_TO_PTR(self))->ctl.cancel = 1;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(beam_cancel_obj, beam_cancel);
 
 static mp_obj_t beam_busy(mp_obj_t self)
 {
-    return mp_obj_new_bool(beam(self)->busy);
+    return mp_obj_new_bool(((beam_obj_t *)MP_OBJ_TO_PTR(self))->busy);
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(beam_busy_obj, beam_busy);
 
@@ -521,16 +537,18 @@ static mp_obj_t beam_info(mp_obj_t self)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(beam_info_obj, beam_info);
 
+/* free(): release the model's memory now. The model can no longer be used;
+ * calling free() again does nothing. */
 static mp_obj_t beam_del(mp_obj_t self)
 {
-    beam_obj_t *b = beam(self);
+    beam_obj_t *b = MP_OBJ_TO_PTR(self);
     if (b->busy)
         return mp_const_none; /* never free memory a solve is using */
-    b->model_block = renew(b->model_block, b->model_bytes, 0);
-    b->index_block = renew(b->index_block, b->index_bytes, 0);
-    b->value_block = renew(b->value_block, b->value_bytes, 0);
     b->ready = false;
     b->m.state = PS_STATE_EDITED;
+    replace(&b->value_block, &b->value_bytes, 0);
+    replace(&b->index_block, &b->index_bytes, 0);
+    replace(&b->model_block, &b->model_bytes, 0);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(beam_del_obj, beam_del);
@@ -713,8 +731,11 @@ typedef struct
     mp_obj_base_t base;
     float limit;
     void *scratch;
+    mp_obj_t fallback; /* Python's evaluation, for points flagged inexact */
     psf_program program;
 } formula_obj_t;
+
+#define FORMULA_CHUNK 128
 
 const mp_obj_type_t picosolve_formula_type;
 
@@ -752,13 +773,14 @@ static int formula_names(mp_obj_t dict, const char **names, float *values, const
 
 static mp_obj_t formula_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args)
 {
-    enum { ARG_text, ARG_variables, ARG_constants, ARG_derived, ARG_limit };
+    enum { ARG_text, ARG_variables, ARG_constants, ARG_derived, ARG_limit, ARG_fallback };
     static const mp_arg_t allowed[] = {
         {MP_QSTR_text, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
         {MP_QSTR_variables, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
         {MP_QSTR_constants, MP_ARG_OBJ, {.u_obj = mp_const_none}},
         {MP_QSTR_derived, MP_ARG_OBJ, {.u_obj = mp_const_none}},
         {MP_QSTR_limit, MP_ARG_OBJ, {.u_obj = mp_const_none}},
+        {MP_QSTR_fallback, MP_ARG_OBJ, {.u_obj = mp_const_none}},
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed)];
     mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed), allowed, args);
@@ -792,6 +814,8 @@ static mp_obj_t formula_make_new(const mp_obj_type_t *type, size_t n_args, size_
 
     formula_obj_t *f = mp_obj_malloc(formula_obj_t, type);
     f->limit = args[ARG_limit].u_obj == mp_const_none ? INFINITY : (float)mp_obj_get_float(args[ARG_limit].u_obj);
+    f->fallback = args[ARG_fallback].u_obj;
+    f->scratch = NULL;
     int at = 0;
     const psf_status status = psf_compile(&f->program, text, (int)length, &o, &at);
     if (status != PSF_OK)
@@ -804,7 +828,53 @@ static mp_obj_t formula_make_new(const mp_obj_type_t *type, size_t n_args, size_
     return MP_OBJ_FROM_PTR(f);
 }
 
-/* f(*values) -> float, or None when undefined there. */
+static bool formula_keep(const formula_obj_t *f, float v)
+{
+    return isfinite(v) && fabsf(v) <= f->limit;
+}
+
+/* Evaluate count points into out; points flagged inexact are evaluated by
+ * the fallback (or stay undefined without one). Returns the results kept. */
+static int formula_run(formula_obj_t *f, const psf_input *inputs, int count, float *out)
+{
+    const int variables = f->program.variable_count;
+    uint8_t flags[FORMULA_CHUNK];
+    int kept = 0;
+    for (int base = 0; base < count; base += FORMULA_CHUNK)
+    {
+        const int n = count - base < FORMULA_CHUNK ? count - base : FORMULA_CHUNK;
+        psf_input chunk[PSF_MAX_VARIABLES];
+        for (int v = 0; v < variables; v++)
+        {
+            chunk[v] = inputs[v];
+            if (chunk[v].data)
+                chunk[v].data += (ptrdiff_t)base * chunk[v].stride;
+        }
+        kept += psf_eval(&f->program, chunk, n, f->limit, out + base, flags, f->scratch);
+        if (f->fallback == mp_const_none)
+            continue;
+        for (int i = 0; i < n; i++)
+        {
+            if (!flags[i])
+                continue;
+            mp_obj_t values[PSF_MAX_VARIABLES];
+            for (int v = 0; v < variables; v++)
+                values[v] = mp_obj_new_float(chunk[v].data ? chunk[v].data[(ptrdiff_t)i * chunk[v].stride]
+                                                           : chunk[v].value);
+            const mp_obj_t r = mp_call_function_n_kw(f->fallback, (size_t)variables, 0, values);
+            float value = r == mp_const_none ? NAN : (float)mp_obj_get_float(r);
+            if (formula_keep(f, value))
+                kept++;
+            else
+                value = NAN;
+            out[base + i] = value;
+        }
+    }
+    return kept;
+}
+
+/* f(*values) -> float, or None when undefined there. A point left to the
+ * fallback returns its answer unchanged (a Python int stays exact). */
 static mp_obj_t formula_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args)
 {
     formula_obj_t *f = MP_OBJ_TO_PTR(self_in);
@@ -813,9 +883,13 @@ static mp_obj_t formula_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const
     for (size_t i = 0; i < n_args; i++)
         inputs[i] = (psf_input){NULL, 0, (float)mp_obj_get_float(args[i])};
     float out;
-    if (!psf_eval(&f->program, inputs, 1, f->limit, &out, f->scratch))
+    uint8_t flag = 0;
+    if (psf_eval(&f->program, inputs, 1, f->limit, &out, &flag, f->scratch))
+        return mp_obj_new_float(out);
+    if (!flag || f->fallback == mp_const_none)
         return mp_const_none;
-    return mp_obj_new_float(out);
+    const mp_obj_t r = mp_call_function_n_kw(f->fallback, n_args, 0, args);
+    return r != mp_const_none && formula_keep(f, (float)mp_obj_get_float(r)) ? r : mp_const_none;
 }
 
 /* map(out, *inputs) -> results kept; each input is array('f') or a number. */
@@ -837,7 +911,7 @@ static mp_obj_t formula_map(size_t n_args, const mp_obj_t *args)
         else
             inputs[i] = (psf_input){floats(a, count, false, "input"), 1, 0.0f};
     }
-    return mp_obj_new_int(psf_eval(&f->program, inputs, (int)count, f->limit, out, f->scratch));
+    return mp_obj_new_int(formula_run(f, inputs, (int)count, out));
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(formula_map_obj, 2, 2 + PSF_MAX_VARIABLES, formula_map);
 
@@ -855,7 +929,7 @@ static mp_obj_t formula_points(size_t n_args, const mp_obj_t *args)
     psf_input inputs[PSF_MAX_VARIABLES];
     for (int i = 0; i < stride; i++)
         inputs[i] = (psf_input){flat + i, stride, 0.0f};
-    return mp_obj_new_int(psf_eval(&f->program, inputs, (int)count, f->limit, out, f->scratch));
+    return mp_obj_new_int(formula_run(f, inputs, (int)count, out));
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(formula_points_obj, 4, 4, formula_points);
 

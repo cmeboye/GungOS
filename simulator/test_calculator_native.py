@@ -22,6 +22,7 @@ EXPRESSIONS = (
     'sqrt(x)', 'ln(x)', 'log(x)', 'logb(2,x)', 'logb(x,8)', 'exp(-x^2)', 'e^x', 'pi x',
     '1/x', 'x%3', '(-x)^0.5', 'x^-1', 'abs(x)-a', 'floor(x)*k', 'ceil(x/n)', 'round(x)',
     'sinh(x)/cosh(x)-tanh(x)', 'min(x,a,1)', 'max(x)', 'Ans*x', '-x^2', '2^3^x',
+    'floor(x+16777216)+floor(x+1)-floor(x+16777216)', 'round(x*1e4)*round(x*1e4)-round(x*1e4)^2',
     're(x)+conj(x)', 'x^40', '(x*1e20)*1e20', '1/((x*1e20)*1e20)', 'k x(x-a)',
 )
 POINTS = (0.0, 1.0, -1.0, 0.5, 2.0, -2.5, 3.0, 45.0, 90.0, -90.0, 100.0, 1e-3, 7.25, -0.0)
@@ -74,6 +75,9 @@ def both(run):
     return slow, fast, slow_time, ticks_diff(ticks_us(), start)
 
 
+# Whole numbers past 2^24 must be exact, as in the evaluator (it gives 1).
+text = 'int(0,1,floor(x+16777216)+floor(x+1)-floor(x+16777216))'
+assert calculate(text, {}, 'RAD')[0] == 1, calculate(text, {}, 'RAD')
 for text in ('int(0,1,x^2)', 'int(0,pi,sin(x))', 'int(-3,3,exp(-x^2))', 'int(1,10,ln(x)/x)',
              'int(0,90,cos(x))', 'int(-1,1,1/x)'):
     angle = 'DEG' if '90' in text else 'RAD'

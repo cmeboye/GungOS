@@ -102,9 +102,15 @@ n)` takes n interleaved points. `derived={'r': 'sqrt(x*x+y*y+z*z)'}` defines a
 name by another expression. Results match MicroPython's own evaluation bit for
 bit; a formula that cannot be matched exactly (for example `abs()` of a power
 that may be complex) raises ValueError, and the caller keeps using `eval`.
-The two remaining differences are documented in `expr/formula.h`: whole
-numbers beyond 2^24 and, in rare min/max mixes of whole and fractional
-numbers, the sign of a zero result.
+Python's whole numbers are exact at any size, float32 only up to 2^24: points
+whose whole-number arithmetic leaves that range are evaluated by
+`fallback=fn` (the caller's `eval`), or are undefined without one, never
+wrong. The one remaining difference, in rare min/max mixes of whole and
+fractional numbers, is the sign of a zero result (see `expr/formula.h`).
+
+`b.free()` releases the model's memory at once; any later use of the model
+raises ValueError. A MemoryError while solving leaves the model consistent:
+edit it or solve again.
 
 `b.info()` reports equations, stored values, the precision used, refinement
 steps, the smallest pivot ratio and memory; `b.free()` releases the memory.

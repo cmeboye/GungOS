@@ -33,7 +33,9 @@ def pick(items):
     return items[rand(len(items))]
 
 
-LEAVES = ('x', 'y', 'x', 'y', '0', '1', '2', '3', '10', '0.5', '1.5', '2.5', '0.1', '1e3', '3.0', 'pi', 'e', '0.0')
+LEAVES = ('x', 'y', 'x', 'y', '0', '1', '2', '3', '10', '0.5', '1.5', '2.5', '0.1', '1e3', '3.0', 'pi', 'e', '0.0',
+          # Whole numbers near and past 2^24, where float32 stops being exact.
+          'floor(x*1e5)', 'round(y*3e4)', '4096', '16777216.0', 'ceil(x+16777215.0)')
 EXPONENTS = ('2', '3', '0', '1', '0.5', '1.5', '-1', '-2', 'x', 'y', '0.0', '-0.5')
 F1 = ('sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sqrt', 'exp', 'log', 'log10', 'sinh', 'cosh', 'tanh',
       'floor', 'ceil', 'round', 'int', 'float', 'abs', 'degrees', 'radians')
@@ -83,7 +85,7 @@ def bits(v):
     return struct.pack('<f', v)
 
 
-compared = refused = exact = big_int = signed_zero = 0
+compared = refused = exact = signed_zero = 0
 failures = []
 for case in range(4000):
     text = formula(1 + rand(4))
@@ -92,7 +94,7 @@ for case in range(4000):
     except SyntaxError:
         continue
     try:
-        f = ps.Formula(text, ('x', 'y'), constants=CONSTANTS)
+        f = ps.Formula(text, ('x', 'y'), constants=CONSTANTS, fallback=lambda x, y, code=code: python(code, x, y))
     except ValueError:
         refused += 1
         continue
@@ -102,8 +104,6 @@ for case in range(4000):
         if want is None or got is None:
             if want is None and got is None:
                 exact += 1
-            elif isinstance(want, int) and abs(want) > 1 << 24:
-                big_int += 1
             else:
                 failures.append((text, x, y, want, got))
             continue
@@ -111,22 +111,35 @@ for case in range(4000):
             wf = float(want)
         except OverflowError:
             wf = math.inf
-        if bits(wf) == bits(got):
+        if isinstance(want, int) and abs(want) >= 1 << 24 and (got != got or int(got) != want):
+            failures.append((text, x, y, want, got))  # a big int must come back exactly
+        elif bits(wf) == bits(got):
             exact += 1
         elif wf == got == 0:
             signed_zero += 1
-        elif isinstance(want, int) and abs(want) > 1 << 24:
-            big_int += 1
         else:
             failures.append((text, x, y, want, got))
 
 for failure in failures[:20]:
     print('  MISMATCH %s at (%r, %r): python %r, formula %r' % failure)
 assert not failures, '%d mismatches' % len(failures)
-assert refused < 200, 'too many formulas refused: %d' % refused
+assert refused < 400, 'too many formulas refused: %d' % refused
 assert signed_zero <= compared // 2000, 'signed zeros: %d' % signed_zero
-print('PASS: %d evaluations identical to eval (%d whole numbers beyond 2^24, %d signed zeros, %d formulas left to Python)'
-      % (exact, big_int, signed_zero, refused))
+print('PASS: %d evaluations identical to eval (%d signed zeros, %d formulas left to Python)'
+      % (exact, signed_zero, refused))
+
+# Exact whole numbers past 2^24 come from the fallback, unchanged.
+text = 'floor(x+16777216.0)+floor(x+1)-floor(x+16777216.0)'
+code = compile(text, '<f>', 'eval')
+f = ps.Formula(text, ('x', 'y'), fallback=lambda x, y: python(code, x, y))
+assert f(0.5, 0) == 1 and python(code, 0.5, 0) == 1
+out = array('f', [0.0] * 40)
+assert f.map(out, array('f', [i / 40 for i in range(40)]), 0.0) == 40 and all(v == 1 for v in out)
+g = ps.Formula(text, ('x', 'y'))
+assert g(0.5, 0) is None, 'without a fallback an inexact point is undefined, never wrong'
+big = ps.Formula('floor(x)*floor(x)+1', ('x', 'y'), fallback=lambda x, y: math.floor(x) * math.floor(x) + 1)
+assert big(5000.5, 0) == 25000001 and isinstance(big(5000.5, 0), int)
+print('PASS: whole numbers past 2^24 are evaluated by Python, exactly')
 
 # Refused on purpose: Python would give a real abs() of a complex power.
 for text in ('abs(x**0.5)', 'atan2(-max(x, 0), -1)', 'x(2)', 'x, y', 'math', 'sin'):

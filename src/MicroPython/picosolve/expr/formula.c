@@ -41,9 +41,17 @@ enum
     OP_RADIANS,
     OP_MIN, /* + argument count */
     OP_MAX, /* + argument count */
-    OP_NONE, /* identity: float() */
-    OP_FINITE /* _finite(): undefined unless finite */
+    OP_NONE,   /* identity: float() */
+    OP_FINITE, /* _finite(): undefined unless finite */
+    OP_EXACT,  /* after whole-number arithmetic: past 2^24, Python must decide */
+    OP_IPOW,   /* int ** non-negative literal, by exact multiplication */
+    OP_EPOW    /* (int or float) ** non-negative literal */
 };
+
+/* Whole numbers up to 2^24 are exact in float32; Python's ints are exact at
+ * any size. Points whose whole-number arithmetic leaves that range are
+ * flagged inexact and the caller evaluates them in Python. */
+#define PSF_EXACT_LIMIT 16777216.0f
 
 /* math functions that follow MicroPython's math_generic_1 rule. */
 static float (*const FN1[])(float) = {sinf, cosf, tanf, asinf, acosf, atanf, sqrtf, expf,
@@ -123,6 +131,7 @@ typedef struct
     bool complex_risk;  /* a power that may be complex in Python */
     bool whole_literal; /* a non-negative integer literal */
     bool zero_sign;     /* may be -0 where Python has the int 0 (see below) */
+    bool negative_literal; /* minus a whole literal: as an exponent, a float power */
 } value;
 
 /*
@@ -327,19 +336,26 @@ static value factor(compiler *c);
 /* a ** b, from the operator or pow(a, b). */
 static value power_of(compiler *c, value a, value b)
 {
-    emit(c, OP_POW);
+    value v = {T_FLOAT, a.complex_risk || b.complex_risk || b.type != T_INT, false, a.zero_sign || b.zero_sign,
+               false};
+    if (a.type == T_FLOAT || b.type == T_FLOAT || b.negative_literal)
+        emit(c, OP_POW); /* a float on either side, or a negative exponent: float power, as in Python */
+    else if (b.whole_literal)
+    {
+        /* Python raises an int to this power exactly; a float, with powf. */
+        emit(c, a.type == T_INT ? OP_IPOW : OP_EPOW);
+        v.type = a.type;
+        v.zero_sign = v.zero_sign || a.type == T_EITHER;
+    }
+    else
+        fail(c, PSF_ERR_UNSUPPORTED); /* int ** int of unknown sign: float or exact int */
     stack(c, -1);
-    value v = {T_FLOAT, a.complex_risk || b.complex_risk || b.type != T_INT, false, a.zero_sign || b.zero_sign};
-    if (a.type == T_INT && b.type == T_INT)
-        v.type = b.whole_literal ? T_INT : T_EITHER;
-    else if (a.type != T_FLOAT && b.type != T_FLOAT)
-        v.type = T_EITHER;
     return v;
 }
 
 static value call(compiler *c, const function *f)
 {
-    value result = {T_FLOAT, false, false, false};
+    value result = {T_FLOAT, false, false, false, false};
     next(c); /* ( */
     if (c->lex.kind == K_RPAREN)
     {
@@ -410,7 +426,7 @@ static value call(compiler *c, const function *f)
     case OP_FINITE:
         emit(c, OP_FINITE);
         result = args[0];
-        result.whole_literal = false;
+        result.whole_literal = result.negative_literal = false;
         break;
     case OP_ABS:
         /* abs() of a complex power is real in Python; not reproducible here. */
@@ -440,7 +456,7 @@ static value call(compiler *c, const function *f)
 
 static value name(compiler *c)
 {
-    value v = {T_FLOAT, false, false, false};
+    value v = {T_FLOAT, false, false, false, false};
     const psf_options *o = c->o;
     const lexer at = c->lex;
     next(c);
@@ -505,10 +521,22 @@ static value name(compiler *c)
 
 static value atom(compiler *c)
 {
-    value v = {T_FLOAT, false, false, false};
+    value v = {T_FLOAT, false, false, false, false};
     switch (c->lex.kind)
     {
     case K_NUM:
+        if (c->lex.integer)
+        {
+            /* Whole literals past 7 digits may not be exact in float32. */
+            int digits = 0;
+            for (int k = 0; k < c->lex.len; k++)
+                digits += digits || c->lex.text[c->lex.start + k] != '0';
+            if (digits > 7)
+            {
+                fail(c, PSF_ERR_UNSUPPORTED);
+                return v;
+            }
+        }
         v.type = c->lex.integer ? T_INT : T_FLOAT;
         v.whole_literal = c->lex.integer;
         push_constant(c, c->o->number(c->lex.text + c->lex.start, c->lex.len, c->lex.integer, c->o->context));
@@ -519,7 +547,7 @@ static value atom(compiler *c)
     case K_LPAREN:
         next(c);
         v = arith(c);
-        v.whole_literal = false;
+        v.whole_literal = v.negative_literal = false;
         if (c->lex.kind != K_RPAREN)
             fail(c, PSF_ERR_SYNTAX);
         next(c);
@@ -547,7 +575,7 @@ static value factor(compiler *c)
     if (++c->nesting > PSF_MAX_NESTING)
     {
         fail(c, PSF_ERR_TOO_LONG);
-        return (value){T_FLOAT, false, false, false};
+        return (value){T_FLOAT, false, false, false, false};
     }
     value v;
     if (c->lex.kind == K_MINUS || c->lex.kind == K_PLUS)
@@ -555,6 +583,7 @@ static value factor(compiler *c)
         const bool negate = c->lex.kind == K_MINUS;
         next(c);
         v = factor(c);
+        v.negative_literal = v.whole_literal && negate;
         v.whole_literal = v.whole_literal && !negate;
         if (negate)
         {
@@ -586,10 +615,12 @@ static value term(compiler *c)
         a.type = kind == K_SLASH ? T_FLOAT : type;
         if (a.type == T_INT)
             emit(c, OP_ZERO);
+        if (a.type != T_FLOAT)
+            emit(c, OP_EXACT);
         a.complex_risk = a.complex_risk || b.complex_risk;
         /* % takes the divisor's sign for a zero result, dropping the dividend's. */
         a.zero_sign = (kind == K_PERCENT ? false : a.zero_sign || b.zero_sign) || a.type == T_EITHER;
-        a.whole_literal = false;
+        a.whole_literal = a.negative_literal = false;
     }
     return a;
 }
@@ -606,9 +637,11 @@ static value arith(compiler *c)
         emit(c, add ? OP_ADD : OP_SUB);
         stack(c, -1);
         a.type = mixed(a.type, b.type);
+        if (a.type != T_FLOAT)
+            emit(c, OP_EXACT);
         a.complex_risk = a.complex_risk || b.complex_risk;
         a.zero_sign = a.zero_sign || b.zero_sign;
-        a.whole_literal = false;
+        a.whole_literal = a.negative_literal = false;
     }
     return a;
 }
@@ -643,7 +676,7 @@ psf_status psf_compile(psf_program *p, const char *text, int length, const psf_o
 
 size_t psf_scratch_bytes(const psf_program *p)
 {
-    return (size_t)p->depth * PSF_BLOCK * sizeof(float) + PSF_BLOCK;
+    return (size_t)p->depth * PSF_BLOCK * sizeof(float) + 2 * PSF_BLOCK;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -710,17 +743,40 @@ static inline float whole(float x)
 #define LANES for (int i = 0; i < n; i++)
 #define AT(k) (stack + (k) * PSF_BLOCK)
 
+/* int ** k exactly, by squaring; *big when a step leaves the exact range. */
+static inline float int_pow(float base, uint32_t k, uint8_t *big)
+{
+    float r = 1.0f;
+    while (k)
+    {
+        if (k & 1u)
+        {
+            r *= base;
+            *big |= !(fabsf(r) < PSF_EXACT_LIMIT);
+        }
+        k >>= 1;
+        if (k)
+        {
+            base *= base;
+            *big |= !(fabsf(base) < PSF_EXACT_LIMIT);
+        }
+    }
+    return whole(r);
+}
+
 int PS_HOT(psf_eval)(const psf_program *p, const psf_input *inputs, int count, float limit, float *out,
-                     void *scratch)
+                     uint8_t *inexact, void *scratch)
 {
     float *stack = scratch;
     uint8_t *err = (uint8_t *)(stack + p->depth * PSF_BLOCK);
+    uint8_t *big = err + PSF_BLOCK;
     const uint8_t *code = p->code;
     int kept = 0;
     for (int base = 0; base < count; base += PSF_BLOCK)
     {
         const int n = count - base < PSF_BLOCK ? count - base : PSF_BLOCK;
         memset(err, 0, (size_t)n);
+        memset(big, 0, (size_t)n);
         int sp = -1;
         for (int pc = 0;;)
         {
@@ -875,6 +931,22 @@ int PS_HOT(psf_eval)(const psf_program *p, const psf_input *inputs, int count, f
                 break;
             }
             case OP_FINITE: LANES err[i] |= !isfinite(b[i]); break;
+            case OP_EXACT: LANES big[i] |= !err[i] && !(fabsf(b[i]) < PSF_EXACT_LIMIT); break;
+            case OP_IPOW:
+                LANES a[i] = int_pow(a[i], (uint32_t)b[i], &big[i]);
+                sp--;
+                break;
+            case OP_EPOW:
+                LANES
+                {
+                    /* A whole value may be a Python int (exact power) or a float
+                     * (powf); zero is the same either way. */
+                    const float x = a[i];
+                    big[i] |= x == floorf(x) && x != 0.0f;
+                    a[i] = py_pow(x, b[i], p->pow_fix_nan, &err[i]);
+                }
+                sp--;
+                break;
             default: break; /* OP_NONE */
             }
         }
@@ -882,12 +954,14 @@ int PS_HOT(psf_eval)(const psf_program *p, const psf_input *inputs, int count, f
         float *o = out + base;
         LANES
         {
-            float v = err[i] ? NAN : r[i];
+            float v = err[i] || big[i] ? NAN : r[i];
             if (isfinite(v) && fabsf(v) <= limit)
                 kept++;
             else
                 v = NAN;
             o[i] = v;
+            if (inexact)
+                inexact[base + i] = big[i];
         }
     }
     return kept;

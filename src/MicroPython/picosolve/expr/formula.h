@@ -14,14 +14,21 @@
  * Results match MicroPython's own evaluation bit for bit (float32, the same
  * C library functions, the same rules). A point where Python would raise
  * (division by zero, a math domain error, a complex power, converting inf to
- * int) is undefined and comes back as NaN. Two limits remain, both tested:
- * Python's integers are exact at any size while these are float32, so whole
- * numbers beyond 2^24 = 16,777,216 may round differently; and where min/max
- * mixes whole and fractional numbers, a zero result may carry a minus sign
- * Python's int 0 lacks (it compares and computes the same; atan2, the one
- * place it would matter, is refused). Anything else the compiler cannot match
- * exactly, such as abs() of a power that may turn complex, is refused, so the
- * caller keeps using Python for that formula.
+ * int) is undefined and comes back as NaN.
+ *
+ * Python's integers are exact at any size; float32 holds whole numbers
+ * exactly only up to 2^24 = 16,777,216. Whole-number arithmetic is checked
+ * against that range, and a point that leaves it is flagged inexact: the
+ * caller evaluates that point in Python (the binding does this through its
+ * fallback). Powers whose base and exponent may both be ints and whole
+ * literals over 7 digits are refused at compile time.
+ *
+ * One difference remains, tested: where min/max mixes whole and fractional
+ * numbers, a zero result may carry a minus sign Python's int 0 lacks (it
+ * compares and computes the same; atan2, the one place it would matter, is
+ * refused). Anything else the compiler cannot match exactly, such as abs() of
+ * a power that may turn complex, is refused, so the caller keeps using Python
+ * for that formula.
  *
  * Evaluation runs 32 points at a time through each operation, which spreads
  * the cost of decoding the program over the whole block.
@@ -96,9 +103,11 @@ typedef struct
 
 /*
  * Evaluate count points into out. A result is kept when it is finite and its
- * magnitude is at most limit; otherwise out holds NaN. Returns the number of
- * results kept.
+ * magnitude is at most limit; otherwise out holds NaN. inexact (optional,
+ * count bytes) marks points Python must evaluate instead; they hold NaN and
+ * are not kept. Returns the number of results kept.
  */
-int psf_eval(const psf_program *p, const psf_input *inputs, int count, float limit, float *out, void *scratch);
+int psf_eval(const psf_program *p, const psf_input *inputs, int count, float limit, float *out,
+             uint8_t *inexact, void *scratch);
 
 #endif

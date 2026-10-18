@@ -45,10 +45,12 @@ static psf_status compile(psf_program *p, const char *text)
     return psf_compile(p, text, (int)strlen(text), &o, NULL);
 }
 
+static int inexact_last;
+
 static float eval3(const char *text, float x, float y, float z)
 {
     static psf_program p;
-    static float scratch[PSF_MAX_STACK * PSF_BLOCK + PSF_BLOCK];
+    static float scratch[PSF_MAX_STACK * PSF_BLOCK + 2 * PSF_BLOCK];
     if (compile(&p, text) != PSF_OK)
     {
         printf("FAIL compile %s\n", text);
@@ -57,7 +59,9 @@ static float eval3(const char *text, float x, float y, float z)
     }
     const psf_input in[3] = {{NULL, 0, x}, {NULL, 0, y}, {NULL, 0, z}};
     float out;
-    psf_eval(&p, in, 1, INFINITY, &out, scratch);
+    uint8_t flag = 0;
+    psf_eval(&p, in, 1, INFINITY, &out, &flag, scratch);
+    inexact_last = flag;
     return out;
 }
 
@@ -69,6 +73,18 @@ static void same(const char *text, float x, float y, float want)
     if (!ok)
     {
         printf("FAIL %s at (%g, %g): got %.9g want %.9g\n", text, (double)x, (double)y, (double)got, (double)want);
+        failures++;
+    }
+}
+
+/* Python's exact ints would give a different answer: the point is flagged. */
+static void inexact(const char *text, float x, float y)
+{
+    checks++;
+    const float got = eval3(text, x, y, 0.0f);
+    if (!inexact_last || !isnan(got))
+    {
+        printf("FAIL %s at (%g, %g) should be left to Python, got %.9g\n", text, (double)x, (double)y, (double)got);
         failures++;
     }
 }
@@ -91,7 +107,9 @@ int main(void)
 
     /* Numbers, names and precedence as Python reads them. */
     same("2+3*4", 0, 0, 14.0f);
-    same("2**3**2", 0, 0, 512.0f);
+    same("2.0**3**2", 0, 0, 512.0f);
+    same("10**-3", 0, 0, powf(10.0f, -3.0f));
+    refused("2**3**2", PSF_ERR_UNSUPPORTED);
     same("-2**2", 0, 0, -4.0f);
     same("2**-1", 0, 0, 0.5f);
     same("(2+3)*4", 0, 0, 20.0f);
@@ -158,6 +176,25 @@ int main(void)
     same("1/_finite(x*x*x*1e30)", 1e10f, 0, nan);
     same("_finite(x)+1", 2, 0, 3.0f);
 
+    /* Whole numbers past 2^24: Python's ints are exact, float32 is not. */
+    inexact("floor(x+16777216.0)+floor(x+1)-floor(x+16777216.0)", 0.5f, 0);
+    refused("floor(x+16777216)", PSF_ERR_UNSUPPORTED);
+    inexact("floor(x)*floor(x)", 5000, 0);
+    inexact("floor(x)**3", 300, 0);
+    inexact("max(x, 0)**2", 5000, 0);
+    same("floor(x)*floor(x)", 4000, 0, 16000000.0f);
+    same("floor(x)**3", 255, 0, 16581375.0f);
+    same("floor(x)**0", 0, 0, 1.0f);
+    same("(-2)**3", 0, 0, -8.0f);
+    same("max(x, 0)**2", -3, 0, 0.0f);
+    same("max(x, 0)**2", 1.5f, 0, powf(1.5f, 2.0f));
+    same("floor(x+16777216.0)", 0.5f, 0, 16777216.0f);  /* a float, exactly held */
+    same("floor(x)+0.5", 1e10f, 0, 1e10f);              /* float arithmetic, as in Python */
+    refused("2**floor(x)", PSF_ERR_UNSUPPORTED);
+    refused("floor(x)**floor(y)", PSF_ERR_UNSUPPORTED);
+    refused("x+16777217", PSF_ERR_UNSUPPORTED);
+    same("x+1234567", 0, 0, 1234567.0f);
+
     /* A derived name compiles its definition in place. */
     same("r", 3, 4, 5.0f);
     same("r*r-25", 3, 4, 0.0f);
@@ -190,7 +227,7 @@ int main(void)
     /* Blocks: strided and broadcast inputs, partial last block, limit. */
     {
         psf_program p;
-        static float scratch[PSF_MAX_STACK * PSF_BLOCK + PSF_BLOCK];
+        static float scratch[PSF_MAX_STACK * PSF_BLOCK + 2 * PSF_BLOCK];
         compile(&p, "x*10+y+1/(x-50)");
         enum { N = 101 };
         float xs[N], flat[3 * N], out[N], out2[N];
@@ -201,8 +238,8 @@ int main(void)
         }
         const psf_input a[3] = {{xs, 1, 0}, {NULL, 0, 0.25f}, {NULL, 0, 0}};
         const psf_input b[3] = {{flat, 3, 0}, {flat + 1, 3, 0}, {flat + 2, 3, 0}};
-        const int kept = psf_eval(&p, a, N, 900.0f, out, scratch);
-        psf_eval(&p, b, N, 900.0f, out2, scratch);
+        const int kept = psf_eval(&p, a, N, 900.0f, out, NULL, scratch);
+        psf_eval(&p, b, N, 900.0f, out2, NULL, scratch);
         int expect = 0, bad = 0;
         for (int i = 0; i < N; i++)
         {

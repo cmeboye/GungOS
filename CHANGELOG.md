@@ -72,6 +72,15 @@
   renderer) is built without fused multiply-add, which rounds differently.
 - The benchmark records the processor clock and adds "Graph drawing" and
   "Calculator" steps (Python versus C).
+- Fixed (review): compiled formulas could give a wrong answer where whole
+  numbers passed 2^24 (Python's ints are exact; float32 is not), e.g. an
+  integral returning 0 instead of 1. Such points are now evaluated in
+  Python; exact whole-number powers no longer use `powf`.
+- Fixed (review): `Beam.free()` left the model usable on released memory,
+  and a MemoryError while reallocating left a dangling block. A freed model
+  now refuses every use, and blocks are never left pointing at freed memory.
+- Fixed (review): a parametric plot whose y(t) could not be compiled while
+  x(t) could lost t and drew nothing.
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer

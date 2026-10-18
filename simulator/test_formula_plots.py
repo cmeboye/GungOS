@@ -14,7 +14,12 @@ from engtools.plots import plot3d as g
 def render(texts, native):
     Graph.NATIVE_FORMULA = native
     a.items = [Graph.Expression(t, Graph.COLORS[i % len(Graph.COLORS)]) for i, t in enumerate(texts)]
-    assert all((e.formula is not None) == native for e in a.items), texts
+    if native and texts == ['t;abs(t^0.5)']:
+        e = a.items[0]
+        assert e.formula is not None and e.formula2 is None, 'y(t) should be left to eval'
+        assert e.value(t=4.0) == 4 and e.second(4.0) == 2, 'parametric fallback'
+    else:
+        assert all((e.formula is not None) == native for e in a.items), texts
     a.dirty = True
     a.refine = None
     start = ticks_us()
@@ -33,6 +38,8 @@ graph_cases = (
     ['x^2+y^2<=9'],                     # implicit inequality
     ['1/x+y=0', 'tan(x*y)=1'],          # poles
     ['sqrt(x)+floor(y)%3=1'],           # undefined half-plane, whole numbers
+    ['t;abs(t^0.5)'],                   # y(t) left to eval while x(t) is compiled
+    ['floor(x*1e5)*floor(x*1e5)/1e10'], # whole numbers past 2^24, from eval
 )
 for texts in graph_cases:
     py = render(texts, False)

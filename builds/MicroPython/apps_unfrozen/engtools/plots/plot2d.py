@@ -48,23 +48,41 @@ def _geometry():
     return picosolve if hasattr(picosolve, 'contour_segments') else None
 
 
-def native_formula(text):
+def python_value(code):
+    """eval of code at (x, y, t): a finite number, or None."""
+    env = dict(SAFE)
+    def value(x, y, t):
+        env['x'], env['y'], env['t'] = x, y, t
+        try:
+            v = eval(code, env)
+            if isinstance(v, (int, float)) and finite(v):
+                return v
+        except Exception:
+            pass
+        return None
+    return value
+
+
+def native_formula(text, code):
     """text compiled to C (picosolve.Formula), or None to keep using eval.
 
-    Results are identical to eval's; None also covers older firmware and the
+    Results are identical to eval's: points whose whole numbers outgrow
+    float32 are handed back to eval. None also covers older firmware and the
     rare formula the compiler cannot reproduce exactly.
     """
     if not NATIVE_FORMULA:
         return None
     try:
         from picosolve import Formula
-        return Formula(text.strip().replace('^', '**'), ('x', 'y', 't'), {'pi': math.pi, 'e': math.e})
-    except (ImportError, ValueError):
+        return Formula(text.strip().replace('^', '**'), ('x', 'y', 't'), {'pi': math.pi, 'e': math.e},
+                       fallback=python_value(code))
+    except (ImportError, ValueError, TypeError):
         return None
 
 
 def compiled(text, variables):
-    return expression_code(text, variables), native_formula(text)
+    code = expression_code(text, variables)
+    return code, native_formula(text, code)
 
 
 def finite(value):
@@ -174,9 +192,11 @@ class Expression:
         return None
 
     def second(self, t):
-        """y(t) of a parametric pair; value(t=t) has set the environment."""
+        """y(t) of a parametric pair."""
         if self.formula2 is not None:
             return self.formula2(0, 0, t)
+        # The first formula may be compiled, leaving the environment untouched.
+        self.env['x'], self.env['y'], self.env['t'] = 0, 0, t
         try:
             second = eval(self.code2, self.env)
             return second if isinstance(second, (int, float)) and finite(second) else None

@@ -319,7 +319,7 @@ def _compile_arithmetic(text):
         elif c in ' +-*/%(),\t': i += 1
         else: raise ValueError('Unsupported character: '+c)
     code = compile(text,'<surface>','eval')
-    return _formula(text) or code
+    return _formula(text, code) or code
 
 
 # Use the firmware's formula compiler when present (tests switch it off).
@@ -327,19 +327,24 @@ NATIVE_FORMULA = True
 _CODE = type(compile('0','<t>','eval'))
 
 
-def _formula(text):
+def _formula(text, code=None):
     """text compiled to C (picosolve.Formula), or None to keep using eval.
 
     Its results are identical to eval's through _field, including r and the
-    1e12 limit; None also covers older firmware and the rare formula the
-    compiler cannot reproduce exactly.
+    1e12 limit; points whose whole numbers outgrow float32 are handed back to
+    eval. None also covers older firmware and the rare formula the compiler
+    cannot reproduce exactly.
     """
     if not NATIVE_FORMULA:
         return None
+    if code is None:
+        code = compile(text,'<surface>','eval')
+    env = dict(_SAFE)
     try:
         from picosolve import Formula
-        return Formula(text, ('x','y','z'), {'pi':pi,'e':e}, {'r':'sqrt(x*x+y*y+z*z)'}, 1e12)
-    except (ImportError, ValueError):
+        return Formula(text, ('x','y','z'), {'pi':pi,'e':e}, {'r':'sqrt(x*x+y*y+z*z)'}, 1e12,
+                       lambda x,y,z: _field(code,env,x,y,z))
+    except (ImportError, ValueError, TypeError):
         return None
 
 
