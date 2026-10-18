@@ -77,6 +77,13 @@
   renderer) is built without fused multiply-add, which rounds differently.
 - The benchmark records the processor clock and adds "Graph drawing" and
   "Calculator" steps (Python versus C).
+- Imports: MicroPython does not cache "extensible" built-ins (array, time,
+  json, os, struct, ...), so every import searches each sys.path directory
+  on the SD card first: about 70 ms per import on the device. Startup now
+  caches them in sys.modules (`main._cache_builtins`), and Graph and
+  Graph3D import array once at module level. This was why Graph's C
+  drawing measured no faster than Python on the device (one plot spent
+  30 s in about 450 such imports) and much of a 3-D frame's time.
 - Fixed (review): compiled formulas could give a wrong answer where whole
   numbers passed 2^24 (Python's ints are exact; float32 is not), e.g. an
   integral returning 0 instead of 1. Such points are now evaluated in

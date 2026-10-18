@@ -117,6 +117,14 @@ def _stage_memory(vm):
     _record('Heap in use when the benchmark started', used // 1024,
             'KB (%d modules loaded; lowest right after a restart)' % len(sys.modules))
 
+    def import_array():
+        from array import array
+        return array
+    took = _best(import_array, 3)
+    _record('Import of a built-in (array) inside a function', took / 1000,
+            'ms (%d search paths; %s)' % (len(sys.path), 'cached at startup' if 'array' in sys.modules
+                                           else 'searches the SD card each time'))
+
 
 def _stage_swaps(vm, label):
     draw = vm.draw

@@ -5,6 +5,9 @@ Syntax: sin(x), y=x^2, x=3, x^2+y^2=25, y>=sin(x),
         x^2+y^2<=25, or parametric x(t);y(t).
 """
 import math
+# Imported once here: on the device each import of an "extensible" built-in
+# such as array searches every sys.path directory on the SD card first.
+from array import array
 from time import ticks_ms, ticks_diff
 from picoware.system.buttons import *
 from picoware.system.font import FONT_SMALL
@@ -205,7 +208,6 @@ class Expression:
 
     def row(self, xs, y):
         """Values at world xs (array('f')) and one y, NaN where undefined."""
-        from array import array
         out = array('f', bytes(4 * len(xs)))
         kept = self.formula.map(out, xs, y, 0.0)
         self.valid += kept
@@ -442,7 +444,6 @@ class GraphApp:
 
     def curve_state(self, e):
         """C drawing state: no previous point, the expression's extent so far."""
-        from array import array
         return array('f', [0.0, 0.0, 0.0] + ([1.0] + e.bbox if e.bbox else [0.0] * 5))
 
     def keep_box(self, e, state):
@@ -556,7 +557,6 @@ class GraphApp:
 
     def explicit_native(self, e, job, draw):
         """explicit_batch with the formula and the drawing loop in C."""
-        from array import array
         param = e.kind == 'param'
         vertical = e.kind == 'x'
         n = max(320,self.pw*2) if param else (self.ph if vertical else self.pw)
@@ -640,7 +640,6 @@ class GraphApp:
         if geom is None:
             return self.implicit_row_python(e, job)
         # Formulas are evaluated here; C finds where the curve crosses each cell.
-        from array import array
         nan = float('nan')
         step = job['step']
         row = job['row']

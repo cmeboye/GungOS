@@ -36,8 +36,36 @@ def _report_fatal(vm, error) -> bool:
         return False
 
 
+# Built-in modules that a file of the same name may replace ("extensible"
+# ones such as array, time and json) are not cached when imported: every
+# import searches each sys.path directory first, on the device about 70 ms of
+# SD card access, and apps add directories to sys.path. Each is looked up once
+# here, while sys.path is short, and cached in sys.modules, so later imports
+# are a dictionary lookup. No GungOS file replaces any of these names.
+# (socket, ssl, bluetooth and websocket are left alone: importing them may
+# start hardware.)
+_CACHED_BUILTINS = ('array', 'binascii', 'collections', 'errno', 'hashlib', 'heapq', 'io',
+                    'json', 'machine', 'os', 'platform', 'random', 're', 'select', 'struct',
+                    'time')
+
+
+def _cache_builtins():
+    import sys
+
+    for name in _CACHED_BUILTINS:
+        if name in sys.modules:
+            continue
+        try:
+            module = __import__(name)
+        except ImportError:
+            continue
+        if not hasattr(module, "__file__"):  # the built-in, not a file
+            sys.modules[name] = module
+
+
 def main():
     """Main function to run the application"""
+    _cache_builtins()
     from gc import collect, threshold, mem_free, mem_alloc
 
     # Initial cleanup

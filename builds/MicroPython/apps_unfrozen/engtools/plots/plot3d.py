@@ -4,6 +4,10 @@ from micropython import const
 from math import sin, cos, sqrt, exp, log, log10, tan, pi, e, floor, ceil
 from math import asin, acos, atan, atan2, sinh, cosh, tanh, isnan, isinf
 import math
+import re
+# Imported once here: on the device each import of an "extensible" built-in
+# such as array searches every sys.path directory on the SD card first.
+from array import array
 from time import ticks_ms, ticks_diff
 from gc import collect
 from ..ui import theme
@@ -368,7 +372,6 @@ def _surface_expression(text):
 
 def _uses_z(text):
     # Distinguish variable z from names such as "degrees".
-    import re
     return re.search(r'(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)',text) is not None
 
 
@@ -455,7 +458,6 @@ def _geometry():
 def _sample_job(native=True):
     """Yield bounded work units; stream two volume planes instead of N cubed RAM."""
     global _zs,_zs2,_zmin,_zmax,_zscale,_has_implicit,_mesh,_mesh_colors,_mesh_limit
-    from array import array
     from gc import mem_free
     geom=_geometry() if native else None
     _zs,_zs2=None,None
@@ -622,7 +624,6 @@ def _mesh_ramp():
 
 
 def _draw_mesh(draw,preview=False,native=True):
-    from array import array
     draw.fill_screen(C_BG)
     style=0 if preview else _style
     count=len(_mesh_colors)
@@ -645,7 +646,6 @@ def _draw_mesh(draw,preview=False,native=True):
 
 def _draw_mesh_python(draw,style,count,stride):
     """Python renderer, for firmware without the C one."""
-    from array import array
     depths=array('f')
     for i in range(count):
         offset=i*9
