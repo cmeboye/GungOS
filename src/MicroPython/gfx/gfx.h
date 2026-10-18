@@ -83,6 +83,10 @@ void gfx_pixel(gfx_surface *s, int x, int y, uint16_t color);
 void gfx_line(gfx_surface *s, int x1, int y1, int x2, int y2, uint16_t color);
 void gfx_rect(gfx_surface *s, int x, int y, int width, int height, uint16_t color);
 void gfx_fill_rect(gfx_surface *s, int x, int y, int width, int height, uint16_t color);
+/* Shade [x0, x1) x [y0, y1) with a diagonal dot pattern: every pixel where
+ * (x + y) mod period == phase. Graph uses it for inequality regions. */
+void gfx_stipple(gfx_surface *s, int x0, int y0, int x1, int y1, int period, int phase,
+                 uint16_t color);
 void gfx_circle(gfx_surface *s, int cx, int cy, int radius, uint16_t color);
 void gfx_fill_circle(gfx_surface *s, int cx, int cy, int radius, uint16_t color);
 void gfx_fill_round_rect(gfx_surface *s, int x, int y, int width, int height,

@@ -104,6 +104,11 @@ def _stage_memory(vm):
     global _start_mode
     _start_mode = _mode_name(vm.draw)
     _record('Screen mode at start', _start_mode, '')
+    try:
+        import machine
+        _record('Processor clock', machine.freq() // 1000000, 'MHz')
+    except (ImportError, AttributeError):
+        pass
 
 
 def _stage_swaps(vm, label):
@@ -324,6 +329,81 @@ def _stage_formula(vm):
                 'ms (%dx)' % (slow // fast) if fast else 'ms')
 
 
+def _stage_graph(vm):
+    """Graph: the same plots drawn with its Python loops and with the C ones."""
+    try:
+        from engtools.plots import plot2d as G
+    except ImportError:
+        _record('Graph', 'not installed', '')
+        return
+    if not hasattr(G, 'NATIVE_DRAW'):
+        _record('Graph', 'older version without C drawing', '')
+        return
+    app = G.GraphApp(vm, persistent=False)
+    vm._button = k.BUTTON_NONE
+
+    def draw(texts, native):
+        G.NATIVE_FORMULA = G.NATIVE_GEOMETRY = G.NATIVE_DRAW = native
+        app.items = [G.Expression(t, G.COLORS[i % len(G.COLORS)]) for i, t in enumerate(texts)]
+        app.dirty, app.refine = True, None
+        start = ticks_us()
+        for _ in range(20000):
+            app.run()
+            if app.job is None and not app.dirty and app.refine is None:
+                break
+        return ticks_diff(ticks_us(), start)
+    try:
+        for label, texts in (('3 curves', ('sin(x)', 'cos(x)', 'y=x^2/4')),
+                             ('shaded band', ('y>=sin(x)', 'y<=sin(x)+2')),
+                             ('disk and circle', ('x^2+y^2<=9', 'x^2+y^2=25')),
+                             ('heart', ('16*sin(t)^3;13*cos(t)-5*cos(2*t)-2*cos(3*t)-cos(4*t)',))):
+            slow, fast = draw(texts, False), draw(texts, True)
+            _record('Graph %s, Python' % label, slow / 1000, 'ms')
+            _record('Graph %s, C' % label, fast / 1000, 'ms (%dx)' % (slow // fast) if fast else 'ms')
+        _record('Graph screen', _mode_name(vm.draw), '')
+    finally:
+        G.NATIVE_FORMULA = G.NATIVE_GEOMETRY = G.NATIVE_DRAW = True
+
+
+def _stage_calculator(vm):
+    """Calculator integrals and equation roots: its evaluator versus compiled."""
+    try:
+        import engtools.calculator.evaluate as ev
+        from engtools.numerics.equations import root_job
+    except ImportError:
+        _record('Calculator', 'not installed', '')
+        return
+    if not hasattr(ev, 'NATIVE_FORMULA'):
+        _record('Calculator', 'older version without compiled formulas', '')
+        return
+
+    def timed(run, native):
+        ev.NATIVE_FORMULA = native
+        start = ticks_us()
+        try:
+            run()
+        except Exception as exc:
+            return None, str(exc)
+        return ticks_diff(ticks_us(), start), ''
+
+    def solve():
+        for _ in root_job('x^3-2x-5', -10, 10, 0, {}, 'RAD'):
+            pass
+    try:
+        for label, run in (('integral of exp(-x^2)', lambda: ev.calculate('int(-3,3,exp(-x^2))', {}, 'RAD')),
+                           ('integral of sin(x)', lambda: ev.calculate('int(0,pi,sin(x))', {}, 'RAD')),
+                           ('root of x^3-2x-5', solve)):
+            slow, problem = timed(run, False)
+            fast, _ = timed(run, True)
+            if slow is None or fast is None:
+                _record('Calculator ' + label, 'failed: ' + problem, '')
+                continue
+            _record('Calculator %s, Python' % label, slow / 1000, 'ms')
+            _record('Calculator %s, C' % label, fast / 1000, 'ms (%dx)' % (slow // fast) if fast else 'ms')
+    finally:
+        ev.NATIVE_FORMULA = True
+
+
 def _stage_compute(vm):
     from array import array
     n = 2000
@@ -382,7 +462,7 @@ def _report(vm):
 
 def _intro(vm):
     _status(vm.draw, 'Display, memory and processor.', (
-        'Takes about half a minute.',
+        'Takes about a minute.',
         'Screen flashes during the tests.',
         '',
         'F2: 12-bit experiment ' + ('ON' if _panel_test else 'OFF'),
@@ -402,6 +482,8 @@ STAGES = (
     ('3-D plot frame', _stage_3d),
     ('Beam solver', _stage_beam),
     ('Formula compiler', _stage_formula),
+    ('Graph drawing', _stage_graph),
+    ('Calculator', _stage_calculator),
     ('Python versus C', _stage_compute),
 )
 

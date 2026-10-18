@@ -153,6 +153,11 @@ int main(void)
     same("abs(x)**0.5", -4, 0, 2.0f);
     same("pow(x, 2)", 3, 0, 9.0f);
 
+    /* _finite: overflow that Python carries on with becomes undefined. */
+    same("1/(x*x*x*1e30)", 1e10f, 0, 0.0f);
+    same("1/_finite(x*x*x*1e30)", 1e10f, 0, nan);
+    same("_finite(x)+1", 2, 0, 3.0f);
+
     /* A derived name compiles its definition in place. */
     same("r", 3, 4, 5.0f);
     same("r*r-25", 3, 4, 0.0f);

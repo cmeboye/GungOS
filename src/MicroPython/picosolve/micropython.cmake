@@ -23,5 +23,7 @@ target_include_directories(usermod_picosolve INTERFACE ${PICOSOLVE_DIR})
 
 # The firmware is built for size; the solver's loops are the point of it.
 set_source_files_properties(${PICOSOLVE_KERNEL} PROPERTIES COMPILE_OPTIONS "-O2")
+# The formula evaluator reproduces Python's arithmetic exactly: no fused multiply-add.
+set_source_files_properties(${PICOSOLVE_DIR}/expr/formula.c PROPERTIES COMPILE_OPTIONS "-O2;-ffp-contract=off")
 
 target_link_libraries(usermod INTERFACE usermod_picosolve)

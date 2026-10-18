@@ -14,7 +14,7 @@ mp="$root/src/MicroPython"
 stubs="$root/tools/device-syntax"
 if [ "$#" -eq 0 ]; then
     set -- "$mp/PicoCalc/picoware_lcd/lcd.c" "$mp/PicoCalc/picoware_lcd/picoware_lcd.c" \
-        "$mp/gfx/gfx.c" "$mp/gfx/gfx_lcd.c" "$mp/gfx/gfx_mesh.c" \
+        "$mp/gfx/gfx.c" "$mp/gfx/gfx_lcd.c" "$mp/gfx/gfx_mesh.c" "$mp/gfx/gfx_plot.c" \
         "$mp/picosolve/core/skyline.c" "$mp/picosolve/core/order.c" "$mp/picosolve/core/dense.c" \
         "$mp/picosolve/core/dofmap.c" "$mp/picosolve/fe/beam.c" "$mp/picosolve/fe/model.c" "$mp/picosolve/geom/mesh.c" "$mp/picosolve/geom/contour.c" "$mp/picosolve/expr/formula.c"
 fi

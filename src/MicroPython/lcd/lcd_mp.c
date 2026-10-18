@@ -19,6 +19,7 @@ bool mp_engine_gc_ready = false;
 
 #if defined(PICOCALC) || defined(DESKTOP)
 #include "../gfx/gfx_mesh.h"
+#include "../gfx/gfx_plot.h"
 #endif
 
 const mp_obj_type_t lcd_mp_type;
@@ -1571,6 +1572,141 @@ mp_obj_t lcd_mp_mesh3d(size_t n_args, const mp_obj_t *args)
     return mp_obj_new_int(drawn);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lcd_mp_mesh3d_obj, 5, 5, lcd_mp_mesh3d);
+
+// Graph's drawing loops (see gfx/gfx_plot.h). All need the unscaled screen.
+//   self._stipple(x0, y0, x1, y1, color, phase, period)
+//   self._plot_curve(xs, ys, first, frame, style, state)
+//   self._plot_segments(segments, count, frame, color, dashed, state)
+// frame: (x_min, x_max, y_min, y_max, left, top, right, bottom, width, height)
+// style: (color, shade, relation, vertical, parity)
+// state: array('f') of 8: has_previous, previous x, y, has_box, box x0, x1, y0, y1
+static void lcd_plot_unscaled(mp_obj_t self_in)
+{
+    lcd_mp_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    if (self->scale_set)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("plot drawing needs the unscaled screen"));
+    }
+}
+
+static void lcd_plot_frame(mp_obj_t obj, gfx_plot_frame *f)
+{
+    size_t n;
+    mp_obj_t *v;
+    mp_obj_get_array(obj, &n, &v);
+    if (n != 10)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("frame needs 10 values"));
+    }
+    f->x_min = mp_obj_get_float(v[0]);
+    f->x_max = mp_obj_get_float(v[1]);
+    f->y_min = mp_obj_get_float(v[2]);
+    f->y_max = mp_obj_get_float(v[3]);
+    f->left = mp_obj_get_int(v[4]);
+    f->top = mp_obj_get_int(v[5]);
+    f->right = mp_obj_get_int(v[6]);
+    f->bottom = mp_obj_get_int(v[7]);
+    f->width = mp_obj_get_int(v[8]);
+    f->height = mp_obj_get_int(v[9]);
+}
+
+static float *lcd_plot_floats(mp_obj_t obj, size_t need, const char *what)
+{
+    mp_buffer_info_t info;
+    mp_get_buffer_raise(obj, &info, MP_BUFFER_RW);
+    if (info.typecode != 'f' || info.len < need * sizeof(float))
+    {
+        mp_raise_msg_varg(&mp_type_ValueError, MP_ERROR_TEXT("%s must be array('f') of at least %d floats"),
+                          what, (int)need);
+    }
+    return info.buf;
+}
+
+static void lcd_plot_state_in(const float *a, gfx_plot_state *st)
+{
+    st->has_previous = a[0] != 0.0f;
+    st->previous_x = a[1];
+    st->previous_y = a[2];
+    st->has_box = a[3] != 0.0f;
+    for (int i = 0; i < 4; i++)
+    {
+        st->box[i] = a[4 + i];
+    }
+}
+
+static void lcd_plot_state_out(const gfx_plot_state *st, float *a)
+{
+    a[0] = st->has_previous ? 1.0f : 0.0f;
+    a[1] = st->previous_x;
+    a[2] = st->previous_y;
+    a[3] = st->has_box ? 1.0f : 0.0f;
+    for (int i = 0; i < 4; i++)
+    {
+        a[4 + i] = st->box[i];
+    }
+}
+
+mp_obj_t lcd_mp_stipple(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    lcd_plot_unscaled(args[0]);
+    gfx_stipple(&gfx_screen, mp_obj_get_int(args[1]), mp_obj_get_int(args[2]), mp_obj_get_int(args[3]),
+                mp_obj_get_int(args[4]), mp_obj_get_int(args[7]), mp_obj_get_int(args[6]),
+                (uint16_t)mp_obj_get_int(args[5]));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lcd_mp_stipple_obj, 8, 8, lcd_mp_stipple);
+
+mp_obj_t lcd_mp_plot_curve(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    lcd_plot_unscaled(args[0]);
+    mp_buffer_info_t xs_info;
+    mp_get_buffer_raise(args[1], &xs_info, MP_BUFFER_READ);
+    const size_t count = xs_info.len / sizeof(float);
+    const float *xs = lcd_plot_floats(args[1], count, "xs");
+    const float *ys = lcd_plot_floats(args[2], count, "ys");
+    gfx_plot_frame f;
+    lcd_plot_frame(args[4], &f);
+    size_t n;
+    mp_obj_t *style;
+    mp_obj_get_array(args[5], &n, &style);
+    if (n != 5)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("style needs 5 values"));
+    }
+    float *state = lcd_plot_floats(args[6], 8, "state");
+    gfx_plot_state st;
+    lcd_plot_state_in(state, &st);
+    gfx_plot_curve(&gfx_screen, &f, xs, ys, (int)count, mp_obj_get_int(args[3]),
+                   (uint16_t)mp_obj_get_int(style[0]), (uint16_t)mp_obj_get_int(style[1]),
+                   mp_obj_get_int(style[2]), mp_obj_is_true(style[3]), mp_obj_get_int(style[4]), &st);
+    lcd_plot_state_out(&st, state);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lcd_mp_plot_curve_obj, 7, 7, lcd_mp_plot_curve);
+
+mp_obj_t lcd_mp_plot_segments(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    lcd_plot_unscaled(args[0]);
+    const mp_int_t count = mp_obj_get_int(args[2]);
+    if (count < 0)
+    {
+        mp_raise_ValueError(MP_ERROR_TEXT("count must not be negative"));
+    }
+    const float *segments = lcd_plot_floats(args[1], (size_t)count * 4, "segments");
+    gfx_plot_frame f;
+    lcd_plot_frame(args[3], &f);
+    float *state = lcd_plot_floats(args[6], 8, "state");
+    gfx_plot_state st;
+    lcd_plot_state_in(state, &st);
+    gfx_plot_segments(&gfx_screen, &f, segments, (int)count, (uint16_t)mp_obj_get_int(args[4]),
+                      mp_obj_is_true(args[5]), &st);
+    lcd_plot_state_out(&st, state);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lcd_mp_plot_segments_obj, 7, 7, lcd_mp_plot_segments);
 #endif
 
 // One row of the screen image as bytes, RGB332 (1 byte per pixel).
@@ -1692,10 +1828,13 @@ static const mp_rom_map_elem_t lcd_mp_locals_dict_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&lcd_mp_set_mode_obj)},                          // self.set_mode()
     {MP_ROM_QSTR(MP_QSTR_set_scaling), MP_ROM_PTR(&lcd_mp_set_scaling_obj)},                    // self.set_scaling()
     {MP_ROM_QSTR(MP_QSTR_swap), MP_ROM_PTR(&lcd_mp_swap_obj)},                                  // self.swap() -> rows sent
-    {MP_ROM_QSTR(MP_QSTR__read_row), MP_ROM_PTR(&lcd_mp_read_row_obj)},
+    {MP_ROM_QSTR(MP_QSTR__read_row), MP_ROM_PTR(&lcd_mp_read_row_obj)},                          // self._read_row(y) -> RGB332 bytes
 #if defined(PICOCALC) || defined(DESKTOP)
     {MP_ROM_QSTR(MP_QSTR__mesh3d), MP_ROM_PTR(&lcd_mp_mesh3d_obj)},                              // self._mesh3d(...) -> triangles drawn
-#endif                          // self._read_row(y) -> RGB332 bytes
+    {MP_ROM_QSTR(MP_QSTR__stipple), MP_ROM_PTR(&lcd_mp_stipple_obj)},                            // self._stipple(...)
+    {MP_ROM_QSTR(MP_QSTR__plot_curve), MP_ROM_PTR(&lcd_mp_plot_curve_obj)},                      // self._plot_curve(...)
+    {MP_ROM_QSTR(MP_QSTR__plot_segments), MP_ROM_PTR(&lcd_mp_plot_segments_obj)},                // self._plot_segments(...)
+#endif
 #ifdef LCD_MP_SET_PANEL_BITS
     {MP_ROM_QSTR(MP_QSTR_set_panel_bits), MP_ROM_PTR(&lcd_mp_set_panel_bits_obj)},                // self.set_panel_bits(12 or 16) -> bool
 #endif

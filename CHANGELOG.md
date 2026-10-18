@@ -60,6 +60,18 @@
   plot pixel for pixel), and a formula it cannot match exactly keeps using
   `eval`. In the simulator, formulas evaluate 23–74× faster and implicit plots
   draw 4–7× faster. The benchmark has a "Formula compiler" step.
+- Graph's per-point drawing runs in C (`gfx/gfx_plot.c`): explicit and
+  parametric curves with inequality shading, implicit-curve segments, and the
+  dotted fill of inequality regions (`draw._stipple`). Pixel for pixel the
+  same as the Python loops on 14 test plots; 5–20× faster in the simulator.
+- Calculator integrals (`int(a,b,f)`) and the equation solver evaluate
+  compiled formulas: identical results, integrals 10–20× faster in the
+  simulator. Compiled integrands are no longer cut off by the 60,000-step
+  work limit, which only guarded the slow evaluator.
+- C code that copies Python's arithmetic (formulas, Graph drawing, the 3-D
+  renderer) is built without fused multiply-add, which rounds differently.
+- The benchmark records the processor clock and adds "Graph drawing" and
+  "Calculator" steps (Python versus C).
 - Fixed drawing bugs: shapes and lines crossing the left or top edge no
   longer reappear at the far side; rounded rectangles keep their shape when
   clipped; JPEG and 16-bit images clipped at the right edge are no longer

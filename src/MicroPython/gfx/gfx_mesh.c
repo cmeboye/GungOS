@@ -1,6 +1,14 @@
 #include "gfx_mesh.h"
 #include <math.h>
 
+/* Python rounds after every operation; a fused multiply-add would not, and
+ * this code must reproduce Python's arithmetic exactly. */
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#endif
+
 /* A projected vertex: screen position, depth from the camera, rotated point. */
 typedef struct
 {

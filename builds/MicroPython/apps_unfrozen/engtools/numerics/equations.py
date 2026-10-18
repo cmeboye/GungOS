@@ -1,6 +1,6 @@
 """Bounded real-equation jobs and degree 2..4 complex polynomial roots."""
 import math
-from engtools.calculator.evaluate import Parser,Evaluator,finite
+from engtools.calculator.evaluate import Parser,Evaluator,finite,native_function
 
 def equation(text,variables=None,angle='DEG'):
     if text.count('=')>1: raise ValueError('Use one equation or expression in x')
@@ -9,6 +9,16 @@ def equation(text,variables=None,angle='DEG'):
     right=Parser(parts[1] if len(parts)>1 else '0').parse()
     if left[0] or right[0]: raise ValueError('Assignments are not allowed in equations')
     constants=dict(variables or {})
+    native=native_function(left[1],constants,angle),native_function(right[1],constants,angle)
+    if native[0] is not None and native[1] is not None:
+        fl,fr=native
+        def evaluate(x):
+            a,b=fl(x),fr(x)
+            if a is None or b is None: raise ValueError('Equation is not finite and real here')
+            value,scale=a-b,1+abs(a)+abs(b)
+            if not finite(value) or not finite(scale): raise ValueError('Equation scaling exceeds float32 range')
+            return value,scale
+        return evaluate
     def evaluate(x):
         evaluator=Evaluator(constants,angle)
         a,b=evaluator.run(left[1],{'x':x}),evaluator.run(right[1],{'x':x})

@@ -3,6 +3,14 @@
 #include <math.h>
 #include <string.h>
 
+/* Python rounds after every operation; a fused multiply-add would not, and
+ * this code must reproduce Python's arithmetic exactly. */
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#endif
+
 /* The same float constant MicroPython's math module uses (MP_PI). */
 #define PSF_PI 3.14159265358979323846f
 
@@ -33,7 +41,8 @@ enum
     OP_RADIANS,
     OP_MIN, /* + argument count */
     OP_MAX, /* + argument count */
-    OP_NONE /* identity: float() */
+    OP_NONE, /* identity: float() */
+    OP_FINITE /* _finite(): undefined unless finite */
 };
 
 /* math functions that follow MicroPython's math_generic_1 rule. */
@@ -72,6 +81,9 @@ static const function FUNCTIONS[] = {
     {"pow", OP_POW, 0, 2, 2},
     {"degrees", OP_DEGREES, 0, 1, 1},
     {"radians", OP_RADIANS, 0, 1, 1},
+    /* For callers whose own evaluator rejects every non-finite step (the
+     * calculator); the plot tools never accept names starting with _. */
+    {"_finite", OP_FINITE, 0, 1, 1},
 };
 
 /* ------------------------------------------------------------------------ */
@@ -394,6 +406,11 @@ static value call(compiler *c, const function *f)
         break;
     case OP_NONE:
         result.zero_sign = zero_sign;
+        break;
+    case OP_FINITE:
+        emit(c, OP_FINITE);
+        result = args[0];
+        result.whole_literal = false;
         break;
     case OP_ABS:
         /* abs() of a complex power is real in Python; not reproducible here. */
@@ -857,6 +874,7 @@ int PS_HOT(psf_eval)(const psf_program *p, const psf_input *inputs, int count, f
                 sp -= k - 1;
                 break;
             }
+            case OP_FINITE: LANES err[i] |= !isfinite(b[i]); break;
             default: break; /* OP_NONE */
             }
         }

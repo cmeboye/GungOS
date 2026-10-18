@@ -222,6 +222,37 @@ void gfx_fill_rect(gfx_surface *s, int x, int y, int width, int height, uint16_t
         span(s, row, x, x + width - 1, c);
 }
 
+void GFX_HOT(gfx_stipple)(gfx_surface *s, int x0, int y0, int x1, int y1, int period, int phase,
+                          uint16_t color)
+{
+    if (period < 1)
+        return;
+    const uint8_t c = gfx_to332(color);
+    if (x0 < 0)
+        x0 = 0;
+    if (x1 > s->width)
+        x1 = s->width;
+    if (y0 < 0)
+        y0 = 0;
+    if (y1 > s->height)
+        y1 = s->height;
+    for (int y = y0; y < y1; y++)
+    {
+        int offset = (phase - y - x0) % period;
+        if (offset < 0)
+            offset += period;
+        const int first = x0 + offset;
+        if (first >= x1)
+            continue;
+        const int len = x1 - first;
+        touch(s, y);
+        uint8_t *p = s->storage->edit(s->ctx, y, first, len);
+        for (int i = 0; i < len; i += period)
+            p[i] = c;
+        s->storage->commit(s->ctx, y, first, len);
+    }
+}
+
 void gfx_circle(gfx_surface *s, int cx, int cy, int radius, uint16_t color)
 {
     if (radius <= 0)

@@ -8,7 +8,8 @@
  *   numbers, named variables and constants, + - * / // % ** and unary -,
  *   parentheses, and calls to sin cos tan asin acos atan atan2 sqrt exp
  *   log (1 or 2 arguments) log10 sinh cosh tanh floor ceil int round float
- *   abs min max pow degrees radians.
+ *   abs min max pow degrees radians, and _finite(v), which makes a point
+ *   undefined unless v is finite (for evaluators stricter than Python's).
  *
  * Results match MicroPython's own evaluation bit for bit (float32, the same
  * C library functions, the same rules). A point where Python would raise

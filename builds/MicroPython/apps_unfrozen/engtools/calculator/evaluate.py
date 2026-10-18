@@ -110,6 +110,81 @@ class Parser:
         return assignment, node
 
 
+# Use the firmware's formula compiler for repeated evaluation (tests switch it off).
+NATIVE_FORMULA = True
+_DIRECT = {'sqrt': 'sqrt', 'exp': 'exp', 'abs': 'abs', 'floor': 'floor', 'ceil': 'ceil',
+           'round': 'round', 'sinh': 'sinh', 'cosh': 'cosh', 'tanh': 'tanh', 'ln': 'log',
+           'log': 'log10', 'sin': 'sin', 'cos': 'cos', 'tan': 'tan', 'asin': 'asin',
+           'acos': 'acos', 'atan': 'atan', 're': '', 'conj': ''}
+
+
+class _Unsupported(Exception):
+    pass
+
+
+def _formula_text(node, variables, angle, local, constants):
+    """Python text that follows Evaluator.run step for step on real values."""
+    def constant(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise _Unsupported
+        if isinstance(value, int):
+            if abs(value) >= 1 << 24: raise _Unsupported
+            return '(%d)' % value
+        name = '_c%d' % len(constants)
+        constants[name] = value
+        return name
+
+    def text(node):
+        kind = node[0]
+        if kind == 'value': return constant(node[1])
+        if kind == 'name':
+            name = node[1]
+            if name == local: return 'x'
+            if name == 'pi': return constant(math.pi)
+            if name == 'e': return constant(math.e)
+            if name in ('ans', 'Ans'): return constant(variables.get('Ans', 0))
+            if name in ('i', 'j') or name not in variables: raise _Unsupported
+            return constant(variables[name])
+        if kind == 'unary':
+            inner = text(node[2])
+            return '(-%s)' % inner if node[1] == '-' else inner
+        if kind == 'binary':
+            op = '**' if node[1] == '^' else node[1]
+            # Evaluator.run checks every operation's result is finite.
+            return '_finite(%s%s%s)' % (text(node[2]), op, text(node[3]))
+        if kind != 'call': raise _Unsupported
+        name, args = node[1], [text(arg) for arg in node[2]]
+        if name in ('min', 'max'):
+            if not args: raise _Unsupported
+            return args[0] if len(args) == 1 else '%s(%s)' % (name, ','.join(args))
+        if name == 'logb' and len(args) == 2:
+            return '_finite(log(%s)/log(%s))' % (args[1], args[0])
+        if name not in _DIRECT or len(args) != 1: raise _Unsupported
+        a = args[0]
+        if name in ('sin', 'cos', 'tan') and angle == 'DEG': a = '%s*%s' % (a, constant(math.pi/180))
+        value = '%s(%s)' % (_DIRECT[name], a)
+        if name in ('asin', 'acos', 'atan') and angle == 'DEG': value = '%s*%s' % (value, constant(180/math.pi))
+        return '_finite(%s)' % value
+    return text(node)
+
+
+def native_function(node, variables, angle='DEG', local='x'):
+    """node as a compiled function of local (picosolve.Formula), or None.
+
+    Gives Evaluator.run's results for real values; None covers complex
+    values, statistics, factorials, nested integrals and older firmware.
+    Call it as f(x): a float, or None where Evaluator.run would raise.
+    """
+    if not NATIVE_FORMULA: return None
+    constants = {}
+    try:
+        text = _formula_text(node, variables, angle, local, constants)
+        from picosolve import Formula
+        return Formula(text, ('x',), constants)
+    except (_Unsupported, ImportError, ValueError):
+        return None
+
+
 class Evaluator:
     def __init__(self, variables, angle='DEG', complex_mode=False, statistics=None):
         self.variables, self.angle, self.complex_mode = variables, angle, complex_mode
@@ -182,7 +257,14 @@ class Evaluator:
                 from engtools.numerics.backend import require
                 _, sp = require()
                 if lower == upper: return 0.0
-                integrand = lambda x: self.run(args[2], {'x':x})
+                native = None if self.complex_mode else native_function(args[2], self.variables, self.angle)
+                if native is not None:
+                    def integrand(x):
+                        value = native(x)
+                        if value is None: raise ValueError('Integrand undefined in the interval')
+                        return value
+                else:
+                    integrand = lambda x: self.run(args[2], {'x':x})
                 coarse, coarse_error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=3)
                 value, error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=4)
                 if not all(finite(v) for v in (coarse, coarse_error, value, error)):

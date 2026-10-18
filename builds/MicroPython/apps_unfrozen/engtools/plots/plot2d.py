@@ -36,6 +36,8 @@ SAFE.update({'abs': abs, 'min': min, 'max': max, 'pow': pow,
 # (tests switch them off).
 NATIVE_GEOMETRY = True
 NATIVE_FORMULA = True
+NATIVE_DRAW = True
+RELATIONS = {'=': 0, '<': 1, '<=': 2, '>': 3, '>=': 4}  # gfx_plot.h codes
 
 
 def _geometry():
@@ -410,6 +412,32 @@ class GraphApp:
         else:
             self.draw._line(int(x0),int(y0),int(x1),int(y1),color)
 
+    def native(self, name):
+        """The firmware's C version of a drawing loop, or None (tests switch it off)."""
+        return getattr(self.draw, name, None) if NATIVE_DRAW else None
+
+    def frame(self):
+        b = self.bounds
+        return (b[0], b[1], b[2], b[3], self.left, self.top, self.right, self.bottom, self.pw, self.ph)
+
+    def curve_state(self, e):
+        """C drawing state: no previous point, the expression's extent so far."""
+        from array import array
+        return array('f', [0.0, 0.0, 0.0] + ([1.0] + e.bbox if e.bbox else [0.0] * 5))
+
+    def keep_box(self, e, state):
+        if state[3]: e.bbox = [state[4], state[5], state[6], state[7]]
+
+    def stipple(self, x1, y1, x2, y2, color, phase):
+        """Dots where (x + y) % 3 == phase: a fill that keeps overlaps visible."""
+        native = self.native('_stipple')
+        if native:
+            native(x1, y1, x2, y2, color, phase, 3)
+            return
+        for sy in range(y1, y2):
+            for sx in range(x1+(phase-sy-x1)%3, x2, 3):
+                self.draw._pixel(sx, sy, color)
+
     def axes(self, labels=False):
         b = self.bounds
         for vertical, lower, upper in ((True,b[0],b[1]),(False,b[2],b[3])):
@@ -483,7 +511,7 @@ class GraphApp:
             else: done = self.explicit_batch(e,job)
             if done:
                 job['index'] += 1
-                job['row'],job['previous'],job['gridrow'] = 0,None,None
+                job['row'],job['previous'],job['gridrow'],job['curve'] = 0,None,None,None
             if ticks_diff(ticks_ms(),started) >= 12: break
         self.draw.swap()
 
@@ -506,7 +534,41 @@ class GraphApp:
         job['row'] += 20
         return job['row'] >= len(e.points)
 
+    def explicit_native(self, e, job, draw):
+        """explicit_batch with the formula and the drawing loop in C."""
+        from array import array
+        param = e.kind == 'param'
+        vertical = e.kind == 'x'
+        n = max(320,self.pw*2) if param else (self.ph if vertical else self.pw)
+        pos = job['row']
+        end = min(pos+160,n+1)
+        count = end-pos
+        xs, ys = array('f',bytes(4*count)), array('f',bytes(4*count))
+        if param:
+            t0,t1 = self.trange
+            ts = array('f',[t0+(t1-t0)*i/n for i in range(pos,end)])
+            kept = e.formula.map(xs,0.0,0.0,ts)
+            e.formula2.map(ys,0.0,0.0,ts)
+        elif vertical:
+            ys = array('f',[self.xy(self.left,self.top+i)[1] for i in range(pos,end)])
+            kept = e.formula.map(xs,self.xy(self.left,self.top)[0],ys,0.0)
+        else:
+            xs = array('f',[self.xy(self.left+i,self.top)[0] for i in range(pos,end)])
+            kept = e.formula.map(ys,xs,self.xy(self.left,self.top)[1],0.0)
+        e.valid += kept
+        e.invalid += count-kept
+        state = job.get('curve') or self.curve_state(e)
+        draw(xs,ys,pos,self.frame(),(e.color,shade_color(e.color),RELATIONS[e.relation],vertical,
+                                     self.items.index(e)),state)
+        self.keep_box(e,state)
+        job['curve'] = state
+        job['row'] = end
+        return end > n
+
     def explicit_batch(self, e, job):
+        draw = self.native('_plot_curve')
+        if draw and e.formula is not None and (e.kind != 'param' or e.formula2 is not None):
+            return self.explicit_native(e, job, draw)
         param = e.kind == 'param'
         vertical = e.kind == 'x'
         length = self.ph if vertical else self.pw
@@ -587,15 +649,17 @@ class GraphApp:
                 centres.append(nan if v is None else v)
         upper = job['gridrow'] if job['gridrow'] is not None else values(py)
         lower = values(py2)
-        for col in range(cells):
-            x1,x2 = xs[col],xs[col+1]
-            if e.relation != '=' and e.inside(centres[col]):
-                color = shade_color(e.color)
-                # Sparse, stable stipple preserves overlapping inequality colors.
-                phase = self.items.index(e)%3
-                for sy in range(py,py2):
-                    for sx in range(x1+(phase-sy-x1)%3,x2,3):
-                        self.draw._pixel(sx,sy,color)
+        if e.relation != '=':
+            # Shade runs of cells whose centre is inside, one call per run.
+            color = shade_color(e.color)
+            phase = self.items.index(e)%3
+            start = None
+            for col in range(cells+1):
+                if col < cells and e.inside(centres[col]):
+                    if start is None: start = xs[col]
+                elif start is not None:
+                    self.stipple(start,py,xs[col],py2,color,phase)
+                    start = None
         xsf = array('f',xs)
         queries = array('f',[0.0]*(8*cells))
         q = geom.contour_queries(upper,lower,centres,xsf,py,py2,queries)
@@ -605,10 +669,17 @@ class GraphApp:
             mids.append(nan if v is None else v)
         segments = array('f',[0.0]*(8*cells))
         dashed = e.relation in ('<','>')
-        for i in range(geom.contour_segments(upper,lower,centres,xsf,py,py2,mids,segments)):
-            a,b = (segments[4*i],segments[4*i+1]),(segments[4*i+2],segments[4*i+3])
-            self.line(a,b,e.color,dashed)
-            e.include(*self.xy(*a)); e.include(*self.xy(*b))
+        count = geom.contour_segments(upper,lower,centres,xsf,py,py2,mids,segments)
+        draw = self.native('_plot_segments')
+        if draw:
+            state = self.curve_state(e)
+            draw(segments,count,self.frame(),e.color,dashed,state)
+            self.keep_box(e,state)
+        else:
+            for i in range(count):
+                a,b = (segments[4*i],segments[4*i+1]),(segments[4*i+2],segments[4*i+3])
+                self.line(a,b,e.color,dashed)
+                e.include(*self.xy(*a)); e.include(*self.xy(*b))
         job['gridrow'] = lower
         job['row'] += 1
         return py2 >= self.bottom
@@ -632,12 +703,7 @@ class GraphApp:
             cx,cy = self.xy((x1+x2)/2,(py+py2)/2)
             center = e.value(cx,cy)
             if e.relation != '=' and e.inside(center):
-                color = shade_color(e.color)
-                # Sparse, stable stipple preserves overlapping inequality colors.
-                phase = self.items.index(e)%3
-                for sy in range(py,py2):
-                    for sx in range(x1+(phase-sy-x1)%3,x2,3):
-                        self.draw._pixel(sx,sy,color)
+                self.stipple(x1,py,x2,py2,shade_color(e.color),self.items.index(e)%3)
             if center is None or any(p[2] is None for p in corners): continue
             crossings = []
             for a,b in zip(corners,corners[1:]+corners[:1]):

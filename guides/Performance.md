@@ -92,6 +92,13 @@ keeps using `eval`. The benchmark's "Formula compiler" step times three
 formulas at 4096 points both ways, and its 3-D step builds an implicit sphere
 in pure Python, with the C mesh builder, and with C mesh and formula.
 
+Graph's curve, contour and shading loops run in C as well (`gfx/gfx_plot.c`,
+`draw._plot_curve`, `_plot_segments`, `_stipple`), and the calculator's
+integrals and equation solver use compiled formulas. The "Graph drawing" and
+"Calculator" steps time each both ways. The benchmark also records the
+processor clock (240 MHz in normal use, 200 MHz in the REPL and serial
+terminal).
+
 Full-screen benchmark samples now establish an untimed baseline and verify that
 every timed swap sends all 320 rows. Each timing is paired with its own row
 count. Earlier full-screen numbers may describe a partial initial update.

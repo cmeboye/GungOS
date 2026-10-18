@@ -706,7 +706,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(geom_contour_segments_obj, 8, 8, geom
 /* Formulas: compiled once, evaluated at many points (see expr/formula.h)    */
 /* ------------------------------------------------------------------------ */
 
-#define FORMULA_MAX_NAMES 16
+#define FORMULA_MAX_NAMES PSF_MAX_CONSTANTS
 
 typedef struct
 {
