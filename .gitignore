@@ -5,7 +5,7 @@
 /.env.*
 !/.env.example
 /simulator/sdcard/
-/simulator/sdcard.flash/
+/simulator/sdcard.*/
 
 # Generated firmware, app packages and host executables
 /.build/

@@ -9,9 +9,8 @@ a square 238 × 238 pixels, filling its frame without a separate caption strip.
 The Apps category lists **PicoDESK, PicoLAB, Games, Misc**. PicoDESK contains
 Eggcel, PicoWord and PicoPaint. PicoLAB contains Graph, Graph3D and engineering
 tools. Screensavers are under Misc. System menus use the same theme/layout as
-the application launchers. The compact layout below ships with v1.1; installing it on the device requires
-the matching UF2 and SD app update. Previous local packages are preserved for
-rollback.
+the application launchers. The current v1.2 layout and branding require the
+matching UF2 and SD app update. Previous local packages can be retained for rollback.
 
 | Area | Position (x, y) | Size (width × height) |
 | --- | --- | --- |
@@ -37,7 +36,6 @@ The red lettering and underline in the PicoDESK/PicoLAB PNGs follow the current
 system accent; their white pixels and the GungOS brand colours are preserved.
 Transparent pixels use the destination panel colour. Old artwork is archived in
 `assets/legacy/`.
-
 
 ## Navigation
 
@@ -160,6 +158,6 @@ sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w \
   --network offline --audio silent
 ```
 
-The desktop changes are firmware source changes and need the v1.1 UF2 build
-for the physical device. Copying the engineering SD bundle alone does not
-update the home screen. The current UF2 is left in place until that build.
+Desktop layout, branding and shared menu changes require rebuilding the v1.2
+UF2 for the physical device. An SD app update alone does not update the home
+screen. Previously generated release files retain the source they were built from.

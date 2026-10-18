@@ -3,9 +3,9 @@
 A handheld engineering computer for **PicoCalc with Raspberry Pi Pico 2 W**.
 By Cem Gungor, based on [Picoware by jblanked](https://github.com/jblanked/Picoware).
 
-![GungOS desktop in the simulator](assets/legacy/desktop.png)
+![GungOS desktop in the simulator](assets/screenshots/desktop.png)
 
-*Simulator preview; resource figures reflect the host.*
+*Simulator preview with the current logo and Lorenz widget; status and resource figures are simulated.*
 
 GungOS v1.2 combines a dark desktop, a calculator widget, themed menus and
 keyboard-driven applications on a 320 × 320 display.
@@ -43,7 +43,8 @@ After building:
 This source tree targets only PicoCalc with Pico 2 W. Subsequent
 app edits normally need only SD `.mpy` replacements. Firmware/native/font changes
 need a new UF2. Build outputs belong in GitHub Releases with their matching
-source revision, rather than the source history.
+source revision, rather than the source history. Local `releases/` packages
+are snapshots and must be rebuilt to include later source changes.
 
 ## Simulator
 

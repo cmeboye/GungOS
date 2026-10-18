@@ -63,6 +63,7 @@ python3 tools/verify-gungos-release.py
 To build and check the host simulator using the same vendored MicroPython:
 
 ```sh
+mkdir -p .build
 MICROPYTHON_DIR="$PWD/vendor/micropython" \
 PICOWARE_DESKTOP_SOURCE_ALIAS="$PWD/.build/desktop-source" \
   sh tools/micropython-desktop.sh
@@ -70,7 +71,6 @@ sh tools/run-micropython-desktop.sh --sim-check --network offline --audio silent
 sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w
 ```
 
-Create `.build/` first if running the simulator build without a firmware build.
 The simulator's initial SD tree uses synthetic network/settings fixtures. It is
 for development and should never be copied to a device instead of `sd-card/`.
 
@@ -78,7 +78,14 @@ The source tree is checked separately with:
 
 ```sh
 python3 tools/check-public-repo.py
+python3 tools/check-service-independence.py
+python3 tools/tests/test_public_repo.py
 ```
+
+To verify packed artwork against the PNG sources, install Pillow in your host
+Python environment and run `python3 tools/convert-dashboard-assets.py --check`.
+The firmware consumes the committed packed modules and does not require Pillow
+or a PNG decoder.
 
 Native code has host tests, and device-only C can be type-checked against the
 real pico-sdk headers without the Arm toolchain:
@@ -90,7 +97,10 @@ sh tools/check-device-syntax.sh
 ```
 
 Release checksum generation covers `firmware/`, `sd-card/` and `verification/`;
-it excludes local backups, personal SD trees and the Git database.
+it excludes local backups, personal SD trees and the Git database. Build from
+a clean source revision when preparing a public release. Preserve earlier
+release folders; rebuilding the source does not refresh an existing snapshot
+under `releases/`. Keep each UF2 with its matching SD package and source revision.
 
 ## Editing applications
 

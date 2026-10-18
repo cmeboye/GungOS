@@ -14,6 +14,8 @@ Build/check instructions are in `BUILD.md`. Relevant checks include:
 
 ```sh
 python3 tools/check-public-repo.py
+python3 tools/check-service-independence.py
+python3 tools/tests/test_public_repo.py
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_eggcel_revision.py
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_tetris_audio.py
 ```

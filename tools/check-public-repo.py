@@ -5,13 +5,15 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 THIRD_PARTY=('vendor/','src/MicroPython/ulab/upstream/','src/MicroPython/JPEGDEC/')
-PRIVATE_ROOTS=('local-backup/','host-tools/','SD contents/','.build/','simulator/sdcard/',
+PRIVATE_ROOTS=('local-backup/','host-tools/','SD contents/','.build/','simulator/sdcard/','simulator/sdcard.flash/',
+               'releases/','sd-card/',
                'builds/MicroPython/apps/','builds/MicroPython/desktop/','sd-card/picoware/apps/','updates/','Tetris Sound/')
 TOKENS=re.compile(rb'(?<![A-Za-z0-9])(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|sk-(?:proj-)?[A-Za-z0-9_-]{30,}|AKIA[A-Z0-9]{16}|xox[baprs]-[A-Za-z0-9-]{25,})')
 PEM=re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----')
 ASSIGNMENT=re.compile(rb'''(?i)["']?(?:wifi_password|api_key|access_token|auth_token|server_password)["']?\s*[:=]\s*["']([^"'\r\n]+)["']''')
 TEST_VALUES={b'initial-pass',b'test-only',b'test-key',b'other-test-key'}
-TEST_FILES={'simulator/test_preferences.py','simulator/test_trimmed_firmware.py','simulator/test_ai_setup.py'}
+TEST_FILES={'simulator/test_preferences.py','simulator/test_trimmed_firmware.py'}
+PUBLIC_TEMPLATES={'sd-card/README.md','.env.example'}
 PUBLIC_KEYS=('vendor/micropython/lib/mbedtls/tests/','vendor/micropython/lib/pico-sdk/tools/example_keys/')
 
 def git(*args,root=ROOT):
@@ -35,7 +37,7 @@ def audit(root=ROOT):
   if not p.is_file():issues.append({'file':name,'reason':'tracked file is missing'});continue
   size=p.stat().st_size;bytes_total+=size
   if size>50*1024*1024:issues.append({'file':name,'reason':'file exceeds project 50 MiB review limit'})
-  if name.startswith(PRIVATE_ROOTS) or name=='.env' or name.startswith('.env.') or name in ('SHA256SUMS.txt','.DS_Store','screenshot.bmp','screenshot.png'):
+  if ((name.startswith(PRIVATE_ROOTS) or name=='.env' or name.startswith('.env.')) and name not in PUBLIC_TEMPLATES) or p.name=='.DS_Store' or name in ('SHA256SUMS.txt','screenshot.bmp','screenshot.png'):
    issues.append({'file':name,'reason':'private/generated file is a Git candidate'})
   if not third_party and p.suffix.lower() in ('.wav','.zip','.mpy','.uf2','.elf','.map'):
    issues.append({'file':name,'reason':'generated binary or audio must be reviewed as a separate release'})

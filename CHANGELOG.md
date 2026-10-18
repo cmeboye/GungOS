@@ -2,6 +2,9 @@
 
 ## v1.2 — 2026-10-18
 
+- Refresh desktop/menu branding with native-resolution logos; PicoDESK and
+  PicoLAB lettering and underlines follow the system accent. Archive old artwork.
+
 - Consolidate the tested v1.1 performance work into a matching firmware and SD
   release: native graphics, changed-row DMA, built-in import caching, C formula
   and plot geometry paths, and the beam solver with lower working memory.

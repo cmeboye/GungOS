@@ -1,5 +1,7 @@
-# Picoware MicroPython Simulator
-Run Picoware on your desktop. The simulator uses a native SDL2 window for display and input, while Picoware itself runs inside MicroPython.
+# GungOS MicroPython simulator
+
+Run GungOS on your desktop. A native SDL2 window handles display and input,
+while the firmware runs inside the project's custom MicroPython interpreter.
 
 ## Features
 - The firmware's own C drawing code (`src/MicroPython/gfx`), so the screen
@@ -18,28 +20,17 @@ board GungOS supports. The home clock still supports NTP. JPEG viewing, USB
 HID, Bluetooth, Wi-Fi, SD editing and PicoLAB are available.
 
 The desktop interpreter includes the [selected ulab build](../src/MicroPython/ulab/README.md)
-and uses float32, matching the current PicoCalc numeric profile. Engineering
-Lab's Numerics checks page shows known-answer checks and host timings; its heap
-deltas are allocation snapshots rather than peak memory measurements.
+and uses float32, matching the current PicoCalc numeric profile. PicoLAB's
+Numerics checks page shows known-answer checks and host timings; its heap deltas
+are allocation snapshots rather than peak memory measurements.
 
-### macOS
+### macOS and Linux
 
-```sh
-brew install micropython sdl2
-```
-
-### Linux
-
-```sh
-# Debian / Ubuntu
-sudo apt install micropython libsdl2-dev ffmpeg
-
-# Fedora
-sudo dnf install micropython SDL2-devel ffmpeg
-
-# Arch
-sudo pacman -S micropython sdl2 ffmpeg
-```
+Install Python 3, Make and a host C/C++ compiler. SDL2 development headers and
+libraries enable the viewer and audio; ffmpeg is optional for local sound
+conversion. The simulator's native modules and float32 ulab profile require the
+custom interpreter built from `vendor/micropython`; a stock MicroPython binary
+is insufficient. See [BUILD.md](../BUILD.md) for the pinned-source build.
 
 ### Windows
 
@@ -48,19 +39,22 @@ that have no direct equivalent on Windows. Use WSL2 or a Linux VM.
 
 ## Usage
 
-Build the selected desktop interpreter and SDL viewer, then launch. Set
-`MICROPYTHON_DIR` to your MicroPython source checkout when building:
+From the repository root, build the custom desktop interpreter and SDL viewer,
+then launch. Use the bundled MicroPython revision:
 
 ```sh
-sh tools/micropython-desktop.sh
+mkdir -p .build
+MICROPYTHON_DIR="$PWD/vendor/micropython" \
+PICOWARE_DESKTOP_SOURCE_ALIAS="$PWD/.build/desktop-source" \
+  sh tools/micropython-desktop.sh
 sh simulator/build.sh viewer
 sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w
 ```
 
-Apps contains Graph, Graph3D, PicoLAB, Games and Screensavers. Games lists only
-Tetris; Screensavers lists the Lorenz demonstration. Use `--app PicoLAB`,
-`--app Graph`, `--app Graph3D` or `--game Tetris` to launch directly. The older
-Agent/Python Apps menu routes are no longer exposed.
+Apps contains PicoDESK, PicoLAB, Games and Misc. Graph and Graph3D live under
+PicoLAB; Screensavers and Benchmark live under Misc. Games lists Tetris. Use
+`--app PicoDESK`, `--app PicoLAB`, `--app Graph`, `--app Graph3D` or
+`--game Tetris` to launch directly.
 
 On the 320 × 320 PicoCalc desktop, Left/Right selects the category and
 Up/Down selects its menu items. F1 focuses the scrollable resource panel,
@@ -73,11 +67,11 @@ Run checks for the selected profile with:
 sh tools/run-micropython-desktop.sh --sim-check --network offline --audio silent
 ```
 
-This builds only the desktop interpreter. The device UF2 is built separately
-after the lab/numerics work is ready.
+These commands use the desktop interpreter. Build the device UF2 separately
+with `tools/build-gungos-release.sh`; the host binary cannot be flashed to PicoCalc.
 
 Tetris music and effects can be heard with `--viewer --game Tetris --audio real`.
-Its dedicated PCM helper streams the supplied WAVs; `--audio silent` disables the
+Its dedicated PCM helper streams your optional local WAVs; `--audio silent` disables the
 audible helper for checks. See [Tetris audio](TetrisAudio.md).
 
 ### Keyboard shortcuts (viewer window)
@@ -101,7 +95,7 @@ audible helper for checks. See [Tetris audio](TetrisAudio.md).
 Simulator scripts support queued key/text input plus simulator state changes:
 
 ```text
-app Calculator
+app PicoLAB
 keys down,enter
 text hello
 battery 42

@@ -2,11 +2,12 @@
 
 Open **Apps → PicoDESK**, then choose Eggcel, PicoWord or PicoPaint.
 PicoLAB is a separate engineering app, including Graph and Graph3D. The new
-hierarchy, shared firmware theme and Esc-only navigation require the matching v1.1
-UF2. Review them in the simulator before building/flashing that firmware.
+hierarchy, shared firmware theme and Esc-only navigation are included in v1.2.
+Review changes in the simulator before building/flashing firmware.
 
-After installing the matching v1.1 UF2, merge the `picoware` folder from
-`GungOS-v1.1-SD.zip` into the SD root and restart.
+After installing the matching v1.2 UF2, merge the `picoware` folder from
+the matching app update into the SD root and restart. For a fresh SD card, use
+the complete clean SD package instead.
 The bundle includes all dependencies. Keep one `.py` or `.mpy` copy per module.
 Later app-only changes can be installed through the SD without rebuilding UF2.
 

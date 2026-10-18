@@ -11,3 +11,28 @@
 *.wav binary
 *.uf2 binary
 *.mpy binary
+
+# Preserve binary source fixtures and media in Git exports.
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.bin binary
+*.der binary
+*.elf binary
+*.lib binary
+*.jar binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.pptx binary
+*.chm binary
+*.sbc binary
+*.msbc binary
+*.lc3 binary
+*.mod binary
+*.snk binary
+*.dump binary
+*.pex binary
+*.FLM binary
