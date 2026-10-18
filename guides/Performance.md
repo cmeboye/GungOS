@@ -1,8 +1,8 @@
-# v1.1 performance hardware test
+# v1.2 performance validation
 
-This build combines the final v1.1 desktop with the native display performance
-changes. The device still reports v1.1; the hardware-test package has a separate
-filename and directory so it cannot be mistaken for the previous stable build.
+GungOS v1.2 includes the native display, import-cache and numerical performance
+work while preserving the v1.1 desktop. Firmware and SD updates are packaged
+together; previous v1.1 releases remain available for rollback.
 
 ## Build on the development Mac
 
@@ -20,7 +20,7 @@ python3 tools/verify-gungos-release.py
 ```
 
 The script uses the pinned source dependencies already in `vendor/`. It produces
-`firmware/GungOS-v1.1-PicoCalc-Pico2W.uf2`, `GungOS-v1.1-SD.zip`, clean `sd-card/`
+`firmware/GungOS-v1.2-PicoCalc-Pico2W.uf2`, `GungOS-v1.2-SD.zip`, clean `sd-card/`
 contents and verification/checksum files. The version comes from
 `src/MicroPython/picoware/system/features.py`. Use a fresh build directory when
 changing source checkout or compiler installation.
@@ -44,7 +44,7 @@ The screen image lives in PSRAM by default. **System > Settings > Fast Drawing**
 moves it to on-chip SRAM: drawing is about 2.5× faster, but the 102,400-byte
 image comes out of the Python heap. Animated apps borrow SRAM only while open
 by calling `view_manager.request_fast_drawing()` in `start`; the view manager
-returns it when the view stops, including after a crash. Graph3D and Tetris do
+returns it when the view stops, including after a crash. Graph3D, Tetris and full-screen Lorenz do
 this. If there is no free 100 KB block, the screen stays in PSRAM and the
 Settings choice applies after a restart.
 

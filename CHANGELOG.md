@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.2 — 2026-10-18
+
+- Consolidate the tested v1.1 performance work into a matching firmware and SD
+  release: native graphics, changed-row DMA, built-in import caching, C formula
+  and plot geometry paths, and the beam solver with lower working memory.
+- Preserve the shared-PSRAM lifetime fix that resolved display blackouts.
+- Reuse Graph's contour work arrays across rows; keep beam numbering scratch
+  temporary and model inputs in float32, with double-precision solver arithmetic.
+- Full-screen Lorenz now borrows the faster SRAM screen while open, restoring
+  the user's preference on exit. If SRAM is unavailable it keeps drawing from
+  PSRAM. The native-size widget keeps its own RAM surface and 8 FPS cap.
+- Native-size widgets now take a direct row blit, avoiding redundant resampling
+  and its temporary row allocation; arbitrary-size widgets still scale to fit.
+- Report v1.2 in the desktop footer and About page; preserve existing SD settings,
+  documents, credentials and optional audio when installing the app update.
+
 ## v1.1 performance hardware test — 2026-10-18
 
 - Display recovery: native PSRAM interfaces share the bus and allocator.

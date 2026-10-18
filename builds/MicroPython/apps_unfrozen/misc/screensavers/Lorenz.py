@@ -81,6 +81,13 @@ def start(vm):
             return False
         _notice = 'Low heap: smaller trail.'
     _reset()
+    # The full-screen trail uses the shared native gfx core. Borrow its faster
+    # SRAM screen just while this view is open; View.stop restores the user's
+    # preference. A widget already owns a small RAM surface and needs no loan.
+    if not _widget:
+        fast = getattr(vm, 'request_fast_drawing', None)
+        if fast is not None:
+            fast()  # safely remains in PSRAM if a 100 KiB block is unavailable
     return True
 
 

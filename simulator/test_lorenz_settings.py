@@ -139,3 +139,33 @@ Lorenz.stop(vm)
 print('PASS: denser bounded trails, constant integration rate across 4-30 FPS, pause/reset and native widget controls')
 print('PASS: cancel, verified saves, SD/heap failures, restart persistence, input validation and low-memory fallback')
 print('Screenshots: ' + output)
+
+# Full-screen Lorenz borrows the native SRAM screen and releases it on return;
+# a widget keeps the desktop preference and its existing native-size RAM surface.
+from picoware.system.view import View
+vm.set_fast_drawing(False)
+vm.add(View('lorenz_parent', lambda v: None, lambda v: True, lambda v: None))
+vm.switch_to('lorenz_parent')
+vm.add(View('lorenz_fast', Lorenz.run, Lorenz.start, Lorenz.stop))
+vm.switch_to('lorenz_fast')
+assert vm.draw.mode == vm.draw.MODE_SRAM
+vm.back()
+assert vm.draw.mode == vm.draw.MODE_PSRAM and Lorenz._trail is None
+assert Lorenz.start(widget)
+assert Lorenz._widget and vm.draw.mode == vm.draw.MODE_PSRAM
+Lorenz.stop(widget)
+# An unavailable contiguous SRAM block must not prevent the demo from opening.
+set_mode = vm.draw.set_mode
+vm.draw.set_mode = lambda mode: None
+vm.add(View('lorenz_no_sram', Lorenz.run, Lorenz.start, Lorenz.stop))
+vm.switch_to('lorenz_no_sram')
+assert vm.current_view.active and vm.draw.mode == vm.draw.MODE_PSRAM
+vm.back()
+vm.draw.set_mode = set_mode
+# Respect an existing global Fast Drawing preference when the demo closes.
+vm.set_fast_drawing(True)
+vm.add(View('lorenz_preferred_sram', Lorenz.run, Lorenz.start, Lorenz.stop))
+vm.switch_to('lorenz_preferred_sram'); vm.back()
+assert vm.draw.mode == vm.draw.MODE_SRAM
+vm.set_fast_drawing(False)
+print('PASS: Lorenz full-screen SRAM borrowing, release, low-memory fallback and widget isolation')

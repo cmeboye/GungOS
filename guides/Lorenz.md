@@ -9,8 +9,7 @@ Press **F3** on the desktop to give the widget keyboard focus.
 - **F2:** open settings. Animation pauses while the settings panel is open.
 - **Space:** pause/resume the animation.
 - **F4:** show/hide performance stats for this session. To retain that choice,
-  open settings and save. F1 remains the firmware's screenshot shortcut outside
-  the desktop.
+  open settings and save. **Alt+S** is the system screenshot shortcut.
 - **F5:** reset the trajectory, retaining the current quality settings.
 - **Esc:** leave the screensaver or return focus from the widget. Inside settings,
   Esc discards the pending edits and resumes the previous animation.
@@ -66,6 +65,17 @@ Settings save only on confirmation, inside the `lorenz` object in
 Invalid saved fields fall back to defaults. If a large saved allocation fails at
 startup, the demo falls back to 192 points at 4 FPS without overwriting that file.
 
-This is an SD application update and needs no new UF2. This review changes source
-and simulator previews only; the compiled SD release bundle is deliberately left
-untouched until visual feedback is complete.
+In v1.2, full-screen Lorenz draws through the shared native gfx core and borrows
+an SRAM framebuffer while open, restoring the system preference on exit. It
+continues in PSRAM if a contiguous 100 KiB block is unavailable. The widget
+already renders into its own RAM framebuffer and reaches the panel through the
+shared native blit and changed-row DMA path. An already-fitting widget now
+uses the direct blit without resampling or an intermediate row allocation;
+other sizes retain the fitting path. It does not allocate a second full-screen
+SRAM framebuffer. Its drawing and trajectory loops remain Python
+calls to native primitives; this release does not introduce a batched C Lorenz
+integrator or trail renderer. Widget timing measures its own work, excluding
+parent desktop composition and panel presentation.
+
+Install the matching v1.2 UF2 and SD update for the complete performance changes.
+Subsequent Lorenz-only Python/MPY edits can be delivered through the SD card.

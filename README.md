@@ -7,7 +7,7 @@ By Cem Gungor, based on [Picoware by jblanked](https://github.com/jblanked/Picow
 
 *Simulator preview; resource figures reflect the host.*
 
-GungOS v1.1 combines a dark desktop, a calculator widget, themed menus and
+GungOS v1.2 combines a dark desktop, a calculator widget, themed menus and
 keyboard-driven applications on a 320 × 320 display.
 
 - **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint drawing.
@@ -18,12 +18,12 @@ keyboard-driven applications on a 320 × 320 display.
 
 The latest Eggcel sources include Range→Go, fill down/right, one-step undo,
 formula-to-value conversion, XY/column/pie charts and local error recovery.
-Firmware and SD application updates ship together as v1.1. Further engineering modules are drafts.
+Firmware and SD application updates ship together as v1.2. Further engineering modules are drafts.
 
-The development tree now retains the final v1.1 interface and adds native gfx,
-SRAM/PSRAM image modes, changed-row DMA transfers and an SD Benchmark app.
-See [performance hardware testing](guides/Performance.md) before installing the
-separately packaged hardware-test build. The release version remains v1.1.
+Version 1.2 retains the v1.1 interface and includes native graphics, SRAM/PSRAM
+image modes, changed-row DMA transfers, cached built-in imports and native
+numerical acceleration. See [performance testing](guides/Performance.md) for
+the build workflow and on-device benchmark instructions.
 
 ## Build and install
 
@@ -37,7 +37,7 @@ After building:
 1. Back up the SD card. For a fresh card, copy `sd-card/` onto writable FAT32.
    For an upgrade, merge the app files while retaining existing settings and documents.
 2. Put the **Pico 2 W** into BOOTSEL mode and copy
-   `firmware/GungOS-v1.1-PicoCalc-Pico2W.uf2` onto its bootloader drive.
+   `firmware/GungOS-v1.2-PicoCalc-Pico2W.uf2` onto its bootloader drive.
 3. Insert the SD and reboot. Configure Wi-Fi under Comms → Wi-Fi → Scan.
 
 This source tree targets only PicoCalc with Pico 2 W. Subsequent

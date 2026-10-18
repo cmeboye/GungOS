@@ -238,7 +238,12 @@ class WidgetHost:
         dw,dh=max(1,int(w*scale)),max(1,int(h*scale))
         target=self.master.draw
         try:
-            target.set_scaling((dw+.001)/w,(dh+.001)/h,False)
+            # An already-fitting widget can use the native row blit directly.
+            # The rounding offset is only needed when actually resizing.
+            if dw==w and dh==h:
+                target.set_scaling(1,1,False)
+            else:
+                target.set_scaling((dw+.001)/w,(dh+.001)/h,False)
             target._bytearray(x+(n-dw)//2,y+(n-dh)//2,w,h,self.draw.buffer)
         finally: target.set_scaling(1,1,False)
         self.draw.changed=False

@@ -1,6 +1,6 @@
 # Working on GungOS
 
-This is the GungOS v1.1 source tree with the latest SD-only Eggcel revision.
+This is the GungOS v1.2 source tree with the matching firmware and SD application updates.
 The complete source and pinned dependencies stand independently of Picoware-main.
 
 | Location | Purpose |

@@ -1,4 +1,4 @@
-# Building GungOS v1.1
+# Building GungOS v1.2
 
 The release vendors its source dependencies. Building does not fetch from the
 network. Use the pinned sources in `vendor/`; no `git submodule update` is needed.
@@ -25,8 +25,8 @@ The script builds a matching `mpy-cross`, host picotool and the RP2350 firmware,
 compiles the shipped applications, regenerates clean SD contents and records
 checksums. Output:
 
-- `firmware/GungOS-v1.1-PicoCalc-Pico2W.uf2`
-- `sd-card/` and `GungOS-v1.1-SD.zip`
+- `firmware/GungOS-v1.2-PicoCalc-Pico2W.uf2`
+- `sd-card/` and `GungOS-v1.2-SD.zip`
 - `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
 
 Intermediate files live in `.build/` and can be deleted after building. To place
@@ -99,12 +99,12 @@ with the matching `.build/mpy-cross/mpy-cross`. Copy changed `.mpy` files and
 their shared dependencies to the SD card. Firmware Python/native changes require
 a new UF2. Ordinary app edits can be tested in the simulator first.
 
-## v1.1 performance hardware test
+## v1.2 performance validation
 
 The working source combines the final released v1.1 dashboard (238 × 238
 widget canvas, centered logo and theme/status features) with native gfx,
-SRAM/PSRAM image storage and dirty-row DMA presentation. The version stays 1.1;
-keep hardware-test packages separate from the previous stable v1.1 release.
+SRAM/PSRAM image storage and dirty-row DMA presentation. The release version is 1.2;
+previous v1.1 packages remain available for rollback.
 
 Use a fresh absolute build directory for this integration:
 
@@ -120,5 +120,5 @@ binary cannot be converted to the device UF2.
 
 Default panel transfers remain 16-bit. The Benchmark SD app can temporarily
 try 12-bit transfers and asks for a colour verdict. Device results are written
-to `picoware/benchmark.txt`. The picosolve C kernel is preserved as source but
-has no MicroPython binding and is not linked into this firmware.
+to `picoware/benchmark.txt`. The picosolve C kernel and MicroPython binding are linked into this firmware;
+Beam, Formula and geometry entry points are available to the SD apps.
