@@ -10,6 +10,7 @@ STATE_THEME_COLOR = const(3)  # choice (select from predefined colors)
 STATE_TIME = const(4)  # menu with date (date picker), GMT offset (keyboard)
 
 # modes
+_MODE_THEME = const(19)
 _MODE_MENU = const(0)
 _MODE_TOGGLE = const(1)
 _MODE_CHOICE = const(2)
@@ -22,6 +23,7 @@ _settings = None
 _menu = None
 _toggle = None
 _choice = None
+_theme_picker = None
 _time_menu = None
 _date_picker = None
 _view_manager = None
@@ -30,47 +32,6 @@ _current_setting = 0
 _gmt_save_requested = False
 _menu_setting_indices = []
 _resume_menu_label = None
-
-
-def __color_values() -> list[int]:
-    """Get the list of color values corresponding to the color names.
-
-    Returns:
-        list[int]: The color values matching the theme color names.
-    """
-    from picoware.system.colors import (
-        TFT_BLUE,
-        TFT_RED,
-        TFT_GREEN,
-        TFT_YELLOW,
-        TFT_VIOLET,
-        TFT_CYAN,
-        TFT_ORANGE,
-        TFT_PINK,
-        TFT_SKYBLUE,
-        TFT_LIGHTGREY,
-        TFT_DARKGREY,
-        TFT_DARKCYAN,
-        TFT_DARKGREEN,
-        TFT_BROWN,
-    )
-
-    return [
-        TFT_RED,
-        TFT_GREEN,
-        TFT_BLUE,
-        TFT_YELLOW,
-        TFT_VIOLET,
-        TFT_CYAN,
-        TFT_ORANGE,
-        TFT_PINK,
-        TFT_SKYBLUE,
-        TFT_LIGHTGREY,
-        TFT_DARKGREY,
-        TFT_DARKCYAN,
-        TFT_DARKGREEN,
-        TFT_BROWN,
-    ]
 
 
 def __config() -> tuple:
@@ -136,54 +97,13 @@ def __open_toggle(setting_index: int) -> None:
     _mode = _MODE_TOGGLE
 
 
-def __open_choice() -> None:
-    """Open a Choice sub-view for the theme color setting."""
-    global _choice, _mode, _current_setting
-    from picoware.gui.choice import Choice
-    from picoware.system.vector import Vector
-
-    _current_setting = STATE_THEME_COLOR
-    current_color = _settings.theme_color
-    try:
-        initial_index = __color_values().index(current_color)
-    except ValueError:
-        initial_index = 0
-
-    draw = _view_manager.draw
-    draw.erase()
-    if _choice is not None:
-        del _choice
-        _choice = None
-
-    _color_names = [
-        "Red",
-        "Green",
-        "Blue",
-        "Yellow",
-        "Violet",
-        "Cyan",
-        "Orange",
-        "Pink",
-        "Sky Blue",
-        "Light Grey",
-        "Dark Grey",
-        "Dark Cyan",
-        "Dark Green",
-        "Brown",
-    ]
-
-    _choice = Choice(
-        draw,
-        Vector(0, 0),
-        draw.size,
-        "Theme Color",
-        _color_names,
-        initial_index,
-        _view_manager.foreground_color,
-        _view_manager.background_color,
-    )
-    _choice.draw()
-    _mode = _MODE_CHOICE
+def __open_theme_picker() -> None:
+    """Preview an accent without changing or saving the active system theme."""
+    global _theme_picker, _mode
+    from picoware.gui.theme_picker import ThemePicker
+    _theme_picker = ThemePicker(_view_manager, _settings.theme_color)
+    _theme_picker.draw()
+    _mode = _MODE_THEME
 
 
 def __open_choice_brightness() -> None:
@@ -298,7 +218,7 @@ def __gmt_save_callback(result: str) -> None:
 
 def __back_to_menu() -> None:
     """Clean up any sub-view and return to the main menu."""
-    global _toggle, _choice, _time_menu, _date_picker, _mode
+    global _toggle, _choice, _theme_picker, _time_menu, _date_picker, _mode
 
     if _toggle is not None:
         del _toggle
@@ -313,7 +233,9 @@ def __back_to_menu() -> None:
         del _date_picker
         _date_picker = None
 
+    _theme_picker = None
     _mode = _MODE_MENU
+    _menu.selected_color = _view_manager.selected_color
     _menu.draw()
 
 
@@ -348,12 +270,13 @@ def start(view_manager) -> bool:
     from picoware.gui.menu import Menu
     from picoware.system.settings import Settings
 
-    global _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _gmt_save_requested
+    global _theme_picker, _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _gmt_save_requested
     global _menu_setting_indices, _resume_menu_label
     _view_manager = view_manager
     _mode = _MODE_MENU
     _gmt_save_requested = False
 
+    _theme_picker = None
     if _settings is not None:
         del _settings
         _settings = None
@@ -438,13 +361,25 @@ def run(view_manager) -> None:
                     view_manager.add(View(name,screensaver_setting.run,screensaver_setting.start,screensaver_setting.stop))
                 view_manager.switch_to(name)
             elif selected == "Theme Color":
-                __open_choice()
+                __open_theme_picker()
             elif selected == "Time":
                 __open_time_menu()
             elif selected == "Screen Brightness":
                 __open_choice_brightness()
             else:
                 __open_toggle(_menu_setting_indices[_menu.selected_index])
+
+    elif _mode == _MODE_THEME:
+        result = _theme_picker.handle(button)
+        if result == 'cancel':
+            __back_to_menu()
+        elif result == 'save':
+            if not _settings.update({'theme_color': _theme_picker.colour}):
+                _theme_picker.error = 'Save failed. Check the SD; ENTER retries.'
+                _theme_picker.draw()
+                return
+            view_manager.selected_color = _theme_picker.colour
+            __back_to_menu()
 
     elif _mode == _MODE_TIME_MENU:
         if button == BUTTON_ESCAPE:
@@ -516,14 +451,7 @@ def run(view_manager) -> None:
         elif button in (BUTTON_DOWN, BUTTON_RIGHT):
             _choice.scroll_down()
         elif button == BUTTON_CENTER:
-            if _current_setting == STATE_THEME_COLOR:
-                selected_color = __color_values()[_choice.state]
-                if not _settings.update({"theme_color": selected_color}):
-                    view_manager.alert("Could not save theme color.\nCheck the SD card.")
-                    _choice.draw()
-                    return
-                _view_manager.selected_color = selected_color
-            elif _current_setting == STATE_SCREEN_BRIGHTNESS:
+            if _current_setting == STATE_SCREEN_BRIGHTNESS:
                 selected_value = int(_choice.options[_choice.state])
                 if not _settings.update({"screen_brightness": selected_value}):
                     view_manager.alert("Could not save brightness.\nCheck the SD card.")
@@ -541,8 +469,9 @@ def stop(view_manager) -> None:
     """
     from gc import collect
 
-    global _settings, _menu, _toggle, _choice, _time_menu, _date_picker
+    global _settings, _menu, _toggle, _choice, _theme_picker, _time_menu, _date_picker
 
+    _theme_picker = None
     if _settings is not None:
         del _settings
         _settings = None

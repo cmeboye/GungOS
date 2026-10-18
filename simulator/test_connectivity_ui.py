@@ -195,3 +195,19 @@ assert vm.storage.write(app.SERVER_INFO,'{invalid')
 assert not app.__save_setting(vm,'mode','STA')
 assert vm.storage.read(app.SERVER_INFO)=='{invalid'
 print('PASS: first-use server settings creation and corrupt-document preservation')
+
+
+# Failed Start must return to a usable menu and let Enter retry.
+assert app.start(vm)
+real_start=app.__server_start;attempts=[]
+def delayed_start(manager):attempts.append(1);return False
+app.__server_start=delayed_start
+try:
+ app.menu_state=app.STATE_MENU_MAIN;app.__menu_start(vm)
+ vm._button=k.BUTTON_CENTER;app.run(vm)
+ assert app.menu_state==app.STATE_MENU_MAIN,'Failed Start stranded the UI in running mode'
+ assert app.menu.title=='Server' and app.menu.current_item=='Start'
+ app.run(vm);assert len(attempts)==2,'Enter could not retry after a failed Start'
+finally:
+ app.__server_start=real_start;vm._button=k.BUTTON_NONE;app.stop(vm)
+print('PASS: unsuccessful server Start keeps a usable menu and permits immediate retry')

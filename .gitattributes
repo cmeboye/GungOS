@@ -11,6 +11,3 @@
 *.wav binary
 *.uf2 binary
 *.mpy binary
-
-# Pinned upstream sources are stored byte-for-byte
-vendor/** -text

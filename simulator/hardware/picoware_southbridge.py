@@ -56,3 +56,18 @@ def write_power_off_delay(delay):
 def get_power_off_delay():
     """Return the current power-off delay."""
     return _power_off_delay
+
+
+
+def is_battery_charging():
+    import sim_runtime
+    return sim_runtime.battery_charging()
+
+
+def set_battery_charging(value):
+    import sim_runtime
+    sim_runtime.set_battery_charging(value)
+
+
+def read_battery():
+    return get_battery_percentage() | (0x80 if is_battery_charging() else 0)

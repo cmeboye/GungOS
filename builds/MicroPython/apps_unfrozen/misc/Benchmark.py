@@ -3,7 +3,7 @@
 Each stage runs in one pass of the app loop so the screen stays responsive.
 Results are shown at the end and saved to picoware/benchmark.txt.
 """
-from time import ticks_us, ticks_diff
+from time import ticks_us, ticks_ms, ticks_diff
 from picoware.system import buttons as k
 
 RESULT_PATH = 'picoware/benchmark.txt'
@@ -14,6 +14,8 @@ _stage = 0
 _results = []   # (label, value, unit)
 _waiting = False
 _saved = ''
+_panel_test = False
+_prompt_started = 0
 
 
 def _best(function, repeat):
@@ -55,14 +57,22 @@ def _shapes(draw):
 
 
 def _swap_full(draw):
-    """Every row changes: the worst case for change-only presenting."""
-    times, rows = [], 0
+    """Time only full-screen changes, keeping each time with its row count."""
+    # The status screen is mostly black. Clearing it to black can change only
+    # a few text rows, so establish an untimed baseline before alternating.
+    draw._clear(BLACK)
+    draw.swap()
+    samples = []
+    expected = int(draw.size.y)
     for i in range(6):
-        draw._clear(BLUE if i % 2 else BLACK)
+        draw._clear(BLUE if i % 2 == 0 else BLACK)
         start = ticks_us()
         rows = draw.swap()
-        times.append(ticks_diff(ticks_us(), start))
-    return min(times), rows
+        took = ticks_diff(ticks_us(), start)
+        if rows != expected:
+            raise RuntimeError('Full-screen sample sent %d rows; expected %d' % (rows, expected))
+        samples.append((took, rows))
+    return min(samples)
 
 
 def _stage_memory(vm):
@@ -80,23 +90,28 @@ def _stage_swaps(vm):
     draw._clear(BLACK)
     _text_screen(draw)
     draw.swap()
-    times, rows = [], 0
+    samples = []
     for i in range(8):
         draw._fill_rectangle(0, 120, 320, 12, BLACK)
         draw._text(2, 120, 'Changed line %d' % i, WHITE, FONT)
         start = ticks_us()
         rows = draw.swap()
-        times.append(ticks_diff(ticks_us(), start))
-    _record('Swap, one text line changed', min(times) / 1000, 'ms (%d rows)' % rows)
-    # Everything redrawn but identical: rows are hashed, nothing is sent.
-    times = []
+        samples.append((ticks_diff(ticks_us(), start), rows))
+    took, rows = min(samples)
+    _record('Swap, one text line changed', took / 1000, 'ms (%d rows)' % rows)
+    # Establish the exact baseline before timing identical redraws.
+    draw._clear(BLACK)
+    _text_screen(draw)
+    draw.swap()
+    samples = []
     for _ in range(4):
         draw._clear(BLACK)
         _text_screen(draw)
         start = ticks_us()
         rows = draw.swap()
-        times.append(ticks_diff(ticks_us(), start))
-    _record('Swap, identical redraw', min(times) / 1000, 'ms (%d rows)' % rows)
+        samples.append((ticks_diff(ticks_us(), start), rows))
+    took, rows = min(samples)
+    _record('Swap, identical redraw', took / 1000, 'ms (%d rows)' % rows)
 
 
 def _stage_drawing(vm, label):
@@ -141,8 +156,11 @@ def _test_pattern(draw):
 
 def _stage_panel_start(vm):
     """Experimental 12-bit panel format: time it, then ask if it looks right."""
-    global _waiting
+    global _waiting, _prompt_started
     draw = vm.draw
+    if not _panel_test:
+        _record('12-bit panel format', 'skipped (disabled by default)', '')
+        return
     if not hasattr(draw, 'set_panel_bits') or not draw.set_panel_bits(12):
         _record('12-bit panel format', 'not available', '')
         return
@@ -150,6 +168,7 @@ def _stage_panel_start(vm):
     _record('Swap whole screen, 12-bit', took / 1000, 'ms (%d rows)' % rows)
     _test_pattern(draw)
     draw.swap()
+    _prompt_started = ticks_ms()
     _waiting = True
 
 
@@ -187,15 +206,23 @@ def _format(value):
     return ('%.2f' % value) if isinstance(value, float) else str(value)
 
 
-def _report(vm):
+def _checkpoint(vm, status):
+    """Keep completed measurements on SD before attempting the next stage."""
     global _saved
-    lines = ['%s: %s %s' % (label, _format(value), unit) for label, value, unit in _results]
+    lines = ['Status: ' + status]
     try:
         import sys
         lines.insert(0, 'GungOS benchmark, %s' % sys.implementation._machine)
     except AttributeError:
         pass
+    lines.extend('%s: %s %s' % (label, _format(value), unit)
+                 for label, value, unit in _results)
     _saved = RESULT_PATH if vm.storage.write(RESULT_PATH, '\n'.join(lines) + '\n') else ''
+    return lines
+
+
+def _report(vm):
+    lines = _checkpoint(vm, 'complete')
     draw = vm.draw
     draw._clear(BLACK)
     for i, line in enumerate(lines[:22]):
@@ -203,6 +230,20 @@ def _report(vm):
     footer = ('Saved to ' + _saved) if _saved else 'Could not save results'
     draw._text(2, 300, footer + '   Esc: back', GREY, 0)
     draw.swap()
+
+
+def _intro(vm):
+    _status(vm.draw, 'Display, memory and processor.', (
+        'Takes about half a minute.',
+        'Screen flashes during the tests.',
+        '',
+        'F2: 12-bit experiment ' + ('ON' if _panel_test else 'OFF'),
+        'Normal tests use 16-bit colour.',
+        'If the experiment stops updating',
+        'the picture, press N to restore it.',
+        'Y/N answer times out after 20 sec.',
+        'Progress is saved between steps.',
+        'Enter: start    Esc: back'))
 
 
 STAGES = (
@@ -216,18 +257,10 @@ STAGES = (
 
 
 def start(vm):
-    global _stage, _results, _waiting, _saved
+    global _stage, _results, _waiting, _saved, _panel_test, _prompt_started
     _stage, _results, _waiting, _saved = -1, [], False, ''
-    _status(vm.draw, 'Display, memory and processor.', (
-        'Takes about half a minute. The screen',
-        'flashes and changes colour meanwhile.',
-        '',
-        'One step shows a colour test: answer',
-        'Y if it looks right, N if not.',
-        '',
-        'Results are saved to the SD card.',
-        '',
-        'Enter: start    Esc: back'))
+    _panel_test, _prompt_started = False, 0
+    _intro(vm)
     return True
 
 
@@ -238,22 +271,34 @@ def run(vm):
         if _waiting:
             _stage_panel_answer(vm, False)
             _waiting = False
+        if _stage >= 0:
+            _checkpoint(vm, 'cancelled')
         vm.back()
         return
     if _waiting:
-        if button in (k.BUTTON_Y, k.BUTTON_N):
-            _stage_panel_answer(vm, button == k.BUTTON_Y)
+        timed_out = ticks_diff(ticks_ms(), _prompt_started) >= 20000
+        if button in (k.BUTTON_Y, k.BUTTON_N) or timed_out:
+            _stage_panel_answer(vm, button == k.BUTTON_Y and not timed_out)
+            if timed_out:
+                _record('12-bit answer', 'timed out; restored 16-bit', '')
             _waiting = False
             _stage += 1
+            _checkpoint(vm, '12-bit colour test ended')
         return
     if _stage == -1:
-        if button == k.BUTTON_CENTER:
+        if button == k.BUTTON_F2:
+            global _panel_test
+            _panel_test = not _panel_test
+            _intro(vm)
+        elif button == k.BUTTON_CENTER:
             _stage = 0
         return
     if _stage < len(STAGES):
         title, function = STAGES[_stage]
         _status(vm.draw, 'Step %d of %d: %s' % (_stage + 1, len(STAGES), title))
+        _checkpoint(vm, 'running step %d: %s' % (_stage + 1, title))
         function(vm)
+        _checkpoint(vm, 'waiting for Y/N' if _waiting else 'finished step %d: %s' % (_stage + 1, title))
         if not _waiting:
             _stage += 1
         if _stage == len(STAGES):

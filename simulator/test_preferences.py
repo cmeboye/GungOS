@@ -39,11 +39,12 @@ assert app.start(vm)
 # Credentials saved elsewhere after opening Settings must not be overwritten.
 assert utils.save_wifi_ssid(vm.storage, 'Updated')
 assert utils.save_wifi_password(vm.storage, 'updated-pass')
-app.__open_choice()
-app._choice.state=0
+app.__open_theme_picker()
+app._theme_picker._select(0)
 vm._button=BUTTON_CENTER
 app.run(vm)
-red=app.__color_values()[0]
+from picoware.gui.theme_picker import PRESETS
+red=PRESETS[0][1]
 assert vm.selected_color == red
 app.__open_choice_brightness()
 app._choice.state=3
@@ -80,11 +81,11 @@ for claim_success in (False, True):
     assert app._choice is not None
     assert sim_runtime.lcd_brightness==40 and Settings(storage).screen_brightness==40
     assert alerts and 'Could not save brightness' in alerts[-1]
-    app.__open_choice()
-    app._choice.state=1
+    app.__open_theme_picker()
+    app._theme_picker._select(1)
     app.run(vm)
     assert vm.selected_color==red and Settings(storage).theme_color==red
-    assert 'Could not save theme color' in alerts[-1]
+    assert 'Save failed' in app._theme_picker.error
     failed=Settings(FailedWrites(storage,claim_success))
     try:
         failed.screen_brightness=90

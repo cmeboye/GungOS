@@ -16,6 +16,13 @@ def snapshot(vm):
         rows.append(('Flash',available,total-available,total))
     except Exception: rows.append(('Flash',None,None,None))
     try:
+        storage=vm.storage
+        if not storage.active: raise OSError('SD unavailable')
+        total,available=int(storage.total_space),int(storage.free_space)
+        if total<=0 or not 0<=available<=total: raise ValueError('Invalid SD counters')
+        rows.append(('SD',available,total-available,total))
+    except Exception: rows.append(('SD',None,None,None))
+    try:
         total=system.total_psram
         available=system.free_psram
         rows.append(('PSRAM',available,total-available,total))
@@ -49,7 +56,7 @@ def lines(info):
     for name,free,used,total in info['rows']:
         percent=str(int(100*free/total)) if free is not None and total else '-'
         result.append('%-5s %4s %4s %4s %3s' % (name,compact(free),compact(used),compact(total),percent))
-    result.extend(('F1/Back returns to menu','K/M/G are binary units','Flash = filesystem space',
+    result.extend(('F1/Esc returns to menu','K/M/G are binary units','Flash = filesystem space',
                    'SRAM usage unavailable','Heap is part of SRAM'))
     if info['simulator']: result.append('Simulator: host counters')
     for name,free,used,total in info['rows']:

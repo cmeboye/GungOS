@@ -10,3 +10,13 @@ class Battery:
         from picoware_southbridge import get_battery_percentage
 
         return get_battery_percentage()
+
+
+    @property
+    def is_charging(self) -> bool:
+        """Read the PicoCalc southbridge charging flag when available."""
+        try:
+            from picoware_southbridge import is_battery_charging
+            return bool(is_battery_charging())
+        except (ImportError, OSError):
+            return False

@@ -60,6 +60,12 @@ try:
  vm.add(View('desktop_view',desktop.run,desktop.start,desktop.stop));vm.switch_to('desktop_view')
  for _ in range(5):vm.run()
  assert vm.wifi.is_connected() and len(time_requests)==1
+ # Exercise the active dashboard's Up key; retired services stay unavailable.
+ from picoware.system.buttons import BUTTON_UP
+ vm.input_manager._last_button=BUTTON_UP
+ vm.run()
+ assert desktop._dashboard is not None
+
 finally:
  desktop.stop(vm);HTTP.__init__=http_init;Time.fetch=time_fetch
 print('PASS: independent home reconnects without an HTTP client; only the retained NTP path is requested')

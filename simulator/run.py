@@ -572,18 +572,18 @@ def _run_sim_check(opts):
 def _run_selected_profile_check(opts):
     """Check the retained firmware without expecting excluded native modules."""
     tests = (
-        "test_dashboard.py",
+        "test_dashboard.py", "test_dashboard_layout.py", "test_status_bar.py", "test_theme_picker.py",
         "test_statistics.py",
         "test_calculator.py",
         "test_calculator_modes.py",
-        "test_release_demos.py",
+        "test_release_demos.py", "test_lorenz_settings.py",
         "test_tetris_audio.py",
         "test_ulab.py",
         "test_trimmed_firmware.py", "test_menu.py", "test_home_visual.py",
         "test_preferences.py", "test_wifi_setup.py",
         "test_connectivity.py", "test_connectivity_ui.py", "test_service_independence.py",
         "test_shared_plots.py", "test_graph.py", "test_graph3d.py",
-        "test_graph3d_implicit.py", "test_choice_dialogs.py", "test_error_reporting.py", "test_secrets.py",
+        "test_graph3d_implicit.py", "test_benchmark.py", "test_choice_dialogs.py", "test_error_reporting.py", "test_secrets.py",
     )
     for name in tests:
         command = _interpreter_command() + " -X heapsize=16M " + _quote(THIS_DIR + "/" + name)

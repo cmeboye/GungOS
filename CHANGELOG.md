@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: Pico 2 W only
+## v1.1 performance hardware test — 2026-10-18
 
 - GungOS now targets only the PicoCalc with a Raspberry Pi Pico 2 W. Code for
   other boards (Flipper Zero, Cardputer, Waveshare, CrowPanel, Pancake, V8,
@@ -49,52 +49,37 @@
 
 These changes require a new UF2 and matching SD apps.
 
-## Unreleased SD update after v2.2
+The final released v1.1 desktop, logo, status icons, themes and 238 × 238
+widget canvas are retained. Release version remains 1.1. `picosolve` remains
+host-tested source; its MicroPython binding is not part of this firmware.
 
-- Eggcel: F1–F5 File/Actions/Range/Copy/Paste, Range→Go, fill down/right,
-  formula-to-value conversion and one-step undo.
-- XY, grouped column and pie charts; bounded iterative calculation, cancellation
-  and local error recovery preserving the workbook.
-- Source repository preparation: private data/build outputs excluded, preserved
-  third-party notices, optional licensed audio and synthetic audio tests.
+## v1.1 — 2026-10-17
 
-These application changes do not require a new UF2. The public/default build
-omits supplied recordings; existing local audio files are preserved privately.
+- Add the compact 320 × 320 desktop: native-size revised logo, black status bar,
+  heap/PSRAM/SD usage bars and F1 resource details. A 238 × 238 widget fills the
+  square panel; narrow-menu labels use the smallest font and wrap when needed.
+  Center the new large logo, leave one-pixel panel margins and show v1.1 in the footer.
+- Add 30 theme swatches and custom RGB hex colours, with preview, confirmed saves
+  and readable text on bright accents.
+- Smooth Lorenz with adjustable detail, trail capacity, FPS and performance stats.
+  Keep the 8 FPS widget-host limit explicit and recover from SD/heap errors.
+- Improve Eggcel keyboard shortcuts, range selection, fill down/right, conversion
+  of formulas to values, undo and XY/column/pie plotting with local error recovery.
+- Fix cooperative Wi-Fi joins, station/AP switching, saved settings, NTP recovery
+  and bounded local HTTP serving. Improve BLE discovery, UART transfer and cleanup.
+- Remove inherited upstream social/update/notification services and account fields.
+- Preserve Esc-only navigation, Back/Del editing, PicoDESK, PicoLAB, Graph/Graph3D
+  and Tetris. Keep selected float32 ulab and native PCM audio support.
+- Package matching RP2350 UF2 and SD bytecode with checksums. Default public
+  packages omit supplied recordings; optional personal audio is packaged separately.
 
-## Unreleased connectivity firmware fixes
+Device validation is pending the first PicoCalc flash. Simulator timings and heap
+sizes reflect the host. Secure Bluetooth pairing is unavailable in this native
+backend; the existing HTTPS certificate and SSH host-verification limitations are
+recorded in [Connectivity](guides/Connectivity.md) and [Comms](guides/Comms.md).
 
-- Cooperative Wi-Fi joins, correct station/AP switching, scan/password handling
-  and retryable NTP failures.
-- Bounded nonblocking HTTP server with reliable Esc cleanup, first-use settings,
-  verified saves and script execution scope.
-- BLE advertisement sizing, actual UART discovery/subscription, MTU-aware chat,
-  timeouts and explicit controller cleanup.
-- Detect unsupported Pico 2 W pairing; simulator now matches that limitation.
-  Generic key persistence/passkey paths are tested only with an opt-in fixture.
-- Added protocol and application regression checks. See
-  [Connectivity](guides/Connectivity.md) for findings and outstanding native/TLS work.
+## v1.0
 
-These changes require a new UF2 on the device. The existing v2.2 binary has not
-been rebuilt or replaced.
-
-## Unreleased upstream service removal
-
-- Remove the remaining FlipSocial and network notification clients from source
-  and explicitly exclude their imports from firmware/simulator profiles.
-- Remove upstream account/API settings, account-required decorator and service
-  fixtures. Old account fields are ignored and dropped on the next successful
-  settings save; Wi-Fi and unrelated preferences remain compatible.
-- Verify the packaged SD settings template contains no retired account fields.
-- Add a service-endpoint source check and old-card/home regression coverage.
-  [Comms inventory and audit](guides/Comms.md) distinguishes retained local tools,
-  the external NTP time source and outstanding hardware/security work.
-
-A new UF2 is required; the existing v2.2 binary remains unchanged.
-
-## v2.2
-
-- PicoDESK groups Eggcel, PicoWord and PicoPaint separately from PicoLAB.
-- Engineering calculator modes, Graph and Graph3D, with selected float32 ulab.
-- Themed dark interface, calculator widget and Lorenz screensaver.
-- Escape returns; Back and Del both erase before the cursor.
-- Lean PicoCalc Pico 2 W firmware retaining essential connectivity/system tools.
+Previous GungOS release: dark desktop, PicoDESK/PicoLAB applications, scientific
+calculator, plotting, Tetris and initial calculator/Lorenz widgets. Previous local
+files are retained unchanged for rollback, including their legacy development filenames.

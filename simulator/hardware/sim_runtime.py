@@ -69,6 +69,7 @@ _key_callback = None
 _background_key_poll = False
 _notifying_key = False
 _battery_percentage = 87
+_battery_charging = False
 
 
 KEY_NAMES = {
@@ -884,6 +885,16 @@ def battery_percentage():
     return _battery_percentage
 
 
+def set_battery_charging(value):
+    global _battery_charging
+    _battery_charging = bool(value)
+
+
+def battery_charging():
+    return _battery_charging
+
+
+
 def run_script_file(path):
     try:
         with open(path, "r") as handle:
@@ -1131,6 +1142,11 @@ def poll_viewer_controls():
                     _log_event("screenshot " + path)
                 except Exception as e:
                     _log_event("screenshot failed " + str(e))
+        elif command.startswith("battery "):
+            try:set_battery_percentage(int(command.split()[1]))
+            except (ValueError, IndexError):_log_event("invalid battery control")
+        elif command.startswith("charging "):
+            set_battery_charging(command.split()[1] in ("on", "true", "1"))
         elif command == "mute":
             audio_muted = not audio_muted
             cmd = sd_root + "/sim_audio.cmd"

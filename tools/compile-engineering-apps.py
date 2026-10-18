@@ -2,6 +2,7 @@
 """Compile and package the entry apps together with their shared SD package."""
 import argparse
 import os
+import runpy
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,6 +30,7 @@ def main():
     if compiler is None:
         parser.error('Provide a firmware-compatible compiler with --mpy-cross PATH')
     root = Path(__file__).resolve().parents[1]
+    version = runpy.run_path(str(root/'src/MicroPython/picoware/system/features.py'))['FIRMWARE_VERSION']
     source = root / 'builds/MicroPython/apps_unfrozen'
     files = [source / name for name in ('Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py')]
     files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','misc/Benchmark.py','games/Tetris.py')]
@@ -83,7 +85,7 @@ def main():
             archive.writestr('INSTALL.txt',
                              'Copy/merge the picoware folder onto the root of your SD card.\n'
                              'Graph, Graph3D and PicoLAB require the complete engtools folder.\n'
-                             'GungOS v2.2: Apps > PicoDESK > Eggcel/PicoWord/PicoPaint. Requires the updated UF2.\n'
+                             f'GungOS v{version}: Apps > PicoDESK > Eggcel/PicoWord/PicoPaint. Requires the updated UF2.\n'
                              'Desktop apps live in desktopapps, separate from engineering engtools.\n'
                              'Eggcel workbooks are saved explicitly under picoware/documents/eggcel.\n'
                              'Keep one .py or .mpy copy of each module in the deployed app tree.\n'
@@ -111,7 +113,7 @@ def main():
                 archive.write(staging/relative,'picoware/apps/'+relative.as_posix())
             archive.writestr('INSTALL.txt',
                              'Merge picoware into the SD root, replacing the matching app modules.\n'
-                             'GungOS v2.2: Apps > PicoDESK > Eggcel / PicoWord / PicoPaint.\n'
+                             f'GungOS v{version}: Apps > PicoDESK > Eggcel / PicoWord / PicoPaint.\n'
                              'Keep desktopapps and engtools complete. Requires the updated firmware UF2.\n'
                              'Keep only one .py or .mpy copy per module.\n'
                              'Your existing documents and settings are not included or replaced.\n'

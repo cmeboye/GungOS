@@ -44,3 +44,6 @@ __pycache__/
 venv/
 .vscode/
 .idea/
+
+# Versioned local release packages
+/releases/

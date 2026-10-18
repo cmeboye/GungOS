@@ -40,8 +40,10 @@ def uf2_info(path):
         blocks[number]=(address,data[offset+32:offset+32+size]);addresses.add(address)
     assert total and sorted(blocks)==list(range(total)) and ignored<=1,'Incomplete UF2 sequence'
     image=b''.join(blocks[n][1] for n in range(total))
-    markers=(b'GungOS',b'picoware_pcm',b'ulab')
-    if VERSION=='2.2':markers+=(b'PicoDESK',b'misc/screensavers',b'picoware/gui/style.py')
+    markers=(b'GungOS',b'picoware_pcm',b'ulab',b'PicoDESK',
+             b'misc/screensavers',b'picoware/gui/style.py',
+             b'picoware/gui/theme_picker.py',b'picoware/gui/status_bar.py',
+             ('preview-gungos-v'+VERSION).encode())
     for name in markers:
         assert name in image,'Expected firmware marker is missing: '+repr(name)
     start=min(addresses);end=max(address+len(payload) for address,payload in blocks.values())
@@ -60,6 +62,7 @@ def verify_sd(root):
     assert {p.name for p in (apps/'games').glob('*.mpy')}=={'Tetris.mpy'},'Unexpected game'
     screens=apps/('misc/screensavers' if (source/'misc/screensavers').exists() else 'screensavers')
     assert {p.name for p in screens.glob('*.mpy')}=={'Calculator Widget.mpy','Lorenz.mpy'},'Unexpected screensaver'
+    assert {p.name for p in (apps/'misc').glob('*.mpy')} == {'Benchmark.mpy'}, 'Missing or unexpected miscellaneous app'
     expected={p.relative_to(source).with_suffix('.mpy') for p in source.rglob('*.py')
               if 'tools' not in p.relative_to(source).parts}
     actual={p.relative_to(apps) for p in apps.rglob('*.mpy')}

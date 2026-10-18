@@ -37,7 +37,7 @@ UF2 to receive them; the calculator SD update does not include this change.
 
 Check with `builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_pico_ide.py`.
 
-The [connectivity review](Connectivity.md) records the post-v2.2 Wi-Fi/BLE
+The [connectivity review](Connectivity.md) records the v1.1 Wi-Fi/BLE
 fixes, test coverage and remaining hardware/native limitations. In particular,
 Pair Device requires native support absent from the selected Pico 2 W build;
 the simulator now reports that limitation too.

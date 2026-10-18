@@ -88,7 +88,7 @@ assert 'Dark Mode' not in labels and 'Exit Button' not in labels
 assert 'Screen Brightness' in labels and 'Theme Color' in labels
 vm.draw.screenshot('/private/tmp/gungos-nav-settings.bmp')
 config._menu.set_selected(labels.index('Theme Color'));key(k.BUTTON_CENTER)
-assert config._choice.selected_color==vm.selected_color
+assert config._theme_picker.colour==vm.selected_color
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
 assert vm.selected_color==Settings(vm.storage).theme_color and vm.draw.theme_color==vm.selected_color
 key(k.BUTTON_ESCAPE);assert vm.current_view.name=='desktop_view'

@@ -1,4 +1,4 @@
-# Building GungOS v2.2
+# Building GungOS v1.1
 
 The release vendors its source dependencies. Building does not fetch from the
 network. Use the pinned sources in `vendor/`; no `git submodule update` is needed.
@@ -25,8 +25,8 @@ The script builds a matching `mpy-cross`, host picotool and the RP2350 firmware,
 compiles the shipped applications, regenerates clean SD contents and records
 checksums. Output:
 
-- `firmware/GungOS-v2.2-PicoCalc-Pico2W.uf2`
-- `sd-card/` and `GungOS-v2.2-SD.zip`
+- `firmware/GungOS-v1.1-PicoCalc-Pico2W.uf2`
+- `sd-card/` and `GungOS-v1.1-SD.zip`
 - `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
 
 Intermediate files live in `.build/` and can be deleted after building. To place
@@ -40,7 +40,7 @@ module drives PicoCalc speakers with PWM/DMA.
 
 `vendor/revisions.json` identifies upstream revisions. Any local MicroPython
 adaptation is recorded in `vendor/micropython-local.patch` and already applied
-to the vendored source. Firmware build date defaults to 2026-10-15 UTC through
+to the vendored source. Firmware build date defaults to 2026-10-18 UTC through
 `SOURCE_DATE_EPOCH`; toolchain changes can change the firmware checksum.
 
 The PicoCalc CMake adapter keeps GCC 15's array-bounds diagnostic for the
@@ -98,3 +98,27 @@ Edit `builds/MicroPython/apps_unfrozen/`, then rerun the build script or compile
 with the matching `.build/mpy-cross/mpy-cross`. Copy changed `.mpy` files and
 their shared dependencies to the SD card. Firmware Python/native changes require
 a new UF2. Ordinary app edits can be tested in the simulator first.
+
+## v1.1 performance hardware test
+
+The working source combines the final released v1.1 dashboard (238 × 238
+widget canvas, centered logo and theme/status features) with native gfx,
+SRAM/PSRAM image storage and dirty-row DMA presentation. The version stays 1.1;
+keep hardware-test packages separate from the previous stable v1.1 release.
+
+Use a fresh absolute build directory for this integration:
+
+```sh
+GUNGOS_BUILD_DIR="$PWD/.build/performance" sh tools/build-gungos-release.sh
+python3 tools/verify-gungos-release.py
+```
+
+The build uses the bundled MicroPython/Pico SDK and picotool sources, an
+installed Arm GNU compiler for the Pico 2 W, and a matching host mpy-cross for
+SD apps. The macOS simulator is a separate native host build. A simulator
+binary cannot be converted to the device UF2.
+
+Default panel transfers remain 16-bit. The Benchmark SD app can temporarily
+try 12-bit transfers and asks for a colour verdict. Device results are written
+to `picoware/benchmark.txt`. The picosolve C kernel is preserved as source but
+has no MicroPython binding and is not linked into this firmware.

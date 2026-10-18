@@ -39,6 +39,13 @@ def check(root=ROOT):
                         if isinstance(value, ast.Constant) and isinstance(value.value, str):
                             docstrings.add(id(value))
             for node in ast.walk(tree):
+                imports = []
+                if isinstance(node, ast.Import):
+                    imports = [item.name for item in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imports = [node.module + '.' + item.name for item in node.names]
+                if any(name == old or name.startswith(old + '.') for name in imports for old in REMOVED_MODULES):
+                    issues.append((str(path.relative_to(root)), node.lineno, 'dangling import of a retired service client'))
                 if not isinstance(node, ast.Constant) or not isinstance(node.value, str) or id(node) in docstrings:
                     continue
                 literal = node.value.lower()

@@ -1,6 +1,6 @@
 # Communications and service independence
 
-This describes the maintained GungOS sources after the post-v2.2 connectivity
+This describes the maintained GungOS sources after the v1.1 connectivity
 and service-removal passes. It is not a claim that every inherited tool has been
 validated on physical PicoCalc hardware. See [Connectivity.md](Connectivity.md)
 for the fixes, protocol tests, limits and device test steps.
@@ -98,6 +98,6 @@ Wi-Fi setup, menu/navigation and BLE/server checks passed as well. The new test
 is included in the simulator's selected `--sim-check` profile.
 
 **A new UF2 is required.** These clients/settings are frozen firmware modules.
-The existing v2.2 UF2 has not been altered and still contains its previous frozen
+The previous v1.0 UF2 has not been altered and still contains its previous frozen
 contents. Replacing SD apps alone cannot remove those contents from the device.
 No firmware has been built/flashed as part of this source-removal pass.

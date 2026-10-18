@@ -53,7 +53,8 @@ key(k.BUTTON_H); assert home.focus=='menu'
 from picoware.applications.system import about
 key(k.BUTTON_I)
 assert vm.current_view.name=='about' and desktop._dashboard is None
-assert about.ABOUT_TEXT.startswith('GungOS v2.2')
+from picoware.system.features import FIRMWARE_VERSION
+assert about.ABOUT_TEXT.startswith('GungOS v'+FIRMWARE_VERSION)
 assert 'Cem Gungor' in about.ABOUT_TEXT and 'jblanked' in about.ABOUT_TEXT
 assert 'GNU GPL v3' in about.ABOUT_TEXT and 'MIT' not in about.ABOUT_TEXT
 vm.draw.screenshot('/private/tmp/picoware-gungos-info.bmp')
@@ -145,7 +146,7 @@ key(k.BUTTON_2); key(k.BUTTON_PLUS); key(k.BUTTON_3); key(k.BUTTON_CENTER)
 from engtools.calculator import app as calculator
 assert calculator._active.answer==5
 assert calculator._active.compact and not calculator._active.history
-assert home.widget.draw.width==184 and home.widget.draw.height==184
+assert home.widget.draw.width==238 and home.widget.draw.height==238
 assert vm.current_view.name=='desktop_view' and vm._view_count==1
 assert not calculator._active.show_hints
 key(k.BUTTON_2)
@@ -214,7 +215,8 @@ home.error=''
 vm.background_color,vm.foreground_color=0xFFFF,0
 key(k.BUTTON_NONE)
 vm.draw.screenshot('/private/tmp/picoware-dashboard-light.bmp')
-assert vm.draw._read_row(200)[0]==0xFF  # white in the RGB332 screen image
+assert vm.draw._read_row(200)[1]==((vm.selected_color >> 8) & 0xE0 | (vm.selected_color >> 6) & 0x1C | (vm.selected_color >> 3) & 3)
+assert vm.draw._read_row(200)[0]==0xFF  # one-pixel white outer margin
 # Deterministic simulator launch routes execute against the new direct tabs.
 vm.input_manager.reset()
 sim_runtime.request_open('Settings')

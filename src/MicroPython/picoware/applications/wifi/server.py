@@ -894,15 +894,13 @@ def __menu_run(view_manager) -> None:
     elif button == BUTTON_CENTER:
         selection = menu.selected_index
 
-        if menu_state == STATE_RUNNING:
-            if server is not None:
-                if not server.is_running:
-                    __server_start(view_manager)
-                server.run()
-        elif menu_state == STATE_MENU_MAIN:
+        if menu_state == STATE_MENU_MAIN:
             if selection == 0:  # Start
-                menu_state = STATE_RUNNING
-                __server_start(view_manager)
+                if __server_start(view_manager):
+                    menu_state = STATE_RUNNING
+                else:
+                    menu_state = STATE_MENU_MAIN
+                    __menu_start(view_manager)
             elif selection == 1:  # Edit
                 menu_state = STATE_MENU_EDIT
                 __menu_start(view_manager)
@@ -1110,6 +1108,9 @@ def __server_start(view_manager) -> bool:
         __box_start(view_manager)
 
         return True
+
+    view_manager.alert("Server could not start. Check settings and port 80.")
+    return False
 
 
 def start(view_manager) -> bool:

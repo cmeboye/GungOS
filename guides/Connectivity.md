@@ -1,8 +1,8 @@
 # Connectivity debugging pass
 
-This source revision fixes the built-in Wi-Fi/BLE modules after v2.2. These
+This source revision fixes the built-in Wi-Fi/BLE modules after v1.0. These
 modules are frozen into firmware: copying SD applications does not install the
-fixes. The existing v2.2 UF2 is unchanged; build and flash a new UF2 when ready.
+fixes. The previous v1.0 UF2 is unchanged; build and flash a new UF2 when ready.
 The simulator loads the revised sources directly.
 
 ## Confirmed issues and changes

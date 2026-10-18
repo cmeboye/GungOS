@@ -41,13 +41,21 @@ _UART_TX_CHAR_UUID='6E400003-B5A3-F393-E0A9-E50E24DCCA9E'
 _BONDING_FILE='picoware/bluetooth/paired_devices.json'
 _SECRETS_FILE='picoware/bluetooth/bonds.json'
 _owner_token=0
+_connection_active=False
+
+
+def connection_active():
+    """Read the current wrapper's link state without activating the radio."""
+    return _connection_active
+
 
 
 class Bluetooth:
     def __init__(self,storage=None):
-        global _owner_token
+        global _owner_token, _connection_active
         from ubluetooth import BLE,UUID
         _owner_token+=1;self._token=_owner_token
+        _connection_active=False
         self._ble=BLE();self._closed=False
         self._callback=self._scan_callback=self._write_callback=self._notify_callback=None
         self._storage=storage;self.error='';self._events=[];self._out=[];self._out_bytes=0
@@ -75,9 +83,11 @@ class Bluetooth:
         except Exception:pass
 
     def close(self):
+        global _connection_active
         if self._closed:return
         self._closed=True
         if self._token==_owner_token:
+            _connection_active=False
             self.flush_bonds()
             self._ble.irq(None)
             try:self._ble.gap_scan(None);self._ble.gap_advertise(None)
@@ -169,6 +179,7 @@ class Bluetooth:
         self._queue(event,data)
 
     def poll(self):
+        global _connection_active
         if self._closed or self._token!=_owner_token:return
         # Process one bounded snapshot; callbacks cannot recursively drain new IRQs.
         count=min(8,len(self._events))
@@ -177,6 +188,7 @@ class Bluetooth:
             event,data=self._events.pop(0)
             try:
                 self._event(event,data)
+                _connection_active=self._connected or bool(self._central_connections)
                 if self._callback:self._callback(event,data)
             except Exception as exc:self.error='Bluetooth event failed: '+str(exc)
         if self._started is not None and ticks_diff(ticks_ms(),self._started)>=self._timeout_ms:
