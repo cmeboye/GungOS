@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- Beam Lab in PicoLAB: build a beam on its drawing (supports, springs,
+  hinges, point, moment and distributed loads, section changes with material
+  and shape presets), solved after every change by `picosolve`. Diagrams of
+  shear, moment, deflection and slope with a cursor, peaks and pinned points;
+  reactions with an equilibrium check; load cases and factored combinations;
+  undo; save/open and CSV export. See [Beam Lab](guides/BeamLab.md).
+- Beam Lab frames: members at any angle joined at joints (B adds a member,
+  C splits one for a section change), loads acting down, normal to the member
+  or horizontally, normal force and stress results, and a whole-frame view of
+  moment (tension side), shear, normal force and the deflected shape. The
+  sketch fits the whole structure at one scale and zooms with + and -.
+- Beam Lab section editor: the cross-section drawn to scale with the edited
+  size highlighted; I, T, rectangle, hollow rectangle, circle, tube or direct
+  values; A, I, W, mass per metre and EI; a section library shared by
+  members; optional self-weight. Beams saved by the first Beam Lab open
+  unchanged.
+- `picosolve.Frame`: plane frames with three DOFs per node, axial loads and
+  results; the beam model is unchanged. Needs the new firmware UF2.
+- `engtools.units`, `engtools.cases` and `engtools.ui.forms` are implemented
+  (fixed engineering SI units, verified JSON cases, streamed CSV export,
+  single-line input with arithmetic).
+
 ## v1.2 — 2026-10-18
 
 - Refresh desktop/menu branding with native-resolution logos; PicoDESK and

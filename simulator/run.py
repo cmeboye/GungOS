@@ -574,6 +574,7 @@ def _run_selected_profile_check(opts):
     tests = (
         "test_dashboard.py", "test_dashboard_layout.py", "test_status_bar.py", "test_theme_picker.py",
         "test_statistics.py",
+        "test_beamlab.py",
         "test_calculator.py",
         "test_calculator_modes.py",
         "test_release_demos.py", "test_lorenz_settings.py",

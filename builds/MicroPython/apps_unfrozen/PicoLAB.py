@@ -1,6 +1,8 @@
 """PicoLAB engineering-tool launcher and shared plotting preview gallery."""
 
-TOOLS = ()  # Unfinished engineering tools stay out of the release launcher.
+# (module, title, detail). A module with show(view_manager) opens its own view;
+# unfinished tools stay out of the release launcher.
+TOOLS = (('engtools.beamlab.app', 'Beam Lab', 'Supports, loads, sections and diagrams'),)
 
 _selected = 0
 _gallery_selected = 0
@@ -89,8 +91,12 @@ def run(view_manager):
                 app.show(view_manager)
                 return
             else:
-                path = 'engtools.tools.'+TOOLS[_selected-3][0]
-                module = __import__(path,None,None,('TOOL',))
+                path = TOOLS[_selected-3][0]
+                module = __import__(path,None,None,('show',))
+                if hasattr(module,'show'):
+                    _resume = True
+                    module.show(view_manager)
+                    return
                 _tool, _page = module.TOOL, 'tool'
             _dirty = True
     elif _page == 'gallery':

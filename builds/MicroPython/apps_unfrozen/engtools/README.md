@@ -18,7 +18,11 @@ PicoCalc firmware builds. `numerics/backend.py` checks its capabilities and
 guards QR workspace; `numerics/bench.py` tests known answers and reports check
 timings/allocation deltas. See [the ulab guide](../../../../src/MicroPython/ulab/README.md).
 
-Engineering models, unit conversion and case storage remain placeholders.
+Beam Lab (`beamlab/`) is the first complete engineering tool; see
+[BeamLab.md](../../../../guides/BeamLab.md). It implements the shared
+`units.py` (fixed engineering SI display units), `cases.py` (verified JSON
+cases, streamed CSV) and `ui/forms.py` (single-line input). `jobs.py` remains
+a placeholder.
 Calculator equations and matrices have dedicated working numerical modules.
 The gallery uses
 synthetic examples; it does not present engineering calculations.
