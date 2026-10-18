@@ -4,7 +4,8 @@
  *
  * Memory comes in three caller-owned blocks, each sized before it is needed:
  *   model  - ps_model_bytes() before ps_model_init()
- *   index  - ps_model_index_bytes() before ps_model_prepare()
+ *   index  - ps_model_index_bytes() before ps_model_prepare(), plus a
+ *            scratch block (ps_model_scratch_bytes()) needed only during it
  *   values - ps_model_value_bytes(precision) after prepare, before solving
  *
  * Solving in PS_SINGLE precision factors in float32 (half the memory, the
@@ -41,9 +42,11 @@ typedef enum
     PS_LOAD_LINE,   /* element line load from w1 at a to w2 at b */
 } ps_load_kind;
 
+/* Inputs are kept as float32: they arrive from Python as float32, so double
+ * storage would hold nothing more. Everything computed from them is double. */
 typedef struct
 {
-    double a, b, w1, w2;
+    float a, b, w1, w2;
     int32_t target; /* node or element */
     uint8_t kind, load_case, dof;
 } ps_load;
@@ -60,7 +63,7 @@ typedef struct
     int32_t nodes, elements, sections, load_capacity, cases;
     int32_t load_count;
     /* model block */
-    double *x, *spring, *modulus, *inertia;
+    float *x, *spring, *modulus, *inertia; /* float32 inputs, see ps_load */
     ps_load *load;
     int32_t *connect, *section_of;
     uint8_t *fixed, *release;
@@ -100,7 +103,9 @@ ps_status ps_model_load(ps_model *m, ps_load_kind kind, int32_t load_case, int32
 void ps_model_clear_loads(ps_model *m);
 
 size_t ps_model_index_bytes(const ps_model *m);
-ps_status ps_model_prepare(ps_model *m, void *block);
+size_t ps_model_scratch_bytes(const ps_model *m);
+/* scratch may be released as soon as this returns. */
+ps_status ps_model_prepare(ps_model *m, void *block, void *scratch);
 size_t ps_model_value_bytes(const ps_model *m, ps_precision precision);
 ps_status ps_model_solve(ps_model *m, void *block, ps_precision precision, ps_control *ctl);
 

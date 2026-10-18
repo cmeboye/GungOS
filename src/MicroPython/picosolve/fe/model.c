@@ -46,8 +46,8 @@ static ps_status fail(ps_model *m, ps_status status, int32_t item, int32_t dof)
 size_t ps_model_bytes(int32_t nodes, int32_t elements, int32_t sections, int32_t loads)
 {
     size_t n = (size_t)nodes, e = (size_t)elements, s = (size_t)sections, l = (size_t)loads;
-    return align8(n * sizeof(double)) + align8(n * DPN * sizeof(double)) +
-           2 * align8(s * sizeof(double)) + align8(l * sizeof(ps_load)) +
+    return align8(n * sizeof(float)) + align8(n * DPN * sizeof(float)) +
+           2 * align8(s * sizeof(float)) + align8(l * sizeof(ps_load)) +
            align8(2 * e * sizeof(int32_t)) + align8(e * sizeof(int32_t)) +
            align8(n) + align8(e);
 }
@@ -64,10 +64,10 @@ ps_status ps_model_init(ps_model *m, void *block, int32_t nodes, int32_t element
     m->load_capacity = loads;
     m->cases = cases;
     m->load_count = 0;
-    m->x = take(&cursor, (size_t)nodes * sizeof(double));
-    m->spring = take(&cursor, (size_t)nodes * DPN * sizeof(double));
-    m->modulus = take(&cursor, (size_t)sections * sizeof(double));
-    m->inertia = take(&cursor, (size_t)sections * sizeof(double));
+    m->x = take(&cursor, (size_t)nodes * sizeof(float));
+    m->spring = take(&cursor, (size_t)nodes * DPN * sizeof(float));
+    m->modulus = take(&cursor, (size_t)sections * sizeof(float));
+    m->inertia = take(&cursor, (size_t)sections * sizeof(float));
     m->load = take(&cursor, (size_t)loads * sizeof(ps_load));
     m->connect = take(&cursor, 2 * (size_t)elements * sizeof(int32_t));
     m->section_of = take(&cursor, (size_t)elements * sizeof(int32_t));
@@ -75,13 +75,13 @@ ps_status ps_model_init(ps_model *m, void *block, int32_t nodes, int32_t element
     m->release = take(&cursor, (size_t)elements);
     for (int32_t i = 0; i < nodes; i++)
     {
-        m->x[i] = 0.0;
+        m->x[i] = 0.0f;
         m->fixed[i] = 0;
         for (int d = 0; d < DPN; d++)
-            m->spring[i * DPN + d] = 0.0;
+            m->spring[i * DPN + d] = 0.0f;
     }
     for (int32_t i = 0; i < sections; i++)
-        m->modulus[i] = m->inertia[i] = 0.0;
+        m->modulus[i] = m->inertia[i] = 0.0f;
     for (int32_t i = 0; i < elements; i++)
     {
         m->connect[2 * i] = m->connect[2 * i + 1] = -1;
@@ -101,7 +101,7 @@ ps_status ps_model_node(ps_model *m, int32_t node, double x)
 {
     if (node < 0 || node >= m->nodes || !isfinite(x))
         return PS_ERR_ARGUMENT;
-    m->x[node] = x;
+    m->x[node] = (float)x;
     edited(m);
     return PS_OK;
 }
@@ -120,7 +120,7 @@ ps_status ps_model_spring(ps_model *m, int32_t node, uint32_t flag, double stiff
     int d = flag_dof(flag);
     if (node < 0 || node >= m->nodes || d < 0 || !(stiffness >= 0.0) || !isfinite(stiffness))
         return PS_ERR_ARGUMENT;
-    m->spring[node * DPN + d] = stiffness;
+    m->spring[node * DPN + d] = (float)stiffness;
     edited(m);
     return PS_OK;
 }
@@ -129,8 +129,8 @@ ps_status ps_model_section(ps_model *m, int32_t section, double modulus, double 
 {
     if (section < 0 || section >= m->sections || !isfinite(modulus) || !isfinite(inertia))
         return PS_ERR_ARGUMENT;
-    m->modulus[section] = modulus;
-    m->inertia[section] = inertia;
+    m->modulus[section] = (float)modulus;
+    m->inertia[section] = (float)inertia;
     edited(m);
     return PS_OK;
 }
@@ -170,10 +170,10 @@ ps_status ps_model_load(ps_model *m, ps_load_kind kind, int32_t load_case, int32
     l->load_case = (uint8_t)load_case;
     l->target = target;
     l->dof = (uint8_t)d;
-    l->a = a;
-    l->b = b;
-    l->w1 = w1;
-    l->w2 = w2;
+    l->a = (float)a;
+    l->b = (float)b;
+    l->w1 = (float)w1;
+    l->w2 = (float)w2;
     edited(m);
     return PS_OK;
 }
@@ -199,7 +199,7 @@ static int element_nodes(const void *model, int32_t e, int32_t *nodes)
 size_t ps_model_index_bytes(const ps_model *m)
 {
     size_t n = (size_t)m->nodes, e = (size_t)m->elements, l = (size_t)m->load_capacity;
-    return ps_dofmap_bytes(m->nodes, DPN, 2 * m->elements) +
+    return ps_dofmap_bytes(m->nodes, DPN) +
            align8((n + 1) * sizeof(int32_t)) + align8(2 * e * sizeof(int32_t)) +
            align8((e + 1) * sizeof(int32_t)) + align8((n + 1) * sizeof(int32_t)) +
            2 * align8(l * sizeof(int32_t));
@@ -207,13 +207,13 @@ size_t ps_model_index_bytes(const ps_model *m)
 
 static double element_length(const ps_model *m, int32_t e)
 {
-    return m->x[m->connect[2 * e + 1]] - m->x[m->connect[2 * e]];
+    return (double)m->x[m->connect[2 * e + 1]] - (double)m->x[m->connect[2 * e]];
 }
 
 static double element_ei(const ps_model *m, int32_t e)
 {
     int32_t s = m->section_of[e];
-    return m->modulus[s] * m->inertia[s];
+    return (double)m->modulus[s] * (double)m->inertia[s];
 }
 
 /* Released element DOFs (theta1 = 1, theta2 = 3) as a bit mask. */
@@ -239,12 +239,17 @@ static void list_finish(int32_t *ptr, int32_t groups)
         ptr[i + 1] += ptr[i];
 }
 
-ps_status ps_model_prepare(ps_model *m, void *block)
+size_t ps_model_scratch_bytes(const ps_model *m)
+{
+    return ps_dofmap_scratch_bytes(m->nodes, 2 * m->elements);
+}
+
+static ps_status prepare(ps_model *m, void *block, void *scratch)
 {
     uint8_t *cursor = block;
     const int32_t nn = m->nodes, ne = m->elements, nl = m->load_count;
-    const size_t map_bytes = ps_dofmap_bytes(nn, DPN, 2 * ne);
-    ps_dofmap_init(&m->map, take(&cursor, map_bytes), nn, DPN, 2 * ne);
+    const size_t map_bytes = ps_dofmap_bytes(nn, DPN);
+    ps_dofmap_init(&m->map, take(&cursor, map_bytes), scratch, nn, DPN, 2 * ne);
     m->dof = m->map.dof;
     m->incident_ptr = take(&cursor, ((size_t)nn + 1) * sizeof(int32_t));
     m->incident = take(&cursor, 2 * (size_t)ne * sizeof(int32_t));
@@ -260,7 +265,7 @@ ps_status ps_model_prepare(ps_model *m, void *block)
         int32_t s = m->section_of[e];
         if (s < 0 || m->connect[2 * e] == m->connect[2 * e + 1])
             return fail(m, PS_ERR_GEOMETRY, e, -1);
-        if (!(m->modulus[s] > 0.0) || !(m->inertia[s] > 0.0))
+        if (!(m->modulus[s] > 0.0f) || !(m->inertia[s] > 0.0f))
             return fail(m, PS_ERR_SECTION, s, -1);
         if (!(element_length(m, e) > 0.0))
             return fail(m, PS_ERR_GEOMETRY, e, -1);
@@ -297,10 +302,10 @@ ps_status ps_model_prepare(ps_model *m, void *block)
         for (int d = 0; d < DPN; d++)
         {
             int fixed = (m->fixed[i] >> d) & 1;
-            if (fixed && m->spring[i * DPN + d] > 0.0)
+            if (fixed && m->spring[i * DPN + d] > 0.0f)
                 return fail(m, PS_ERR_SUPPORT, i, d);
             int32_t code = fixed ? PS_DOF_FIXED : 0;
-            if (d == 1 && !fixed && rigid[i] == 0 && m->spring[i * DPN + d] == 0.0)
+            if (d == 1 && !fixed && rigid[i] == 0 && m->spring[i * DPN + d] == 0.0f)
                 code = PS_DOF_FREE_HINGE;
             m->dof[i * DPN + d] = code;
         }
@@ -319,16 +324,16 @@ ps_status ps_model_prepare(ps_model *m, void *block)
             int32_t code = m->dof[l->target * DPN + l->dof];
             if (l->kind == PS_LOAD_SETTLE && code != PS_DOF_FIXED)
                 return fail(m, PS_ERR_SUPPORT, l->target, l->dof);
-            if (l->kind == PS_LOAD_NODE && code == PS_DOF_FREE_HINGE && l->w1 != 0.0)
+            if (l->kind == PS_LOAD_NODE && code == PS_DOF_FREE_HINGE && l->w1 != 0.0f)
                 return fail(m, PS_ERR_MECHANISM, l->target, l->dof);
             m->node_load_ptr[l->target + 1]++;
             continue;
         }
         const double length = element_length(m, l->target);
         const double slack = 1e-9 * length;
-        int ok = l->a >= -slack && l->a <= length + slack;
+        int ok = (double)l->a >= -slack && (double)l->a <= length + slack;
         if (l->kind == PS_LOAD_LINE)
-            ok = ok && l->b > l->a && l->b <= length + slack;
+            ok = ok && l->b > l->a && (double)l->b <= length + slack;
         if (!ok)
             return fail(m, PS_ERR_LOAD, k, -1);
         m->element_load_ptr[l->target + 1]++;
@@ -361,6 +366,15 @@ ps_status ps_model_prepare(ps_model *m, void *block)
     return PS_OK;
 }
 
+ps_status ps_model_prepare(ps_model *m, void *block, void *scratch)
+{
+    const ps_status status = prepare(m, block, scratch);
+    /* The scratch is the caller's to release now: nothing may point into it. */
+    m->map.xadj = m->map.adj = m->map.perm = m->map.level = NULL;
+    m->map.mask = NULL;
+    return status;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Solving                                                                  */
 /* ------------------------------------------------------------------------ */
@@ -370,10 +384,10 @@ static void beam_load(const ps_load *l, ps_beam_load *out)
     out->kind = l->kind == PS_LOAD_POINT ? PS_BEAM_POINT
                 : l->kind == PS_LOAD_MOMENT ? PS_BEAM_MOMENT
                                             : PS_BEAM_TRAP;
-    out->a = l->a;
-    out->b = l->b;
-    out->w1 = l->w1;
-    out->w2 = l->w2;
+    out->a = (double)l->a;
+    out->b = (double)l->b;
+    out->w1 = (double)l->w1;
+    out->w2 = (double)l->w2;
 }
 
 /* Element stiffness with hinges condensed out. */
@@ -418,7 +432,7 @@ static void assemble_loads(const ps_model *m, double *rhs)
         {
             int32_t v = m->dof[l->target * DPN + l->dof];
             if (v >= 0)
-                r[v] += l->w1; /* loads on supports go straight into the reaction */
+                r[v] += (double)l->w1; /* loads on supports go straight into the reaction */
         }
         else if (l->kind == PS_LOAD_SETTLE)
         {
@@ -431,7 +445,7 @@ static void assemble_loads(const ps_model *m, double *rhs)
                 const int column = end * DPN + l->dof;
                 for (int a = 0; a < PS_BEAM_DOF; a++)
                     if (eq[a] >= 0)
-                        r[eq[a]] -= k[a * PS_BEAM_DOF + column] * l->w1;
+                        r[eq[a]] -= k[a * PS_BEAM_DOF + column] * (double)l->w1;
             }
         }
         else
@@ -478,8 +492,8 @@ static void residual(const ps_model *m, const double *rhs, const double *u, doub
         }
     }
     for (int32_t i = 0; i < m->nodes * DPN; i++)
-        if (m->dof[i] >= 0 && m->spring[i] > 0.0)
-            r[m->dof[i]] -= m->spring[i] * u[m->dof[i]];
+        if (m->dof[i] >= 0 && m->spring[i] > 0.0f)
+            r[m->dof[i]] -= (double)m->spring[i] * u[m->dof[i]];
 }
 
 static double max_abs(const double *v, int32_t n)
@@ -560,8 +574,8 @@ ps_status ps_model_solve(ps_model *m, void *block, ps_precision precision, ps_co
         ps_sky_add(&m->sky, eq, PS_BEAM_DOF, k);
     }
     for (int32_t i = 0; i < m->nodes * DPN; i++)
-        if (m->dof[i] >= 0 && m->spring[i] > 0.0)
-            ps_sky_add_diagonal(&m->sky, m->dof[i], m->spring[i]);
+        if (m->dof[i] >= 0 && m->spring[i] > 0.0f)
+            ps_sky_add_diagonal(&m->sky, m->dof[i], (double)m->spring[i]);
     assemble_loads(m, rhs);
 
     ps_status status = ps_sky_factor(&m->sky, &m->info, ctl);
@@ -597,7 +611,7 @@ static double settlement(const ps_model *m, int32_t load_case, int32_t node, int
     {
         const ps_load *l = &m->load[m->node_load[p]];
         if (l->kind == PS_LOAD_SETTLE && l->load_case == load_case && l->dof == d)
-            value += l->w1;
+            value += (double)l->w1;
     }
     return value;
 }
@@ -686,8 +700,8 @@ ps_status ps_model_reaction(const ps_model *m, int32_t load_case, int32_t node, 
     {
         reaction[d] = 0.0;
         int32_t v = m->dof[node * DPN + d];
-        if (v >= 0 && m->spring[node * DPN + d] > 0.0)
-            reaction[d] = -m->spring[node * DPN + d] * node_value(m, load_case, node, d);
+        if (v >= 0 && m->spring[node * DPN + d] > 0.0f)
+            reaction[d] = -(double)m->spring[node * DPN + d] * node_value(m, load_case, node, d);
     }
     if (!m->fixed[node])
         return PS_OK;
@@ -708,7 +722,7 @@ ps_status ps_model_reaction(const ps_model *m, int32_t load_case, int32_t node, 
         const ps_load *l = &m->load[m->node_load[p]];
         if (l->kind == PS_LOAD_NODE && l->load_case == load_case &&
             m->dof[node * DPN + l->dof] == PS_DOF_FIXED)
-            reaction[l->dof] -= l->w1;
+            reaction[l->dof] -= (double)l->w1;
     }
     return PS_OK;
 }

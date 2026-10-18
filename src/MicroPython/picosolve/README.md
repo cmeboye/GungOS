@@ -16,7 +16,7 @@ curves. Stiffness matrices are never exposed.
 | First suite | Structural, starting with beams. |
 | Beam theory | Euler–Bernoulli. Timoshenko may follow. |
 | Units | SI everywhere: m, N, N·m, Pa, m⁴, N/m. The kernel does no unit conversion. |
-| Precision | Python inputs are float32 (MicroPython's float), which is ample for material and geometry data. Everything derived from them is double: element matrices, assembly, factorization, displacements, reactions, end forces and diagrams. |
+| Precision | Python inputs are float32 (MicroPython's float), which is ample for material and geometry data, and the model stores them as float32. Everything derived from them is double: lengths, EI, element matrices, assembly, factorization, displacements, reactions, end forces and diagrams. |
 | Size limits | Not fixed. Before allocating, `prepare` reports the memory this model needs, so the hardware decides. |
 
 ## Layout
@@ -130,14 +130,19 @@ with the device benchmark.
 
 ## Memory
 
-The kernel never allocates. A model uses three blocks owned by the caller,
-each sized before it is needed:
+The kernel never allocates. A model uses blocks owned by the caller, each
+sized before it is needed:
 
 | Block | Sized by | Holds |
 |---|---|---|
-| model | `ps_model_bytes(nodes, elements, sections, loads)` | the model description |
-| index | `ps_model_index_bytes()` | equation numbering, profile, ordering scratch |
+| model | `ps_model_bytes(nodes, elements, sections, loads)` | the model description (float32 inputs) |
+| index | `ps_model_index_bytes()` | equation numbering, skyline column pointers, lookups for results |
+| scratch | `ps_model_scratch_bytes()` | node graph and ordering work space, needed only during `prepare` |
 | values | `ps_model_value_bytes()`, after `prepare` | skyline values and one solution per load case |
+
+The binding frees the scratch block as soon as `prepare` returns, before the
+values block is allocated. A 600-element continuous beam (1,051 equations)
+needs 91 KB: about 29 KB model, 27 KB index and 35 KB values.
 
 The binding will allocate these blocks on the MicroPython heap and attach them
 to the model object, so the garbage collector frees them with the model.

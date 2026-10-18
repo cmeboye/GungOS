@@ -77,6 +77,12 @@
   renderer) is built without fused multiply-add, which rounds differently.
 - The benchmark records the processor clock and adds "Graph drawing" and
   "Calculator" steps (Python versus C).
+- Beam solver memory: inputs (positions, springs, E, I, loads) are stored as
+  float32, as they arrive from Python (all arithmetic stays double), and
+  the equation-numbering scratch is freed right after numbering. A
+  600-element beam needs 91 KB instead of 121 KB, with results unchanged.
+- Graph's implicit curves reuse their per-row work arrays: 63% less memory
+  allocated per plot, so fewer garbage collections.
 - Imports: MicroPython does not cache "extensible" built-ins (array, time,
   json, os, struct, ...), so every import searches each sys.path directory
   on the SD card first: about 70 ms per import on the device. Startup now

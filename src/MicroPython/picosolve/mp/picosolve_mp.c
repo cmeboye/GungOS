@@ -332,7 +332,13 @@ static mp_obj_t beam_begin(size_t n, const mp_obj_t *args)
     b->m.state = PS_STATE_EDITED;
     replace(&b->value_block, &b->value_bytes, 0);
     replace(&b->index_block, &b->index_bytes, ps_model_index_bytes(&b->m));
-    raise_status(b, ps_model_prepare(&b->m, b->index_block));
+    /* Numbering scratch lives only through prepare, so it is gone before
+     * the matrix is allocated: the peak is lower as well as the total. */
+    const size_t scratch_bytes = ps_model_scratch_bytes(&b->m);
+    void *scratch = m_malloc(scratch_bytes);
+    const ps_status prepared = ps_model_prepare(&b->m, b->index_block, scratch);
+    m_free(scratch);
+    raise_status(b, prepared);
     allocate_values(b, choose(b));
     b->ctl.cancel = 0;
     b->ctl.done = 0;

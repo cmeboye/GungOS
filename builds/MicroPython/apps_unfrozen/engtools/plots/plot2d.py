@@ -679,14 +679,16 @@ class GraphApp:
                 elif start is not None:
                     self.stipple(start,py,xs[col],py2,color,phase)
                     start = None
-        xsf = array('f',xs)
-        queries = array('f',[0.0]*(8*cells))
+        # Work arrays are the same size every row: made once per plot.
+        work = job.get('contour')
+        if work is None or len(work[0]) != len(xs):
+            work = job['contour'] = (array('f',xs),array('f',bytes(32*cells)),
+                                     array('f',bytes(16*cells)),array('f',bytes(32*cells)))
+        xsf,queries,mids,segments = work
         q = geom.contour_queries(upper,lower,centres,xsf,py,py2,queries)
-        mids = array('f')
         for i in range(q):
             v = e.value(*self.xy(queries[2*i],queries[2*i+1]))
-            mids.append(nan if v is None else v)
-        segments = array('f',[0.0]*(8*cells))
+            mids[i] = nan if v is None else v
         dashed = e.relation in ('<','>')
         count = geom.contour_segments(upper,lower,centres,xsf,py,py2,mids,segments)
         draw = self.native('_plot_segments')

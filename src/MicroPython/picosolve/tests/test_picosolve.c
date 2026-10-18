@@ -27,6 +27,18 @@ static int failures = 0, checks = 0;
         }                                                              \
     } while (0)
 
+/* prepare with its own scratch, then scribble over and free the scratch:
+ * nothing after prepare may use it (AddressSanitizer would also catch it). */
+static ps_status prepare_and_release(ps_model *m, void *index)
+{
+    const size_t bytes = ps_model_scratch_bytes(m);
+    void *scratch = malloc(bytes);
+    const ps_status status = ps_model_prepare(m, index, scratch);
+    memset(scratch, 0xA5, bytes);
+    free(scratch);
+    return status;
+}
+
 static int near(double got, double want, double tolerance)
 {
     double scale = fabs(want) > 1.0 ? fabs(want) : 1.0;
@@ -70,7 +82,7 @@ static ps_status beam_solve(beam *b)
     free(b->value_block);
     b->index_block = malloc(ps_model_index_bytes(&b->m));
     b->value_block = NULL;
-    ps_status status = ps_model_prepare(&b->m, b->index_block);
+    ps_status status = prepare_and_release(&b->m, b->index_block);
     if (status != PS_OK)
         return status;
     b->value_block = malloc(ps_model_value_bytes(&b->m, first_precision) + 8);
@@ -145,7 +157,7 @@ static void invariants(beam *b)
             double r[2];
             ps_model_reaction(m, c, i, r);
             fy += r[0];
-            mz += r[1] + r[0] * m->x[i];
+            mz += r[1] + r[0] * (double)m->x[i];
             scale += fabs(r[0]) + fabs(r[1]);
         }
         for (int k = 0; k < m->load_count; k++)
@@ -153,30 +165,30 @@ static void invariants(beam *b)
             const ps_load *l = &m->load[k];
             if (l->load_case != c || l->kind == PS_LOAD_SETTLE)
                 continue;
-            double x0 = l->kind == PS_LOAD_NODE ? m->x[l->target] : m->x[m->connect[2 * l->target]];
+            double x0 = l->kind == PS_LOAD_NODE ? (double)m->x[l->target] : (double)m->x[m->connect[2 * l->target]];
             double force = 0.0, moment = 0.0;
             if (l->kind == PS_LOAD_NODE)
             {
                 if (l->dof == 0)
-                    force = l->w1;
+                    force = (double)l->w1;
                 else
-                    moment = l->w1;
+                    moment = (double)l->w1;
             }
             else if (l->kind == PS_LOAD_POINT)
             {
-                force = l->w1;
-                x0 += l->a;
+                force = (double)l->w1;
+                x0 += (double)l->a;
             }
             else if (l->kind == PS_LOAD_MOMENT)
-                moment = l->w1;
+                moment = (double)l->w1;
             else
             {
-                double span = l->b - l->a;
-                force = 0.5 * (l->w1 + l->w2) * span;
-                double centroid = (l->w1 + l->w2) != 0.0
-                                      ? span * (l->w1 + 2.0 * l->w2) / (3.0 * (l->w1 + l->w2))
+                double span = (double)l->b - (double)l->a;
+                force = 0.5 * ((double)l->w1 + (double)l->w2) * span;
+                double centroid = ((double)l->w1 + (double)l->w2) != 0.0
+                                      ? span * ((double)l->w1 + 2.0 * (double)l->w2) / (3.0 * ((double)l->w1 + (double)l->w2))
                                       : 0.5 * span;
-                x0 += l->a + centroid;
+                x0 += (double)l->a + centroid;
             }
             fy += force;
             mz += moment + force * x0;
@@ -195,7 +207,7 @@ static void invariants(beam *b)
         for (int e = 0; e < m->elements; e++)
         {
             double mid[4];
-            double half = 0.5 * (m->x[m->connect[2 * e + 1]] - m->x[m->connect[2 * e]]);
+            double half = 0.5 * ((double)m->x[m->connect[2 * e + 1]] - (double)m->x[m->connect[2 * e]]);
             ps_model_section_at(m, c, e, half, mid);
             v_scale = fabs(mid[3]) > v_scale ? fabs(mid[3]) : v_scale;
             t_scale = fabs(mid[2]) > t_scale ? fabs(mid[2]) : t_scale;
@@ -210,7 +222,7 @@ static void invariants(beam *b)
         for (int e = 0; e < m->elements; e++)
         {
             int n2 = m->connect[2 * e + 1];
-            double length = m->x[n2] - m->x[m->connect[2 * e]];
+            double length = (double)m->x[n2] - (double)m->x[m->connect[2 * e]];
             double v2 = ps_model_displacement(m, c, n2, PS_UY);
             double end[4];
             ps_model_section_at(m, c, e, length, end);
@@ -551,9 +563,12 @@ static void test_settlement(void)
         ps_model_support(&b.m, i, PS_UY);
     ps_model_load(&b.m, PS_LOAD_SETTLE, 0, 1, PS_UY, 0, 0, delta, 0);
     CHECK(beam_solve(&b) == PS_OK);
-    NEAR(deflection(&b, 0, 1), delta);
-    NEAR(reaction(&b, 0, 1, 0), 6.0 * EI * delta / (L * L * L));
-    NEAR(reaction(&b, 0, 0, 0), -3.0 * EI * delta / (L * L * L));
+    /* Inputs are stored as float32, as they arrive from Python; 0.01 is not
+     * exact in float32, so the answer is exact for the value held. */
+    const double held = (double)(float)delta;
+    NEAR(deflection(&b, 0, 1), held);
+    NEAR(reaction(&b, 0, 1, 0), 6.0 * EI * held / (L * L * L));
+    NEAR(reaction(&b, 0, 0, 0), -3.0 * EI * held / (L * L * L));
     invariants(&b);
     beam_free(&b);
 }
@@ -745,7 +760,7 @@ static void test_single_memory(void)
     for (int i = 0; i <= 400; i += 5)
         ps_model_support(&b.m, i, PS_UY);
     void *index = malloc(ps_model_index_bytes(&b.m));
-    CHECK(ps_model_prepare(&b.m, index) == PS_OK);
+    CHECK(prepare_and_release(&b.m, index) == PS_OK);
     size_t single = ps_model_value_bytes(&b.m, PS_SINGLE), dbl = ps_model_value_bytes(&b.m, PS_DOUBLE);
     printf("values block, 400 elements: double %zu bytes, single %zu bytes\n", dbl, single);
     CHECK(single > 0 && dbl > 0);

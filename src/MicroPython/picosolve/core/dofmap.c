@@ -14,15 +14,20 @@ static void *take(uint8_t **cursor, size_t bytes)
     return p;
 }
 
-size_t ps_dofmap_bytes(int32_t nodes, int32_t dpn, int32_t edges)
+size_t ps_dofmap_bytes(int32_t nodes, int32_t dpn)
 {
     size_t n = (size_t)nodes, d = (size_t)dpn;
-    return align8(n * d * sizeof(int32_t)) + align8((n * d + 1) * sizeof(uint32_t)) +
-           align8((n + 1) * sizeof(int32_t)) + align8((size_t)edges * sizeof(int32_t)) +
+    return align8(n * d * sizeof(int32_t)) + align8((n * d + 1) * sizeof(uint32_t));
+}
+
+size_t ps_dofmap_scratch_bytes(int32_t nodes, int32_t edges)
+{
+    size_t n = (size_t)nodes;
+    return align8((n + 1) * sizeof(int32_t)) + align8((size_t)edges * sizeof(int32_t)) +
            2 * align8(n * sizeof(int32_t)) + align8(n);
 }
 
-void ps_dofmap_init(ps_dofmap *map, void *block, int32_t nodes, int32_t dpn, int32_t edges)
+void ps_dofmap_init(ps_dofmap *map, void *block, void *scratch, int32_t nodes, int32_t dpn, int32_t edges)
 {
     uint8_t *cursor = block;
     map->nodes = nodes;
@@ -30,6 +35,7 @@ void ps_dofmap_init(ps_dofmap *map, void *block, int32_t nodes, int32_t dpn, int
     map->edge_capacity = edges;
     map->dof = take(&cursor, (size_t)nodes * (size_t)dpn * sizeof(int32_t));
     map->ptr = take(&cursor, ((size_t)nodes * (size_t)dpn + 1) * sizeof(uint32_t));
+    cursor = scratch;
     map->xadj = take(&cursor, ((size_t)nodes + 1) * sizeof(int32_t));
     map->adj = take(&cursor, (size_t)edges * sizeof(int32_t));
     map->perm = take(&cursor, (size_t)nodes * sizeof(int32_t));

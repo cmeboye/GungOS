@@ -25,6 +25,8 @@ typedef struct
     int32_t nodes, dpn;
     int32_t *dof;   /* nodes * dpn: equation number, or a negative mark */
     uint32_t *ptr;  /* skyline column offsets, nodes * dpn + 1 */
+    /* Scratch for numbering only: valid until ps_dofmap_number returns and
+     * the caller releases it. */
     int32_t *xadj, *adj, *perm, *level;
     uint8_t *mask;
     int32_t edge_capacity;
@@ -32,9 +34,11 @@ typedef struct
     uint32_t profile;
 } ps_dofmap;
 
-/* edges: room for node adjacencies, sum over elements of k * (k - 1). */
-size_t ps_dofmap_bytes(int32_t nodes, int32_t dpn, int32_t edges);
-void ps_dofmap_init(ps_dofmap *map, void *block, int32_t nodes, int32_t dpn, int32_t edges);
+/* The numbering itself (kept), and scratch used only while numbering.
+ * edges: room for node adjacencies, sum over elements of k * (k - 1). */
+size_t ps_dofmap_bytes(int32_t nodes, int32_t dpn);
+size_t ps_dofmap_scratch_bytes(int32_t nodes, int32_t edges);
+void ps_dofmap_init(ps_dofmap *map, void *block, void *scratch, int32_t nodes, int32_t dpn, int32_t edges);
 
 /* Number the free DOFs and size the skyline. Marks in map->dof must be set. */
 ps_status ps_dofmap_number(ps_dofmap *map, int32_t elements, ps_element_nodes nodes_of,
