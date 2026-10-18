@@ -44,6 +44,8 @@ class Calculator:
         return Renderer(draw, clip, self.accent)
 
     def footer(self, r, width, height, first, second='', message=''):
+        from engtools.ui import breadcrumbs
+        breadcrumbs.paint(r.draw,theme.system_palette(self.vm),fallback=('tools','Scientific calculator'))
         bottom = height-self.footer_height
         r.fill(0, bottom, width, self.footer_height, theme.PANEL)
         limit = max(1, (width-12)//6)

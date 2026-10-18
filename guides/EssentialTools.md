@@ -1,23 +1,22 @@
 # Retained system and connectivity tools
 
-This is the current menu inventory for the v2.1 review. Keeping a tool in this
+This is the current retained menu inventory. Keeping a tool in this
 list does not imply that every operation has been tested on the physical PicoCalc.
 
 | Tool | Current purpose | Next review |
 |---|---|---|
-| Settings | Theme, brightness, keys, time and widget choice | Physical reboot/persistence and input consistency |
+| Settings | Theme, brightness, time and widget choice | Physical reboot/persistence and input consistency |
 | About | GungOS version, features, credits and GPL notice | Final release wording |
 | System Info / F1 panel | Board and memory counters | Unify full-page counters with the measured desktop snapshot |
-| Bootloader / Restart / Shutdown / Stop | Device/runtime control | Confirm PicoCalc behaviour and return paths |
+| Restart / Shutdown | Reset or power off the device | Bootloader and Stop removed from both System menu layouts |
 | Bluetooth | BLE scan, advertise, pairing, UART chat, beacon and RSSI pages | Radio behaviour, cleanup and whether each page is useful |
 | WiFi | Scan/connect and saved credentials | Cold boot reconnect and NTP on the device |
 | USB | Keyboard, numpad, media keys and payload tools | Which HID tools belong in the bare release |
-| Infrared | External IR transmit/receive functionality | Hardware requirements and whether to keep it |
 | File Manager | Browse/copy/edit/manage SD files | Editing and app launch paths with the release bundle |
 | PicoIDE | Python source editing and development; compiled `.mpy` open/save blocked | Execution and error recovery |
 | Python REPL | Interactive Python | Keyboard routing and exit/recovery |
 | Serial Terminal | UART communication | Pin/settings workflow and cleanup |
-| SSH Terminal | Remote shell via Wi-Fi | Connection setup, terminal behaviour and failure recovery |
+| SSH Terminal | Remote command execution via Wi-Fi | Missing host verification; experimental, not ready for credentials |
 
 Agent/AI, its setup page, Email and ESP Flasher are excluded from the frozen
 profile. The launcher exposes Graph, Graph3D and PicoLAB directly. Games lists
@@ -41,3 +40,7 @@ The [connectivity review](Connectivity.md) records the v1.1 Wi-Fi/BLE
 fixes, test coverage and remaining hardware/native limitations. In particular,
 Pair Device requires native support absent from the selected Pico 2 W build;
 the simulator now reports that limitation too.
+
+The [wired/SSH review](CommsReview.md) records the remaining inherited
+terminal and USB defects, PicoCalc connector routing, and release exclusions.
+Future GPIO configuration and SSH work is tracked in [ConnectivityRoadmap.md](ConnectivityRoadmap.md).

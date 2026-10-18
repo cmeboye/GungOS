@@ -82,7 +82,7 @@ vm.add(View('parent', lambda vm: None, lambda vm: True, lambda vm: None))
 vm.switch_to('parent')
 vm.add(View('lab', lab.run, lab.start, lab.stop))
 vm.switch_to('lab')
-lab._selected = len(lab.TOOLS)+3
+lab._enter('checks');lab._selected = 0
 vm._button = BUTTON_CENTER
 lab.run(vm)
 assert lab._page == 'bench'
@@ -96,14 +96,14 @@ lab.run(vm)
 assert lab._bench is not None and len(lab._bench_rows) == 1
 vm._button = BUTTON_ESCAPE
 lab.run(vm)
-assert lab._page == 'tools' and lab._bench is None
+assert lab._page == 'checks' and lab._bench is None
 # Existing device firmware gets a useful message rather than an app failure.
 old_require = backend.require
 def unavailable():
     raise RuntimeError('This firmware needs the configured ulab build.')
 backend.require = unavailable
 try:
-    lab._selected = len(lab.TOOLS)+3
+    lab._enter('checks');lab._selected = 0
     vm._button = BUTTON_CENTER
     lab.run(vm)
     assert lab._page == 'bench' and lab._bench is None and 'ulab' in lab._error

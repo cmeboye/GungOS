@@ -4,7 +4,7 @@
 `plot3d.py`. Both standalone apps and PicoLAB use the same rendering
 code and `engtools/ui/theme.py` for their header, footer and menu styling.
 
-Open **PicoLAB > Plot previews** in the simulator to compare:
+Open **PicoLAB > Checks > Plot previews** in the simulator to compare:
 
 - 2D equations: two curves and a colored legend.
 - 2D shaded region: an implicit circle and inequality.

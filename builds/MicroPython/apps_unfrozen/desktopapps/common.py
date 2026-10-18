@@ -1,7 +1,7 @@
 """Shared native-size application chrome and verified explicit SD documents."""
 from picoware.system import buttons as k
 from engtools.calculator.render import Renderer
-from engtools.ui.theme import system_palette
+from engtools.ui.theme import system_palette,header
 
 COLORS=(('Black',0),('White',0xFFFF),('Red',0xF800),('Orange',0xFD20),
         ('Yellow',0xFFE0),('Green',0x07E0),('Cyan',0x07FF),('Blue',0x001F),
@@ -172,7 +172,10 @@ class FileApp:
     def chrome(self):
         d=self.vm.draw;w,h=int(d.size.x),int(d.size.y)
         p=system_palette(self.vm);r=self.renderer()
-        d.fill_screen(p.BG);r.fill(0,18,w,23,p.PANEL)
+        d.fill_screen(p.BG)
+        page='' if self.page in ('edit','equation') else ' / '+self.page.replace('_',' ').upper()
+        header(d,self.title+page,'PicoDESK',p,height=18)
+        r.fill(0,18,w,23,p.PANEL)
         r.text(8,24,self.title,p.ACCENT,1)
         name=(self.filename.rsplit('/',1)[-1] if self.filename else 'Untitled')+(' *' if self.model.dirty else '')
         r.text(max(101,w-8-min(len(name),28)*6),27,name[-28:],p.MUTED,0)

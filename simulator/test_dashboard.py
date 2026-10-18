@@ -179,12 +179,14 @@ home.widget.load('LabWidget')
 assert home.widget.module is not None,home.widget.error
 home.focus='widget'; home.widget.focused=True
 import PicoLAB
-for _ in range(len(PicoLAB.TOOLS)+4): key(k.BUTTON_DOWN)
+key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)  # Tools
+key(k.BUTTON_DOWN);key(k.BUTTON_DOWN)  # Scientific calculator
 key(k.BUTTON_CENTER)
 assert home.widget.context.current_view.name=='eng_calculator'
 assert len(home.widget.context.stack)==1 and vm._view_count==1
 key(vm.input_manager._key_esc)
 assert home.widget.context.current_view.name=='__widget_root' and home.focus=='widget'
+key(k.BUTTON_ESCAPE);assert PicoLAB._page=='root' and home.focus=='widget'
 key(k.BUTTON_ESCAPE)
 assert home.focus=='menu'
 home.widget.load('LabWidget')

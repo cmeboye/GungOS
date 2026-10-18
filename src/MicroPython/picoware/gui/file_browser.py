@@ -94,6 +94,8 @@ class FileBrowser:
         mode=FILE_BROWSER_SELECTOR,
         start_directory="",
         allowed_extensions=[],
+        brand='GungOS',
+        breadcrumb='File Browser',
     ):
         """Initialize the file browser.
 
@@ -109,6 +111,7 @@ class FileBrowser:
         # Link to system managers
         self._vm = view_manager
         self._mode = mode
+        self._brand, self._breadcrumb = brand, breadcrumb
 
         # State tracking and caching
         self._stat_cache = {}
@@ -466,7 +469,8 @@ class FileBrowser:
         bg = self._vm.background_color
         sel = self._vm.selected_color
         draw = self._vm.draw
-        m = Menu(draw, title, 0, self._screen_h, fg, bg, sel, bg)
+        m = Menu(draw, self._breadcrumb+" / "+title, 0, self._screen_h, fg, bg, sel, bg,
+                 brand=self._brand)
         for i in items:
             m.add_item(i)
         m.set_selected(0)
@@ -505,7 +509,7 @@ class FileBrowser:
 
         char_h = max(1, draw.font_size.y)
 
-        top_bar_h = max(char_h + sy(4), self._five * 2)
+        top_bar_h = max(18, char_h + sy(4), self._five * 2)
         bottom_bar_h = top_bar_h
         pane_header_h = top_bar_h
         splitter_w = max(1, sx(1))
@@ -607,7 +611,6 @@ class FileBrowser:
         # 3. Help Screen Overlay
         if self._is_help_screen:
             help_lines = (
-                ("--- FILE BROWSER SHORTCUTS ---", 5, color_sel),
                 ("[MAIN BROWSER]", 20, color_sel),
                 ("UP/DWN:Scroll   L/R:Switch Pane", 32, color_fg),
                 ("CENTER:Menu     ESC:Exit App", 44, color_fg),
@@ -625,8 +628,11 @@ class FileBrowser:
                 ("[IMAGE & TEXT VIEWER]", 200, color_sel),
                 ("UP/DWN:Scroll   ESC: Close", 212, color_fg),
             )
+            from picoware.gui import style
+            style.header(draw,self._breadcrumb+" / Help",self._brand,
+                         style.system_palette(self._vm),top_bar_h)
             for text, y, color in help_lines:
-                draw._text(sx(10), sy(y), text, color)
+                draw._text(sx(10), top_bar_h+sy(y), text, color)
 
             draw.swap()
             self._needs_redraw = False
@@ -646,48 +652,23 @@ class FileBrowser:
 
         # 5. Options Menu
         if self._show_options:
-            margin_x = sx(10)
-            margin_y = sy(10)
-            menu_x = margin_x
-            menu_y = margin_y
-            menu_w = sw - (margin_x * 2)
-            menu_h = sh - (margin_y * 2)
-            menu_header_h = max(sy(20), self._five * 4)
-            draw._fill_rectangle(menu_x, menu_y, menu_w, menu_h, color_bg)
-            draw._rectangle(menu_x, menu_y, menu_w, menu_h, color_sel)
-            draw._fill_rectangle(menu_x, menu_y, menu_w, menu_header_h, color_sel)
-            draw._text(menu_x + sx(5), menu_y + sy(4), "OPTIONS MENU", color_sel)
-            for i, l in enumerate(self.OPTIONS_LABELS):
-                yp = menu_y + sy(25) + (i * sy(15))
-                tc = color_sel if i == self._opt_idx else color_fg
-                if i == self._opt_idx:
-                    draw._fill_rectangle(
-                        menu_x + sx(2),
-                        yp - sy(2),
-                        menu_w - sx(4),
-                        max(sy(13), self._five * 2 + 1),
-                        color_bg,
-                    )
-                draw._text(menu_x + sx(10), yp, l + ":", tc)
-                v = ""
-                if i == 0:
-                    v = "Show" if self._app_state.get("show_hidden", False) else "Hide"
-                elif i == 1:
-                    v = "Menu" if self._app_state.get("dir_menu", True) else "Open"
-                draw._text(sx(130), yp, f"< {v} >", tc)
-            draw._fill_rectangle(menu_x, sh - sy(30), menu_w, menu_header_h, color_sel)
-            draw._text(
-                menu_x + sx(5),
-                sh - sy(26),
-                "[L/R] Edit   [ESC/ENT] Save",
-                color_bg,
-            )
-            draw.swap()
-            self._needs_redraw = False
+            from picoware.gui import style
+            values=("Show" if self._app_state.get("show_hidden",False) else "Hide",
+                    "Menu" if self._app_state.get("dir_menu",True) else "Open")
+            rows=[(label,values[i]) for i,label in enumerate(self.OPTIONS_LABELS)]
+            style.menu(draw,rows,self._opt_idx,self._breadcrumb+" / Options",self._brand,
+                       "UP/DOWN choose  LEFT/RIGHT change","ENTER saves  ESC returns",
+                       palette=style.system_palette(self._vm))
+            self._needs_redraw=False
             return
 
         # 6. Text Input Overlay (for renaming/creating)
         if self._input_active:
+            from picoware.gui import style
+            name=("Rename" if self._input_mode==self.MODE_RENAME else
+                  "Copy as" if self._input_mode==self.MODE_COPY_SAME else "New directory")
+            style.header(draw,self._breadcrumb+" / "+name,self._brand,
+                         style.system_palette(self._vm),top_bar_h)
             box_h = sy(70)
             box_x = sx(10)
             box_y = (sh - box_h) // 2
@@ -739,15 +720,14 @@ class FileBrowser:
             return
 
         # 8. Main Dual-Pane Browser View
-        draw._fill_rectangle(0, 0, sw, top_bar_h, color_sel)
         dm = "Menu" if self._app_state.get("dir_menu", True) else "Open"
 
         mk_len = len(self._app_state["marked"])
         mk_str = f" [Sel:{mk_len}]" if mk_len > 0 else ""
 
-        draw._text(
-            text_pad_x, text_line_y, f"File Browser [Dir:{dm}]{mk_str}", color_fg
-        )
+        from picoware.gui import style
+        style.header(draw,self._breadcrumb+f" [Dir:{dm}]{mk_str}",self._brand,
+                     style.system_palette(self._vm),top_bar_h)
         draw._fill_rectangle(
             mx,
             top_bar_h,

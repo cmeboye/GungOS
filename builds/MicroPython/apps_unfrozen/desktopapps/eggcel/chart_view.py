@@ -39,7 +39,10 @@ class Chart:
     def draw(self):
         d=self.vm.draw;p=system_palette(self.vm);w,h=int(d.size.x),int(d.size.y)
         r=Renderer(d,(0,18,w,h),p.ACCENT)
-        d.fill_screen(p.BG);r.fill(0,18,w,23,p.PANEL);r.text(8,25,'Eggcel / '+('2D pie' if self.spec['kind']=='pie' else '2D column'),p.ACCENT,1)
+        d.fill_screen(p.BG)
+        from engtools.ui import theme
+        theme.header(d,'Eggcel / Plot','PicoDESK',p,height=18)
+        r.fill(0,18,w,23,p.PANEL);r.text(8,25,'Eggcel / '+('2D pie' if self.spec['kind']=='pie' else '2D column'),p.ACCENT,1)
         r.text(8,49,(self.spec['title']+(' | '+self.spec.get('note','') if self.spec['kind']=='pie' and self.spec.get('note') else ''))[:49],p.TEXT,0)
         if self.spec['kind']=='pie':self.pie(r,p,w,h)
         else:self.columns(r,p,w,h)

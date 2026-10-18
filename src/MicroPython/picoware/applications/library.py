@@ -2,8 +2,8 @@
 
 CATEGORIES = ("Apps", "System", "Comms", "Utils")
 APP_ITEMS = ("PicoDESK", "PicoLAB", "Games", "Misc")
-SYSTEM_ITEMS = ("Settings", "About", "System Info", "Bootloader", "Restart", "Shutdown", "Stop")
-COMMS_ITEMS = ("Bluetooth", "Infrared", "USB", "WiFi")
+SYSTEM_ITEMS = ("Settings", "About", "System Info", "Restart", "Shutdown")
+COMMS_ITEMS = ("Bluetooth", "USB", "WiFi")
 UTIL_ITEMS = ("File Manager", "PicoIDE", "Python REPL", "Serial Terminal", "SSH Terminal")
 SCRIPT_ITEMS = ("Python Apps",)
 SECTIONS = (APP_ITEMS, SYSTEM_ITEMS, COMMS_ITEMS, UTIL_ITEMS)
@@ -20,7 +20,6 @@ _ROUTES = {
     "About": ("about", "picoware.applications.system.about"),
     "System Info": ("system_info", "picoware.applications.system.system_info"),
     "Bluetooth": ("bluetooth", "picoware.applications.bluetooth.bluetooth"),
-    "Infrared": ("ir", "picoware.applications.ir"),
     "USB": ("usb", "picoware.applications.usb.usb"),
     "WiFi": ("wifi", "picoware.applications.wifi.wifi"),
     "File Manager": ("file_manager", "picoware.applications.utilities.file_manager"),
@@ -49,9 +48,9 @@ def launch(view_manager, item):
             view_manager.add(View(name,module.run,module.start,module.stop))
         view_manager.switch_to(name)
         return
-    if item in ("Bootloader", "Restart", "Shutdown", "Stop"):
+    if item in ("Restart", "Shutdown"):
         from picoware.applications.system import system
-        system.activate(view_manager, ("Bootloader", "Restart", "Shutdown", "Stop").index(item) + 2,
+        system.activate(view_manager, 3 if item == "Restart" else 4,
                         _library.draw if _library else None)
         return
     route = _ROUTES.get(item)

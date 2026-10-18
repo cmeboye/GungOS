@@ -3,7 +3,8 @@
 This describes the maintained GungOS sources after the v1.1 connectivity
 and service-removal passes. It is not a claim that every inherited tool has been
 validated on physical PicoCalc hardware. See [Connectivity.md](Connectivity.md)
-for the fixes, protocol tests, limits and device test steps.
+for the Wi-Fi/BLE fixes, protocol tests, limits and device test steps.
+The [wired/SSH review](CommsReview.md) covers the remaining modules.
 
 ## Current inventory
 
@@ -16,13 +17,13 @@ for the fixes, protocol tests, limits and device test steps.
 | Bluetooth LE UART | Central connects to a compatible Nordic UART peer; peripheral advertises/waits for a client; bounded UTF-8 chat | Discovery/subscription, packet fragmentation and cleanup fixed; physical interoperability remains |
 | Bluetooth advertising / Beacon page | Simple UART-service advertising demonstrations | This is not an implementation of a standardized iBeacon/Eddystone payload |
 | Bluetooth pairing | Clear unavailable message | Selected Pico 2 W native BTstack build does not expose the needed pairing API; secure pairing/bond persistence is not ready |
-| USB | Keyboard, numpad, media-control keys, payload tools, alongside USB serial/REPL | Present; device enumeration and each app still need physical review |
-| Infrared | Remote files, transmit, learn and pin/settings workflows | Requires suitable IR hardware/pins; needs a separate device review |
-| Serial Terminal | UART input/output with port/baud/pin configuration | Present under Utils; requires an appropriate wired connection and hardware checks |
-| SSH Terminal | User-specified remote host and credentials | Inherited code, not ready to call secure: key exchange parses the server host key/signature without verifying it or maintaining a trusted-host record; needs a separate review |
+| USB | Keyboard, numpad, media-control keys and SD macro playback, alongside native USB serial/REPL | Use the Pico’s own USB connector; key mapping, transfer backpressure and cleanup need work; physical enumeration unverified |
+| Serial Terminal | Line-oriented UART0 text exchange, fixed GP0/GP1 at 115200 baud | No port/baud/pin settings UI. Burst loss, lost local echo, blocking startup and unbounded text confirmed; refactor before relying on it |
+| SSH Terminal | Password-authenticated SSH command execution to a user-specified host | Not an interactive shell; no host-key signature/trust verification. Parser/MAC defects and unbounded/blocking output confirmed; not ready for credentials |
 | HTTP / WebSocket libraries | Generic transports for scripts using caller-supplied URLs | No configured upstream account service; HTTP certificate verification is still disabled and needs its own fix |
 
-Menus: **Comms → WiFi / Bluetooth / USB / Infrared**. Serial Terminal and SSH
+Menus: **Comms → Bluetooth / USB / WiFi**. Infrared and its frozen drivers are
+excluded from this release. Serial Terminal and SSH
 Terminal remain under **Utils**.
 
 ## Removed upstream service integrations
@@ -101,3 +102,7 @@ is included in the simulator's selected `--sim-check` profile.
 The previous v1.0 UF2 has not been altered and still contains its previous frozen
 contents. Replacing SD apps alone cannot remove those contents from the device.
 No firmware has been built/flashed as part of this source-removal pass.
+
+See [ConnectivityRoadmap.md](ConnectivityRoadmap.md) for the deferred GPIO/serial
+configuration tool and usable SSH client. The complete SSH profile now lives in
+internal flash; old SD profile files migrate before being removed.

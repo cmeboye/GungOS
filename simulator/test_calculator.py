@@ -125,7 +125,7 @@ from engtools.calculator.render import Renderer
 vm = ViewManager()
 vm.add(View('parent', lambda vm:None, lambda vm:True, lambda vm:None)); vm.switch_to('parent')
 vm.add(View('lab', lab.run, lab.start, lab.stop)); vm.switch_to('lab')
-lab._selected = len(lab.TOOLS)+4
+lab._enter('tools');lab._selected = 2
 
 def key(button):
     vm.input_manager._last_button = button
@@ -175,6 +175,7 @@ class RecordingDraw:
     def _text(self, x,y,char,color,font): self.calls.append(('text',x,y,char,color))
     def _line(self, x1,y1,x2,y2,color): self.calls.append(('line',x1,y1,x2,y2,color))
     def _fill_rectangle(self,x,y,w,h,color): self.calls.append(('fill',x,y,w,h,color))
+    def _bytearray(self,x,y,w,h,data): self.calls.append(('bitmap',x,y,w,h))
     def fill_screen(self,color): self.calls=[]
     def swap(self): pass
     def text(self): return ''.join(call[3] for call in self.calls if call[0]=='text')

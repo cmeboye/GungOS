@@ -87,7 +87,7 @@ Input.button=property(lambda self:self._last_button)
 vm=ViewManager()
 vm.add(View('parent',lambda vm:None,lambda vm:True,lambda vm:None));vm.switch_to('parent')
 vm.add(View('desk',desk.run,desk.start,desk.stop));vm.switch_to('desk')
-lab._selected=len(lab.TOOLS)+4
+lab._enter('tools');lab._selected=2
 def key(button):
     vm.input_manager._last_button=button;vm.run()
     for _ in range(1000):
@@ -173,7 +173,7 @@ key(vm.input_manager._key_esc)
 key(vm.input_manager._key_esc)
 assert vm.current_view.name=='parent'
 vm.add(View('lab',lab.run,lab.start,lab.stop));vm.switch_to('lab')
-lab._selected=len(lab.TOOLS)+4;key(k.BUTTON_CENTER)
+lab._enter('tools');lab._selected=2;key(k.BUTTON_CENTER)
 assert vm.current_view.name=='eng_calculator'
 key(vm.input_manager._key_esc)
 assert vm.current_view.name=='lab'

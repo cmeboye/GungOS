@@ -184,6 +184,7 @@ _resolution_return = ST_SETTINGS
 _fit_pending = False
 _embedded = False
 _brand = "GRAPH 3D"
+_keyboard = None
 _plot_title = ""
 
 
@@ -684,7 +685,7 @@ def _begin_resolution(view_manager):
     global _state,_resolution_return
     _resolution_return=_state
     _state=ST_RESOLUTION
-    kb=view_manager.keyboard
+    kb=_get_keyboard(view_manager)
     kb.reset(); kb.title='Resolution N (4..64)'; kb.response=str(_grid_n)
     view_manager.input_manager.reset(); kb.run(force=True)
 
@@ -914,6 +915,14 @@ def _layout(draw):
     short = min(_px1 - _px0, _py1 - _py0)
     _focal = short * 0.78
     _cam = max(7.6 + _range * 0.22, _range * 2.4)
+
+
+def _get_keyboard(vm):
+    global _keyboard
+    if _keyboard is None:
+        from engtools.ui.keyboard import create
+        _keyboard=create(vm,() if _embedded else ('tools','Graph3D'))
+    return _keyboard
 
 
 def _paint_chrome(draw, subtitle, footer1, footer2):
@@ -1236,7 +1245,7 @@ def _make_help(view_manager):
 
 
 def _begin_input(view_manager, second=False):
-    kb = view_manager.keyboard
+    kb = _get_keyboard(view_manager)
     view_manager.input_manager.reset()
     kb.reset()
     if second:
@@ -1473,7 +1482,7 @@ def run(view_manager) -> None:
         return
 
     elif _state == ST_RESOLUTION:
-        kb=view_manager.keyboard
+        kb=_get_keyboard(view_manager)
         if button==BUTTON_ESCAPE or not kb.run():
             inp.reset(); kb.reset()
             _state=_resolution_return; _dirty=True
@@ -1655,7 +1664,7 @@ def run(view_manager) -> None:
             _help_box.scroll_down()
 
     elif _state == ST_INPUT:
-        kb = view_manager.keyboard
+        kb = _get_keyboard(view_manager)
         if button == BUTTON_ESCAPE:
             inp.reset()
             kb.reset()
@@ -1683,7 +1692,7 @@ def run(view_manager) -> None:
                 _make_menu(view_manager)
 
     elif _state == ST_INPUT2:
-        kb = view_manager.keyboard
+        kb = _get_keyboard(view_manager)
         if button == BUTTON_ESCAPE:
             inp.reset()
             kb.reset()
@@ -1890,7 +1899,7 @@ def stop(view_manager) -> None:
     global _menu, _preset_menu, _help_box, _zs
     global _state, _auto, _dirty
 
-    global _saved_menu, _zs2, _sampling, _fit_pending
+    global _saved_menu, _zs2, _sampling, _fit_pending, _keyboard
     if _menu:
         del _menu
         _menu = None
@@ -1912,10 +1921,7 @@ def stop(view_manager) -> None:
     _auto = False
     _dirty = True
     _state = ST_MENU
-    try:
-        view_manager.keyboard.reset()
-    except Exception:
-        pass
+    _keyboard = None
     collect()
 
 def _release_mesh():

@@ -1,8 +1,8 @@
 """Decorators for feature availability checks on the PicoCalc with a Pico 2 W.
 
-Audio, PSRAM, SD, Bluetooth, the keyboard, Wi-Fi and the GP28 infrared
-transmitter are always present, so their decorators return the function
-unchanged. There is no infrared receiver.
+Audio, PSRAM, SD, Bluetooth, the keyboard and Wi-Fi are built in.
+Infrared is excluded from this release; its legacy decorators report it as
+unavailable for compatibility with SD applications.
 """
 
 import sys
@@ -29,12 +29,16 @@ audio_required = _available
 psram_required = _available
 storage_required = _available
 bluetooth_required = _available
-infrared_tx_required = _available
 keyboard_required = _available
 
 
+def infrared_tx_required(func: callable) -> callable:
+    """Reject legacy IR applications: no infrared driver is shipped."""
+    return _unavailable(func, "infrared support (excluded from this release)")
+
+
 def infrared_rx_required(func: callable) -> callable:
-    """Decorator for functions that need an infrared receiver (absent on PicoCalc)."""
+    """Reject legacy IR applications: no infrared driver is shipped."""
     return _unavailable(func, "infrared reception")
 
 

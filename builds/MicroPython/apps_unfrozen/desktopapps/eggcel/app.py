@@ -6,7 +6,7 @@ from .formulas import ROWS, COLS, MAX_TEXT, CellError, address, reference
 from .model import Sheet, DIRECTORY, MAX_CELLS, format_value, safe_name, write_verified, read_sheet, demo
 
 _active = None
-FILE_ITEMS = ('New sheet','Open workbook','Save','Save as','Import CSV','Export CSV','Load example')
+FILE_ITEMS = ('New sheet','Open workbook','Save','Save as','Open CSV','Export CSV','Load example')
 ACTIONS = ('Fill selection','Fill down','Fill right','Convert to values','Undo last edit',
            'Copy selection','Paste','Clear selection','Format: General','Format: 2 decimals',
            'Format: Scientific','Recalculate','Plot selection')
@@ -34,6 +34,8 @@ class Spreadsheet:
         self.filename,self.message,self.error='','',''
         self.clipboard=None
         self.files=[]
+        self.browser=None
+        self.csv_directory='/picoware'
         self.pending,self.after_save,self.overwrite=None,None,None
         self.purpose='';self.replace_on_type=False
         self.plot_options=None
@@ -53,6 +55,7 @@ class Spreadsheet:
     def stop(self,vm):
         global _active
         self.cancel_job()
+        self.browser=None
         if self._keep_on_stop:
             self._keep_on_stop,self.suspended=False,True
             return
@@ -92,7 +95,7 @@ class Spreadsheet:
                     'Calculation stack limit; workbook retained' if isinstance(exc,RuntimeError) and 'recursion' in str(exc) else str(exc)) or 'Operation failed; workbook retained'
 
     def safe_draw(self):
-        if self.vm is None or self.suspended:return
+        if self.vm is None or self.suspended or self.browser is not None:return
         try:
             if self._safe_mode:self.draw_fallback()
             else:self.draw()
@@ -101,7 +104,10 @@ class Spreadsheet:
 
     def draw_fallback(self):
         d=self.vm.draw;fg,bg=self.vm.foreground_color,self.vm.background_color
-        d.fill_screen(bg);d._text(8,25,'Eggcel / workbook retained',fg,1)
+        d.fill_screen(bg)
+        from engtools.ui import theme
+        theme.header(d,'Eggcel / Recovery','PicoDESK',theme.system_palette(self.vm),height=18)
+        d._text(8,25,'Eggcel / workbook retained',fg,1)
         d._text(8,57,address(*self.position)+'  '+self.sheet.cells.get(self.position,'')[:35],fg,0)
         d._text(8,85,'F1 File   F2 Recovery   ESC dismiss',fg,0)
         if self.message:d._text(8,98,self.message[:49],fg,0)
@@ -232,11 +238,41 @@ class Spreadsheet:
             self.filename,self.anchor,self.page='',None,'grid'
             self.plot_options=None;self.calc_paused=False;self._safe_mode=False;self.error=''
             self.message='Example loaded' if action=='demo' else 'New sheet'
-        elif action in ('open','import'):
-            extension='.csv' if action=='import' else '.egg'
+        elif action=='import':
+            from picoware.gui.file_browser import FileBrowser, FILE_BROWSER_SELECTOR
+            self.browser=FileBrowser(self.vm,FILE_BROWSER_SELECTOR,self.csv_directory,['csv'])
+            self.browser._brand='PicoDESK'
+            self.browser._breadcrumb='Eggcel / Import CSV'
+            self.page='csv_browser'
+            # Render on the next tick: vm.button still contains the Enter
+            # that opened the selector, even after input.reset().
+            self.vm.input_manager.reset()
+        elif action=='open':
+            extension='.egg'
             self.files=sorted(name for name in self.vm.storage.listdir(DIRECTORY)
                               if name.lower().endswith(extension))
             self.purpose,self.page,self.selected=action,'files',0
+
+    def load_file(self,path,imported=False):
+        # Validate the entire file before replacing the current workbook.
+        result=read_sheet(self.vm.storage,path,imported)
+        self.sheet=result
+        self.filename='' if imported else path
+        self.row=self.col=self.top=self.left=0
+        self.anchor,self.page=None,'grid'
+        self.message=('Imported ' if imported else 'Opened ')+path.rsplit('/',1)[-1]
+        self.plot_options=None;self._plot_selection=None
+        self.calc_paused=False;self._safe_mode=False;self.error=''
+
+    def run_csv_browser(self):
+        browser=self.browser
+        if browser.run():return
+        path,selected=browser.path,browser.mode==browser.MODE_SELECT
+        self.csv_directory=browser.directory
+        self.browser=None;self.page='grid'
+        if selected:
+            if not path.lower().endswith('.csv'):raise ValueError('Select a CSV file')
+            self.load_file(path,True)
 
     def prompt(self,purpose,text=''):
         self.purpose,self.page=purpose,'dialog';self.replace_on_type=True
@@ -380,14 +416,7 @@ class Spreadsheet:
             else: self.open_plot()
         elif self.page=='files' and self.files:
             name=self.files[index]
-            imported=self.purpose=='import'
-            result=read_sheet(self.vm.storage,DIRECTORY+'/'+name,imported)
-            self.sheet=result
-            self.filename='' if imported else DIRECTORY+'/'+name
-            self.row=self.col=self.top=self.left=0
-            self.anchor,self.page,self.message=None,'grid',('Imported ' if imported else 'Opened ')+name
-            self.plot_options=None;self._plot_selection=None
-            self.calc_paused=False;self._safe_mode=False;self.error=''
+            self.load_file(DIRECTORY+'/'+name)
         elif self.page=='confirm':
             action=self.pending
             if index==0:
@@ -401,6 +430,9 @@ class Spreadsheet:
     def run(self,vm):
         button=vm.button
         try:
+            if self.browser is not None:
+                self.run_csv_browser()
+                self.safe_draw();return
             if self.job is not None:
                 if button==vm.input_manager._key_esc:
                     self.cancel_job();self.calc_paused=True;self.message='Cancelled; original cells retained'
@@ -457,7 +489,9 @@ class Spreadsheet:
             else:
                 char=vm.input_manager.button_to_char(button)
                 if char and char not in ('\n','\r','\t'):self.begin(char)
-        except Exception as exc:self.report_error(exc)
+        except Exception as exc:
+            if self.page=='csv_browser':self.browser=None;self.page='grid'
+            self.report_error(exc)
         if self.vm is not None and not self.suspended:self.safe_draw()
 
     def menu_items(self):
@@ -497,6 +531,9 @@ class Spreadsheet:
         brightness=((accent>>11)&31)*299/31+((accent>>5)&63)*587/63+(accent&31)*114/31
         contrast=0 if brightness>540 else 0xFFFF
         d.fill_screen(bg)
+        from engtools.ui import theme
+        path='Eggcel'+(' / '+self.page.replace('_',' ').upper() if self.page!='grid' else '')
+        theme.header(d,path,'PicoDESK',theme.system_palette(vm),height=18)
         r=self.renderer()
         r.fill(0,18,width,23,panel)
         r.fill(6,23,13,13,accent)

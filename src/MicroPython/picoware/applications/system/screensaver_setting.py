@@ -18,7 +18,7 @@ def start(vm):
 def draw(vm):
     from picoware.gui import style
     rows=[(name,'') for name in _items]
-    style.menu(vm.draw,rows,_selected,'Screensaver / widget','Settings',
+    style.menu(vm.draw,rows,_selected,'Settings / Screensaver / widget','GungOS',
                'UP/DOWN choose  ENTER saves',_error or 'ESC returns',palette=style.system_palette(vm))
 
 

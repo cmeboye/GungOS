@@ -2,18 +2,13 @@
 
 from micropython import const
 
-# states (indices into __config())
-STATE_DEBUG = const(0)  # toggle (enable/disable)
-STATE_ONSCREEN_KEYBOARD = const(1)  # toggle (show/hide)
-STATE_SCREEN_BRIGHTNESS = const(2)  # choice (10 - 100)
-STATE_FAST_DRAWING = const(3)  # toggle: screen image in SRAM (faster, uses 100 KB RAM)
-STATE_THEME_COLOR = const(4)  # choice (select from predefined colors)
-STATE_TIME = const(5)  # menu with date (date picker), GMT offset (keyboard)
+# Brightness is the only choice mode; drawing/keyboard preferences remain
+# supported by Settings and ViewManager without exposing their old toggles.
+STATE_SCREEN_BRIGHTNESS = const(0)
 
 # modes
 _MODE_THEME = const(19)
 _MODE_MENU = const(0)
-_MODE_TOGGLE = const(1)
 _MODE_CHOICE = const(2)
 _MODE_TIME_MENU = const(3)
 _MODE_DATE_PICKER = const(4)
@@ -22,7 +17,6 @@ _MODE_GMT_KEYBOARD = const(5)
 
 _settings = None
 _menu = None
-_toggle = None
 _choice = None
 _theme_picker = None
 _time_menu = None
@@ -31,7 +25,6 @@ _view_manager = None
 _mode = _MODE_MENU
 _current_setting = 0
 _gmt_save_requested = False
-_menu_setting_indices = []
 _resume_menu_label = None
 
 
@@ -43,64 +36,10 @@ def __config() -> tuple:
     """
     # (menu label, json key, default value)
     return (
-        ("Debug", "debug", False),
-        ("Onscreen Keyboard", "onscreen_keyboard", True),
         ("Screen Brightness", "screen_brightness", 100),
-        ("Fast Drawing", "fast_drawing", False),
         ("Theme Color", "theme_color", None),
         ("Time", "time", None),
     )
-
-
-def __apply_toggle_setting(index: int, state: bool) -> None:
-    """Apply a toggle setting change to the view manager.
-
-    Args:
-        index (int): The setting index to apply.
-        state (bool): The new toggle state.
-    """
-    if index == STATE_ONSCREEN_KEYBOARD:
-        _view_manager.keyboard.show_keyboard = state
-    elif index == STATE_FAST_DRAWING:
-        if not _view_manager.set_fast_drawing(state):
-            _view_manager.alert("Saved. Not enough free memory now;\nFast Drawing applies after a restart.")
-            _toggle.draw()
-
-
-def __open_toggle(setting_index: int) -> None:
-    """Open a Toggle sub-view for the given setting index.
-
-    Args:
-        setting_index (int): The setting index to toggle.
-    """
-    global _toggle, _mode, _current_setting
-    from picoware.gui.toggle import Toggle
-    from picoware.system.vector import Vector
-
-    _current_setting = setting_index
-    cfg = __config()[setting_index]
-    current_state = _settings._settings[cfg[1]]
-
-    draw = _view_manager.draw
-    draw.erase()
-    if _toggle is not None:
-        del _toggle
-        _toggle = None
-
-    _toggle = Toggle(
-        draw,
-        Vector(10, 10),
-        Vector(draw.size.x - 20, int(draw.size.y // 10.67)),
-        cfg[0],
-        current_state,
-        _view_manager.foreground_color,
-        _view_manager.background_color,
-        _view_manager.selected_color,
-        _view_manager.foreground_color,
-        2,
-    )
-    _toggle.draw()
-    _mode = _MODE_TOGGLE
 
 
 def __open_theme_picker() -> None:
@@ -224,11 +163,8 @@ def __gmt_save_callback(result: str) -> None:
 
 def __back_to_menu() -> None:
     """Clean up any sub-view and return to the main menu."""
-    global _toggle, _choice, _theme_picker, _time_menu, _date_picker, _mode
+    global _choice, _theme_picker, _time_menu, _date_picker, _mode
 
-    if _toggle is not None:
-        del _toggle
-        _toggle = None
     if _choice is not None:
         del _choice
         _choice = None
@@ -277,7 +213,7 @@ def start(view_manager) -> bool:
     from picoware.system.settings import Settings
 
     global _theme_picker, _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _gmt_save_requested
-    global _menu_setting_indices, _resume_menu_label
+    global _resume_menu_label
     _view_manager = view_manager
     _mode = _MODE_MENU
     _gmt_save_requested = False
@@ -312,13 +248,10 @@ def start(view_manager) -> bool:
         2,
     )
 
-    _menu_setting_indices = []
-    for index, cfg in enumerate(__config()):
+    for cfg in __config():
         _menu.add_item(cfg[0])
-        _menu_setting_indices.append(index)
 
     _menu.add_item('Screensaver')
-    _menu_setting_indices.append(-2)
 
     if _resume_menu_label is not None:
         for index in range(_menu.item_count):
@@ -372,8 +305,6 @@ def run(view_manager) -> None:
                 __open_time_menu()
             elif selected == "Screen Brightness":
                 __open_choice_brightness()
-            else:
-                __open_toggle(_menu_setting_indices[_menu.selected_index])
 
     elif _mode == _MODE_THEME:
         result = _theme_picker.handle(button)
@@ -436,19 +367,6 @@ def run(view_manager) -> None:
             view_manager.keyboard.reset()
             __back_to_time_menu()
 
-    elif _mode == _MODE_TOGGLE:
-        if button == BUTTON_ESCAPE:
-            __back_to_menu()
-        elif button == BUTTON_CENTER:
-            new_state = not _toggle.state
-            _toggle.state = new_state
-            cfg = __config()[_current_setting]
-            if not _settings.update({cfg[1]: new_state}):
-                _toggle.state = not new_state
-                view_manager.alert("Could not save setting.\nCheck the SD card.")
-                return
-            __apply_toggle_setting(_current_setting, new_state)
-
     elif _mode == _MODE_CHOICE:
         if button == BUTTON_ESCAPE:
             __back_to_menu()
@@ -475,7 +393,7 @@ def stop(view_manager) -> None:
     """
     from gc import collect
 
-    global _settings, _menu, _toggle, _choice, _theme_picker, _time_menu, _date_picker
+    global _settings, _menu, _choice, _theme_picker, _time_menu, _date_picker
 
     _theme_picker = None
     if _settings is not None:
@@ -484,9 +402,6 @@ def stop(view_manager) -> None:
     if _choice is not None:
         del _choice
         _choice = None
-    if _toggle is not None:
-        del _toggle
-        _toggle = None
     if _date_picker is not None:
         del _date_picker
         _date_picker = None

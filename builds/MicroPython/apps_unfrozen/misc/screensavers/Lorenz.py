@@ -175,8 +175,8 @@ def _draw_settings(vm):
     accent, text, bg = vm.selected_color, vm.foreground_color, vm.background_color
     ink, muted = _foreground(accent), 0xAD55
     draw.fill_screen(bg)
-    draw._fill_rectangle(0, 0, width, 18, accent)
-    draw._text(5, 5, 'LORENZ / SETTINGS', ink, 0)
+    from engtools.ui import theme
+    theme.header(draw,'Lorenz / Settings',palette=theme.system_palette(vm),height=18)
     detail = next(label for label, stride in DETAILS if stride == _draft['detail'])
     fps = str(_draft['fps']) + (' (cap 8)' if _widget and _draft['fps'] > 8 else '')
     rows = (('Detail', detail + ' /' + str(_draft['detail'])),

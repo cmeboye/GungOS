@@ -72,12 +72,10 @@ class SplitMenu:
         available = max(1, (bottom - top - font.height - pad * 3) // line_height)
         row_y = top + font.height + pad * 2
         draw.erase()
-        draw._fill_rectangle(0, 0, width, header, bg)
-        draw._fill_rectangle(0, 0, width, 2, accent)
-        from picoware.assets.logos import LOGOS, paint
-        logo_width, logo_height = LOGOS['gungOS_small'][:2]
-        paint(draw, 'gungOS_small', pad, 2+(header-2-logo_height)//2, bg, accent)
-        draw._text(pad+logo_width+8, (header - draw.font_size.y) // 2, "Menu", fg)
+        from picoware.gui import style
+        path="Menu / "+self.categories[self.category]
+        if self.nested_items is not None:path+=" / "+self.nested_title
+        style.header(draw,path,palette=style.system_palette(vm),height=header)
         draw._rectangle(pad, top, split - pad * 2, bottom - top, accent)
         draw._rectangle(split, top, width - split - pad, bottom - top, accent)
         title = self.categories[self.category]

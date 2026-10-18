@@ -63,31 +63,26 @@ assert vm.set_fast_drawing(False) and draw.mode == SRAM, 'The running app keeps 
 vm.back()
 assert draw.mode == PSRAM
 
-# Settings > Fast Drawing saves the preference and applies it at once.
+# The menu no longer offers Fast Drawing; existing SD preferences and per-app
+# borrowing must still work (including a failed SRAM allocation).
 from picoware.applications import settings as app
 vm.add(View('settings', app.run, app.start, app.stop))
 vm.switch_to('settings')
 labels = [app._menu.get_item(i) for i in range(app._menu.item_count)]
-assert labels.index('Fast Drawing') == labels.index('Screen Brightness') + 1
-app.__open_toggle(app.STATE_FAST_DRAWING)
-vm._button = k.BUTTON_CENTER
-app.run(vm)
-assert Settings(vm.storage).fast_drawing and vm.fast_drawing and draw.mode == SRAM
-vm._button = k.BUTTON_CENTER
-app.run(vm)
-assert not Settings(vm.storage).fast_drawing and draw.mode == PSRAM
+assert 'Fast Drawing' not in labels
+assert Settings(vm.storage).update({'fast_drawing': True})
+assert vm.set_fast_drawing(True) and draw.mode == SRAM
+assert Settings(vm.storage).update({'fast_drawing': False})
+assert vm.set_fast_drawing(False) and draw.mode == PSRAM
 
-# Without a free 100 KB block the preference is kept for the next start.
 draw.set_mode = lambda mode: None
-alerts[:] = []
-vm._button = k.BUTTON_CENTER
-app.run(vm)
+assert Settings(vm.storage).update({'fast_drawing': True})
+assert not vm.set_fast_drawing(True)
 assert Settings(vm.storage).fast_drawing and draw.mode == PSRAM
-assert alerts and 'after a restart' in alerts[-1]
 del draw.set_mode
 vm.back()
 
 # A new start applies the saved preference.
 vm2 = ViewManager()
 assert vm2.fast_drawing and vm2.draw.mode == SRAM
-print('PASS: PSRAM screen by default; Fast Drawing setting and per-app SRAM borrowing, also after crashes')
+print('PASS: PSRAM screen by default; saved Fast Drawing preference and per-app SRAM borrowing, also after crashes')

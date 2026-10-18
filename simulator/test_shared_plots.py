@@ -46,7 +46,7 @@ def finish():
    if plot3d._state==plot3d.ST_PLOT and not plot3d._dirty:return captured[0]
  raise AssertionError('Plot did not finish')
 vm.draw.screenshot('/private/tmp/shared-lab-menu.bmp')
-lab._selected=2
+lab._enter('checks');lab._selected=1
 key(BUTTON_CENTER);assert lab._page=='gallery'
 vm.draw.screenshot('/private/tmp/shared-gallery-menu.bmp')
 count=vm._view_count

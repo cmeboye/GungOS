@@ -138,9 +138,9 @@ class ThemePicker:
         bg, text, muted = 0, 0xFFFF, 0xAD55
         colour, ink = self.colour, foreground(self.colour)
         draw.fill_screen(bg)
-        draw._fill_rectangle(0, 0, 320, 24, colour)
-        draw._text(8, 6, 'Custom colour' if self.editing else 'Theme colour', ink, FONT_SMALL)
-        draw._text(253, 8, 'PREVIEW', ink, FONT_XTRA_SMALL)
+        from picoware.gui import style
+        label='Settings / Theme colour'+(' / Custom' if self.editing else '')
+        style.header(draw,label,palette=style.colors(bg,text,colour),height=24)
         if self.editing:
             draw._text(16, 43, 'Enter RGB hex: #RRGGBB', text, FONT_SMALL)
             draw._fill_rectangle(16, 70, 288, 44, 0x18C3)

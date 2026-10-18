@@ -67,18 +67,19 @@ class KeyboardStub:
  def __init__(self): self.response='';self.title='';self.is_finished=False
  def reset(self): self.response='';self.is_finished=False
  def run(self,force=False): return True
-old_keyboard=vm._keyboard
-vm._keyboard=KeyboardStub()
+# Graph3D owns a scoped keyboard to retain its PicoLAB breadcrumb.
+old_keyboard=g._keyboard
+g._keyboard=KeyboardStub()
 g._grid_n=12;g._state=g.ST_SETTINGS;g._set_row=1
 key(BUTTON_CENTER);assert g._state==g.ST_RESOLUTION
-vm._keyboard.response='12.5';vm._keyboard.is_finished=True
+g._keyboard.response='12.5';g._keyboard.is_finished=True
 key(BUTTON_NONE);assert g._state==g.ST_RESOLUTION and g._grid_n==12
-vm._keyboard.response='25';vm._keyboard.is_finished=True
+g._keyboard.response='25';g._keyboard.is_finished=True
 key(BUTTON_NONE);assert g._state==g.ST_RES_WARNING and g._grid_n==12
 key(BUTTON_ESCAPE);assert g._state==g.ST_SETTINGS and g._grid_n==12
-key(BUTTON_CENTER);vm._keyboard.response='15';vm._keyboard.is_finished=True
+key(BUTTON_CENTER);g._keyboard.response='15';g._keyboard.is_finished=True
 key(BUTTON_NONE);assert g._state==g.ST_SETTINGS and g._grid_n==15
-vm._keyboard=old_keyboard
+g._keyboard=old_keyboard
 # Warning leaves the old resolution untouched until confirmed.
 g._grid_n=12;g._resolution_return=g.ST_SETTINGS;g._pending_resolution=25;g._state=g.ST_RES_WARNING
 g._draw_resolution_warning(vm.draw)

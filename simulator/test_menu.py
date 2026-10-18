@@ -44,10 +44,10 @@ vm.draw.screenshot('/private/tmp/picoware-menu-apps.bmp')
 key(BUTTON_DOWN)
 assert library._library.category==1 and library._library.current_item=='Settings'
 key(BUTTON_DOWN)
-assert library._library.items==('Bluetooth','Infrared','USB','WiFi')
+assert library._library.items==('Bluetooth','USB','WiFi')
 vm.draw.screenshot('/private/tmp/picoware-menu-comms.bmp')
 key(BUTTON_RIGHT)
-for i in range(3): key(BUTTON_DOWN)
+for i in range(2): key(BUTTON_DOWN)
 key(BUTTON_CENTER)
 assert vm.current_view.name=='wifi'
 vm.back()

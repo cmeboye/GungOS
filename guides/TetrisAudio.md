@@ -7,7 +7,8 @@ folder and the generated WAV files are ignored by Git. Existing local game/SD
 sound files remain available for personal use.
 
 Tetris handles missing audio by muting playback and keeping the game usable.
-F3 toggles/retries sound; F4 changes volume. Public clean SD builds disable
+F3 toggles/retries music; F4 toggles/retries effects. F2 opens Settings for
+independent music/FX switches and volume. See [Tetris.md](Tetris.md). Public clean SD builds disable
 sound by default when no recordings are included.
 
 ## Prepare your own recordings
@@ -39,8 +40,10 @@ omits those recordings, even if local copies exist.
 ## Playback and tests
 
 The `engtools.system.pcm` player streams fixed-size blocks, validates every WAV
-at startup and caches the effect readers. It mixes one music stream and up to
-two effects through the native `picoware_pcm` backend. Missing/bad files mute sound
+when their channel is enabled and caches the effect readers. It mixes one music stream and up to
+two effects through the native `picoware_pcm` backend. Music-only playback
+does not open effect files; effects-only playback does not open the music file.
+Disabled channels do not advance, and no output is queued while paused. Missing/bad files mute sound
 and show a short error while the game remains usable.
 
 `simulator/test_tetris_audio.py` generates synthetic waveforms, so testing does

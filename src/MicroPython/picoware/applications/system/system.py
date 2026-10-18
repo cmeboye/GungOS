@@ -2,6 +2,8 @@
 
 _system = None
 _system_index = 0
+# Preserve the existing action IDs while removing rows from the visible menu.
+_MENU_ACTIONS = (0, 1, 3, 4)
 
 
 def start(view_manager) -> bool:
@@ -30,12 +32,12 @@ def start(view_manager) -> bool:
         )
         _system.add_item("About")
         _system.add_item("System Info")
-        _system.add_item("Bootloader")
         _system.add_item("Restart")
         _system.add_item("Shutdown")
-        _system.add_item("Stop")
 
-        _system.set_selected(_system_index)
+        _system.set_selected(
+            _MENU_ACTIONS.index(_system_index) if _system_index in _MENU_ACTIONS else 0
+        )
 
         _system.draw()
     return True
@@ -72,7 +74,7 @@ def run(view_manager) -> None:
         view_manager.back()
         _system_index = 0
     elif button == BUTTON_CENTER:
-        activate(view_manager, _system.selected_index)
+        activate(view_manager, _MENU_ACTIONS[_system.selected_index])
 
 
 def activate(view_manager, index, redraw=None):

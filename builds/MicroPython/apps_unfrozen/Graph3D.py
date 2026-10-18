@@ -25,3 +25,5 @@ def stop(view_manager):
     if _engine is not None:
         _engine.stop(view_manager)
     _engine = None
+    from engtools.ui import breadcrumbs
+    breadcrumbs.unbind(view_manager)

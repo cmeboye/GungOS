@@ -310,6 +310,7 @@ def validate_spec(spec):
 class GraphApp:
     def __init__(self, vm, spec=None, persistent=True, embedded=False):
         self.vm = vm
+        self._keyboard = None
         self.palette=theme.system_palette(vm)
         self.data_only=bool(spec and spec.get('data_only'))
         self.note=str(spec.get('note','')) if spec else ''
@@ -372,6 +373,12 @@ class GraphApp:
     def text(self, x, y, text, color=None):
         if color is None: color=self.palette.TEXT
         self.draw._text(int(x), int(y), str(text), color, FONT_SMALL)
+
+    def keyboard(self):
+        if self._keyboard is None:
+            from engtools.ui.keyboard import create
+            self._keyboard=create(self.vm,('tools','Graph'))
+        return self._keyboard
 
     def chrome(self, subtitle, hint1, hint2):
         theme.chrome(self.draw,subtitle,hint1,hint2,self.brand,self.palette)
@@ -797,7 +804,7 @@ class GraphApp:
         self.edit_target=target
         if self.state != "input": self.return_state=self.state
         self.state='input'
-        kb=self.vm.keyboard
+        kb=self.keyboard()
         kb.reset(); kb.title=title; kb.response=initial
         self.vm.input_manager.reset()
         kb.run(force=True)
@@ -946,7 +953,7 @@ class GraphApp:
         button=self.vm.button
         if self.data_only and button==inp._key_esc: button=BUTTON_ESCAPE
         if self.state=='input':
-            kb=self.vm.keyboard
+            kb=self.keyboard()
             if button==BUTTON_ESCAPE:
                 inp.reset(); kb.reset(); self.set_state(self.return_state)
             elif not kb.run():
@@ -1052,7 +1059,7 @@ class _PlotView:
             self.app.job = None
             self.app.items = []
         self.app,self.spec = None,None
-        if vm.keyboard is not None: vm.keyboard.reset()
+
         from gc import collect
         collect()
 

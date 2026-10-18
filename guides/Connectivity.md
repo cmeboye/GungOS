@@ -53,7 +53,10 @@ on the shipped Pico firmware.
   that older releases wrote to the SD card move to flash the first time they
   are read and are then removed from the card. They stay with the device:
   moving the SD card to another PicoCalc means entering them again. Anyone
-  holding the device can still read them over the USB REPL.
+  holding the device can still read them over the USB REPL. The full SSH
+  profile (host, port, username and password) now stays in internal flash too;
+  its old SD files are removed only after successful migration. Flash storage
+  is not encryption. See [ConnectivityRoadmap.md](ConnectivityRoadmap.md).
 - Web-server settings/pages live in `picoware/wifi/server/server_info.json`.
 - On a future supported pairing backend, actual key material lives in
   `picoware/bluetooth/bonds.json`; `paired_devices.json` holds names and key

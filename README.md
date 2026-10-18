@@ -63,9 +63,9 @@ headless checks use `--headless --network offline --audio silent`.
 Escape returns/cancels. Back and Del erase before the cursor. F6–F10 use
 Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot from any screen. Menus and app chrome follow the system accent.
 
-[Desktop](guides/Desktop.md) · [Themes](guides/Themes.md) · [Lorenz](guides/Lorenz.md) · [Eggcel](guides/Eggcel.md) ·
-[Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
-[Graph3D](guides/Graph3D.md) · [Audio](guides/TetrisAudio.md) ·
+[Desktop](guides/Desktop.md) · [Menu headers](guides/MenuHeaders.md) · [Themes](guides/Themes.md) · [Lorenz](guides/Lorenz.md) · [Eggcel](guides/Eggcel.md) ·
+[PicoLAB](guides/PicoLAB.md) · [Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
+[Graph3D](guides/Graph3D.md) · [Tetris](guides/Tetris.md) · [Audio](guides/TetrisAudio.md) ·
 [Connectivity review](guides/Connectivity.md) · [Comms and service independence](guides/Comms.md)
 
 ## License and media

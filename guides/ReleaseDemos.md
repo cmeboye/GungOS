@@ -26,8 +26,9 @@ or a measured physical signal.
 
 Open **Apps → Games → Tetris**, or launch the simulator with `--game Tetris`.
 The rewritten game uses seven-bag selection, SRS wall kicks, a ghost piece,
-three next-piece previews, hold, increasing gravity and a bounded 500 ms lock
-delay. Best score is kept only in the current app session.
+Modern (three previews/hold) or Classic (one preview/no hold), increasing gravity and a bounded 500 ms lock
+delay. Best scores persist in internal flash separately for Classic and Modern;
+pause or leave the game to save an unfinished run.
 
 | Key | Action |
 |---|---|
@@ -35,14 +36,18 @@ delay. Best score is kept only in the current app session.
 | Up / Z | Rotate clockwise / counterclockwise |
 | Down | Soft drop |
 | Enter / Space | Hard drop; Enter restarts after game over |
-| C | Hold; once per placed piece |
+| C | Hold in Modern mode; once per placed piece |
 | P | Pause / resume |
-| F5 | New game while paused or after game over |
-| F3 | Mute / unmute |
-| F4 | Cycle volume through 0 / 25 / 50 / 75 / 100% |
-| Back / Escape | Exit |
+| F5 | New game; asks for confirmation during play |
+| F2 | Settings |
+| F9 | Scrollable help and all key bindings |
+| F3 | Toggle music |
+| F4 | Toggle sound effects; volume lives in Settings |
+| Escape | Exit the game; return from menus |
 
-Sound changes are saved explicitly through the verified settings pipeline.
+Mode, sound and block-style changes use the verified settings pipeline.
+The left panel counts newly spawned pieces; block colours follow the level.
+See [Tetris.md](Tetris.md) for rules, assets and settings.
 The supplied music and effects use streamed mono 22,050 Hz, 16-bit PCM WAVs.
 The music skips the recording's quiet tail and loops; effects mix over it, with
 music ducking for line clears and other important cues. Pause/mute stop advancing

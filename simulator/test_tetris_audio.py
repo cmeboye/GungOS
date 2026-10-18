@@ -122,6 +122,33 @@ sound.configure(True,25);sound.play('game_over')
 assert not sound.music_active
 sound.stop();assert sound.player is None and sound.music is None and not sound.buffers
 assert not sound.assets and all(reader.closed for reader in readers)
+# Separate channels: disabled categories need no files/readers and never advance.
+music_only=Playback(True,25,vm.storage,music_enabled=True,effects_enabled=False)
+music_only.restart()
+assert music_only.player and music_only.music and not music_only.assets
+position=music_only.music.position
+music_only.play('clear')
+assert not any(music_only.voices) and not music_only.pending
+music_only.play('game_over')
+assert not music_only.music_active and music_only.player.queued()==0
+music_only.stop()
+fx_only=Playback(True,25,vm.storage,music_enabled=False,effects_enabled=True)
+fx_only.restart()
+assert fx_only.music is None and fx_only.player is None
+fx_only.play('clear');fx_only.tick()
+assert fx_only.player and fx_only.music is None and fx_only.assets and not fx_only.error
+fx_only.configure(True,25,music_enabled=True,effects_enabled=False)
+assert fx_only.music and fx_only.music_enabled and not fx_only.effects_enabled
+fx_only.restart()
+position=fx_only.music.position
+fx_only.configure(True,25,music_enabled=False,effects_enabled=True)
+position=fx_only.music.position
+fx_only.play('move');fx_only.player.clear();fx_only.tick()
+assert fx_only.music.position==position and not fx_only.error
+fx_only.configure(False,25,music_enabled=False,effects_enabled=False)
+assert not fx_only.enabled and not any(fx_only.voices) and not fx_only.pending
+fx_only.stop()
+print('PASS: music-only, FX-only, live channel changes, silent game-over and disabled-channel resource isolation')
 missing=Playback(True,25,vm.storage)
 original_path=missing.path
 missing.path=lambda name:'/private/tmp/gungos-audio-does-not-exist.wav'

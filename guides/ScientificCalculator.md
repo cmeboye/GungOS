@@ -1,6 +1,6 @@
 # PicoLAB scientific calculator preview
 
-Open **PicoLAB → Scientific Calculator**. The preview follows `test.png`:
+Open **PicoLAB → Tools → Scientific calculator**. The preview follows `test.png`:
 18 pixels reserved for system indicators, calculator status, a separate answer
 box and history above the `>>` prompt. Shortcut bars and editing explanations
 start hidden; **F9** toggles them throughout the calculator, including its

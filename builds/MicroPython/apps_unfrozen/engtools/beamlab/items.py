@@ -143,7 +143,7 @@ def title(model, ref):
         if obj['w2'] != obj['w1']:
             text += ' to ' + units.number(units.from_si(obj['w2'], 'kN/m'))
     if obj['kind'] != 'moment' and obj.get('dir', 'down') != 'down':
-        text += ' ' + obj['dir']
+        text += (' @ ' + units.number(bm.load_angle(model, obj)) + ' deg') if obj['dir'] == 'angle' else ' ' + obj['dir']
     if len(model['cases']) > 1:
         text += '  ' + case_name(model, obj['case'])
     return text
@@ -183,6 +183,8 @@ def fields(model, ref):
                 ('w1', 'w start', 'num', 'kN/m', True), ('w2', 'w end', 'num', 'kN/m', True)]
     if obj['kind'] != 'moment':
         rows.append(('dir', 'Acts', 'choice', '', True))
+        if obj['kind'] == 'point':
+            rows.append(('angle', 'Angle (0 right, 90 up)', 'num', 'deg', True))
     rows.append(('case', 'Load case', 'choice', '', True))
     return rows
 
@@ -194,6 +196,8 @@ def get(model, ref, field):
         return model['joints'][obj][0 if field == 'X' else 1]
     if kind == 'member':
         return bm.member_length(model, obj) if field == 'length' else bm.member_angle(model, obj)
+    if kind == 'load' and obj['kind'] == 'point' and field == 'angle':
+        return bm.load_angle(model, obj)
     if field in ('x', 'x2'):
         return along(model, obj, field)
     return obj[field]
@@ -206,7 +210,7 @@ def choices(model, ref, field):
     if field == 'kind':
         return list(bm.SUPPORTS)
     if field == 'dir':
-        return list(bm.DIRECTION_TITLES)
+        return list(bm.POINT_DIRECTION_TITLES if obj['kind'] == 'point' else bm.DIRECTION_TITLES)
     return list(model['cases'])
 
 
@@ -217,7 +221,8 @@ def choice_index(model, ref, field):
     if field == 'kind':
         return bm.SUPPORTS.index(obj['kind'])
     if field == 'dir':
-        return bm.DIRECTIONS.index(obj.get('dir', 'down'))
+        directions = bm.POINT_DIRECTIONS if obj['kind'] == 'point' else bm.DIRECTIONS
+        return directions.index(obj.get('dir', 'down'))
     return obj[field]
 
 
@@ -247,7 +252,11 @@ def set_choice(model, ref, field, index):
     elif field == 'kind':
         obj['kind'] = bm.SUPPORTS[index]
     elif field == 'dir':
-        obj['dir'] = bm.DIRECTIONS[index]
+        directions = bm.POINT_DIRECTIONS if obj['kind'] == 'point' else bm.DIRECTIONS
+        direction = directions[index]
+        if direction == 'angle':
+            obj['angle'] = bm.load_angle(model, obj)
+        obj['dir'] = direction
     else:
         obj['case'] = index
 
@@ -312,6 +321,11 @@ def set_number(model, ref, field, unit, shown):
         else:
             angle = value
         _geometry_change(model, lambda: bm.set_member(model, obj, length, angle))
+        return
+    if kind == 'load' and obj['kind'] == 'point' and field == 'angle':
+        if not bm.isfinite(value):
+            raise ValueError('Angle must be a finite number')
+        obj['angle'], obj['dir'] = value % 360, 'angle'
         return
     if field in ('x', 'x2'):
         runs = bm.lines(model)
@@ -415,9 +429,11 @@ def add_member(model, m, x):
     if len(model['members']) >= bm.MAX_MEMBERS:
         raise ValueError('Up to %d members' % bm.MAX_MEMBERS)
     L = bm.member_length(model, m)
-    if x < 1e-9:
+    # Compare the remaining distance, not x > L - epsilon: with the
+    # Pico's float32 arithmetic L - 1e-9 can round straight back to L.
+    if x <= 1e-6:
         joint = model['members'][m]['a']
-    elif x > L - 1e-9:
+    elif L - x <= 1e-6:
         joint = model['members'][m]['b']
     else:
         split(model, m, x)
@@ -429,12 +445,19 @@ def add_member(model, m, x):
     return len(model['members']) - 1
 
 
-def insert(model, what, line, s):
+def insert(model, what, line, s, member=None):
     """Add an item at or near the cursor and return (reference, field to edit)."""
     if bm.item_count(model) >= bm.MAX_ITEMS:
         raise ValueError('Item limit reached (%d)' % bm.MAX_ITEMS)
     runs = bm.lines(model)
-    m, x = locate(model, line, s, runs)
+    if member is None:
+        m, x = locate(model, line, s, runs)
+    else:
+        m = member
+        member_line, offset = line_of(model, m, runs)
+        if member_line != line:
+            raise ValueError('Selected beam is not on the cursor run')
+        x = min(max(s-offset, 0.0), bm.member_length(model, m))
     L = bm.member_length(model, m)
     if what == 'split':
         n = split(model, m, x)
@@ -454,7 +477,7 @@ def insert(model, what, line, s):
     if what == 'hinge':
         if any(h['m'] == m and bm.key(h['x']) == bm.key(x) for h in model['hinges']):
             raise ValueError('A hinge is already here')
-        if (x < 1e-9 or x > L - 1e-9) and len(runs[line]) == 1 and not any(
+        if (x <= 1e-6 or L - x <= 1e-6) and len(runs[line]) == 1 and not any(
                 same_point(bm.point(model, m, x), model['joints'][o['a']]) or
                 same_point(bm.point(model, m, x), model['joints'][o['b']])
                 for i, o in enumerate(model['members']) if i != m):
@@ -483,7 +506,7 @@ def delete(model, ref):
         raise ValueError('Joints go with their members: remove a member instead')
     if kind == 'member':
         if len(model['members']) == 1:
-            raise ValueError('The last member stays; try F6 New beam')
+            raise ValueError('The last member stays; try F3 New beam')
         for group in ('supports', 'hinges', 'loads'):
             model[group] = [i for i in model[group] if i['m'] != obj]
             for item in model[group]:

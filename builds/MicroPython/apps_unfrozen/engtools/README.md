@@ -1,9 +1,9 @@
-# Engineering tools scaffold
+# PicoLAB engineering tools
 
 `PicoLAB.py` provides a plotting preview gallery, a native Numerics checks page,
-and a keyboard-driven scientific calculator with six numerical modes. The
-unfinished engineering tools remain in source and are omitted from the release
-launcher and SD bundle. See
+and a keyboard-driven scientific calculator with six numerical modes. Checks contains numerics validation and plot previews. Tools contains Graph,
+Graph3D and the scientific calculator. Modules contains Structural → Beam view
+and empty planned folders for Dynamics, Thermal, Electrical and Fluids. See
 [ScientificCalculator.md](../../../../guides/ScientificCalculator.md) for
 its input rules and current mode/precision limits.
 Statistics now provides one-/two-variable data, frequencies, descriptive
@@ -18,7 +18,7 @@ PicoCalc firmware builds. `numerics/backend.py` checks its capabilities and
 guards QR workspace; `numerics/bench.py` tests known answers and reports check
 timings/allocation deltas. See [the ulab guide](../../../../src/MicroPython/ulab/README.md).
 
-Beam Lab (`beamlab/`) is the first complete engineering tool; see
+Beam view, formerly Beam Lab (`beamlab/`) is the first complete engineering tool; see
 [BeamLab.md](../../../../guides/BeamLab.md). It implements the shared
 `units.py` (fixed engineering SI display units), `cases.py` (verified JSON
 cases, streamed CSV) and `ui/forms.py` (single-line input). `jobs.py` remains
@@ -77,8 +77,9 @@ From the project root:
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/run.py --viewer --board picocalc-pico2w --network offline --audio silent --app PicoLAB
 ```
 
-Up/Down selects a row. Enter opens Plot previews or a tool placeholder. Back
-on a plot returns to the selected gallery entry; Back on the tools menu exits.
+Up/Down selects a row; Enter opens a folder or tool. Esc returns one level,
+restoring the selection; Esc at the PicoLAB root exits. The logo and breadcrumb
+remain visible throughout. See [PicoLAB navigation](../../../../guides/PicoLAB.md).
 
 The simulator uses `apps_unfrozen` as its source automatically. For an SD
 installation, deploy Graph, Graph3D, PicoLAB and the complete engtools

@@ -35,7 +35,9 @@ for name in ("picoware.engine", "picoware.system.gameboy", "picoware.system.audi
              "picoware.applications.system.update", "picoware.applications.applications.app_store",
              "picoware.system.agent", "picoware.applications.ai_setup",
              "picoware.applications.applications.agent",
-             "picoware.applications.utilities.utilities"):
+             "picoware.applications.utilities.utilities",
+             "picoware.applications.ir", "picoware.system.infrared",
+             "picoware.system.drivers.ir_rx", "picoware.system.drivers.ir_tx"):
     path = root + "/src/MicroPython/" + name.replace(".", "/")
     for candidate in (path + ".py", path + "/__init__.py"):
         try:
@@ -45,12 +47,14 @@ for name in ("picoware.engine", "picoware.system.gameboy", "picoware.system.audi
             pass
 import picoware.system.boards as boards
 assert boards.BOARD_ID == boards.BOARD_PICOCALC_PICO_2W and boards.DISPLAY_SIZE == (320, 320)
-for route in ("App Store", "Update", "Apps/Scripts/C", "JavaScript", "MMBasic", "Agent", "Email", "ESP Flasher"):
+for route in ("System/Bootloader", "System/Stop", "Comms/Infrared", "IR", "App Store", "Update", "Apps/Scripts/C", "JavaScript", "MMBasic", "Agent", "Email", "ESP Flasher"):
     try:
         sim_runtime.request_open(route)
         raise AssertionError("Excluded route was launchable: " + route)
     except sim_runtime.LaunchTargetError:
         pass
+sim_runtime.request_open("System/Shutdown")
+assert sim_runtime._keys
 sim_runtime._keys = []
 
 vm = ViewManager()
@@ -76,7 +80,42 @@ assert not settings._menu.item_exists("AI Setup")
 assert not settings._menu.item_exists("Server Settings")
 assert not settings._menu.item_exists("Use LVGL")
 assert not settings._menu.item_exists("USB Stream")
+assert [settings._menu.get_item(i) for i in range(settings._menu.item_count)] == [
+    "Screen Brightness", "Theme Color", "Time", "Screensaver"]
+from picoware.applications import library
+assert library.SYSTEM_ITEMS == ("Settings", "About", "System Info", "Restart", "Shutdown")
+assert library.COMMS_ITEMS == ("Bluetooth", "USB", "WiFi")
+# Legacy SD apps receive a clear unsupported error rather than a fake IR API.
+from picoware.system.decorator import infrared_tx_required, infrared_rx_required
+for decorator in (infrared_tx_required, infrared_rx_required):
+    try:
+        decorator(lambda: True)()
+        raise AssertionError("Retired IR driver reported available")
+    except RuntimeError:
+        pass
 settings.stop(vm)
+# Menu rows must map Restart and Shutdown to their stable action IDs.
+from picoware.applications.system import system as system_menu
+from picoware.system.buttons import BUTTON_CENTER
+assert system_menu.start(vm)
+assert [system_menu._system.get_item(i) for i in range(system_menu._system.item_count)] == [
+    "About", "System Info", "Restart", "Shutdown"]
+actions = []
+activate = system_menu.activate
+system_menu.activate = lambda manager, index: actions.append(index)
+try:
+    vm._button = BUTTON_CENTER
+    for row in (2, 3):
+        system_menu._system.set_selected(row)
+        system_menu.run(vm)
+    assert actions == [3, 4]
+finally:
+    system_menu.activate = activate
+    system_menu.stop(vm)
+system_menu._system_index = 3
+assert system_menu.start(vm) and system_menu._system.current_item == "Restart"
+system_menu.stop(vm)
+system_menu._system_index = 0
 
 class ConnectedWifi:
     state = 2

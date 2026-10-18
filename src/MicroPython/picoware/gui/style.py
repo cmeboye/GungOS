@@ -56,30 +56,55 @@ def columns(draw, pixel_width):
     return max(1, int(pixel_width)//max(1, draw.len('M', FONT_SMALL)))
 
 
-def chrome(draw, subtitle, hint1, hint2, brand='PicoLAB', palette=None):
+def header(draw, subtitle='', brand='GungOS', palette=None, height=HEAD_HEIGHT, font=None):
+    """Paint a logo/path header without swapping or covering the page body."""
+    from picoware.assets.logos import LOGOS, paint
+    from picoware.system.font import FONT_SMALL, FONT_XTRA_SMALL
+    p=palette or DEFAULT_PALETTE
+    width=int(draw.size.x)
+    names={'GungOS':'gungOS_small','PicoDESK':'picodesk','PicoLAB':'picolab'}
+    # App-specific chart engines can identify themselves while retaining their
+    # launcher's logo. Other tools default to the system brand.
+    aliases={'Eggcel':'PicoDESK','PicoWord':'PicoDESK','PicoPaint':'PicoDESK'}
+    original=brand
+    brand=aliases.get(brand,brand)
+    if brand not in names:
+        brand='GungOS'
+    label=str(subtitle).strip(' /')
+    if original not in names:
+        label=original+(' / '+label if label else '')
+    label='/ '+label if label else ''
+    draw._fill_rectangle(0,0,width,height,p.PANEL)
+    if height>=HEAD_HEIGHT:
+        draw._fill_rectangle(0,0,width,2,p.ACCENT)
+    logo_width,logo_height=LOGOS[names[brand]][:2]
+    top=2 if height>=HEAD_HEIGHT else 0
+    paint(draw,names[brand],7,top+(height-top-logo_height)//2,p.PANEL,p.ACCENT)
+    x=logo_width+11
+    available=max(0,width-x-6)
+    if font is None:font=FONT_SMALL if height>=HEAD_HEIGHT else FONT_XTRA_SMALL
+    if draw.len(label,font)>available:font=FONT_XTRA_SMALL
+    if draw.len(label,font)>available:
+        # Keep the current menu's name visible, even in a long nested path.
+        tail=label[2:]
+        while tail and draw.len('/ ...'+tail,font)>available:tail=tail[1:]
+        label='/ ...'+tail
+        if draw.len(label,font)>available:label=''
+    text_height=int(draw.get_font(font).height)
+    draw._text(x,top+(height-top-text_height)//2,label,p.TEXT,font)
+
+
+def chrome(draw, subtitle, hint1, hint2, brand='GungOS', palette=None):
     p=palette or DEFAULT_PALETTE
     width, height = int(draw.size.x), int(draw.size.y)
-    draw._fill_rectangle(0, 0, width, HEAD_HEIGHT, p.PANEL)
-    draw._fill_rectangle(0, 0, width, 2, p.ACCENT)
-    from picoware.system.font import FONT_SMALL
-    names = {'GungOS': 'gungOS_small', 'PicoDESK': 'picodesk', 'PicoLAB': 'picolab'}
-    name = names.get(brand)
-    if name is not None:
-        from picoware.assets.logos import LOGOS, paint
-        logo_width, logo_height = LOGOS[name][:2]
-        paint(draw, name, 7, 2+(HEAD_HEIGHT-2-logo_height)//2, p.PANEL, p.ACCENT)
-        offset = 7+logo_width+8
-    else:
-        text(draw, 7, 7, brand, p.ACCENT)
-        offset = 7+draw.len(brand, FONT_SMALL)+8
-    text(draw, offset, 7, subtitle[:columns(draw, width-offset-6)],p.TEXT)
+    header(draw,subtitle,brand,p)
     bottom = height-FOOT_HEIGHT
     draw._fill_rectangle(0, bottom, width, FOOT_HEIGHT, p.PANEL)
     text(draw, 6, bottom+5, hint1[:columns(draw, width-12)], p.ACCENT)
     text(draw, 6, bottom+20, hint2[:columns(draw, width-12)], p.MUTED)
 
 
-def menu(draw, rows, selected, subtitle='tools', brand='PicoLAB',
+def menu(draw, rows, selected, subtitle='tools', brand='GungOS',
          hint1='UP/DOWN choose  ENTER open', hint2='ESC returns', row_colors=None, palette=None):
     """Draw (label, detail) rows without allocating a native menu widget."""
     p=palette or DEFAULT_PALETTE

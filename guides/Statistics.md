@@ -1,10 +1,10 @@
 # Calculator Statistics
 
-Open PicoLAB → Scientific Calculator → F2 → Statistics. Choose
+Open PicoLAB → Tools → Scientific calculator → F2 → Statistics. Choose
 1-variable or 2-variable data. Probability distributions are deferred and hidden
 from the release menu.
 
-The 320×320 layout retains the 18-pixel system-indicator gap, status strip,
+The 320×320 layout retains the 18-pixel PicoLAB breadcrumb strip, status strip,
 answer box, data/results area, mathematical prompt and shortcut bar.
 
 ## Table and input

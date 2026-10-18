@@ -4,9 +4,10 @@ from picoware.gui import style
 
 class Menu:
     def __init__(self,draw,title,y,height,text_color=0xFFFF,background_color=0,
-                 selected_color=0x001F,border_color=0xFFFF,border_width=2):
+                 selected_color=0x001F,border_color=0xFFFF,border_width=2,
+                 brand='GungOS'):
         from picoware.system.vector import Vector
-        self.display=draw;self._title=title
+        self.display=draw;self._title=title;self.brand=brand
         self.position=Vector(0,y);self.size=Vector(draw.size.x,height)
         self.text_color=text_color;self.background_color=background_color
         self.selected_color=selected_color;self.border_color=border_color;self.border_width=border_width
@@ -41,7 +42,7 @@ class Menu:
     def draw(self,*args):
         palette=style.colors(self.background_color,self.text_color,self.selected_color)
         rows=[(str(item),'') for item in self.items] or [('No entries available','')]
-        style.menu(self.display,rows,self._selected_index,self.title,'GungOS',
+        style.menu(self.display,rows,self._selected_index,self.title,self.brand,
                    'UP/DOWN choose  ENTER select','ESC returns',palette=palette)
     def refresh(self):self.draw()
     def draw_title(self):self.draw()

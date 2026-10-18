@@ -558,7 +558,6 @@ def _run_sim_check(opts):
     _run_library_route_check()
     _run_stale_app_link_check(opts)
     _run_duplicate_app_link_check(opts)
-    _run_ir_parity_check()
     _run_uart_parity_check()
     _run_keyboard_background_check()
     _run_lcd_parity_check()
@@ -574,13 +573,13 @@ def _run_selected_profile_check(opts):
     tests = (
         "test_dashboard.py", "test_dashboard_layout.py", "test_status_bar.py", "test_theme_picker.py",
         "test_statistics.py",
-        "test_beamlab.py",
+        "test_picolab_hierarchy.py", "test_beamlab.py", "test_beamlab_ui.py", "test_beam_eggcel_csv.py",
         "test_calculator.py",
         "test_calculator_modes.py",
         "test_release_demos.py", "test_lorenz_settings.py",
-        "test_tetris_audio.py",
+        "test_tetris_audio.py", "test_tetris_ui.py", "test_tetris_scores.py",
         "test_ulab.py",
-        "test_trimmed_firmware.py", "test_menu.py", "test_home_visual.py",
+        "test_trimmed_firmware.py", "test_menu.py", "test_menu_headers.py", "test_home_visual.py",
         "test_preferences.py", "test_wifi_setup.py",
         "test_connectivity.py", "test_connectivity_ui.py", "test_service_independence.py",
         "test_shared_plots.py", "test_graph.py", "test_graph3d.py",
@@ -592,49 +591,6 @@ def _run_selected_profile_check(opts):
         if status:
             raise RuntimeError("Selected firmware regression failed: " + name)
     print("[sim-check:pass] Python/engineering firmware")
-
-
-def _run_ir_parity_check():
-    """Exercise the simulator's real IR timer waveform and PicoCalc pins."""
-    import sim_runtime
-    from picoware.system.infrared import (
-        InfraredTransmitter,
-        Signal,
-        _default_rx_pin,
-        _default_tx_pin,
-    )
-
-    tx_pin = _default_tx_pin()
-    if getattr(tx_pin, "id", None) != 28:
-        raise RuntimeError("simulator PicoCalc IR TX pin mismatch")
-    signal = Signal(
-        {
-            "name": "simulator",
-            "type": "raw",
-            "frequency": "38000",
-            "duty_cycle": "0.33",
-            "data": "9000 4500 560 560",
-        }
-    )
-    sim_runtime.clear_ir_waveform()
-    InfraredTransmitter(tx_pin).send(signal)
-    waveform = sim_runtime.get_ir_waveform()
-    if len(waveform) < 4:
-        raise RuntimeError("simulator IR waveform is incomplete")
-    first = waveform[0]
-    if (
-        first["duration_us"] != 9000
-        or not first["mark"]
-        or first["frequency"] != 38000
-    ):
-        raise RuntimeError("simulator IR waveform does not match raw signal")
-    try:
-        _default_rx_pin()
-    except ValueError:
-        pass
-    else:
-        raise RuntimeError("PicoCalc must not report an infrared receiver")
-    print("[sim-check:ok] infrared timer waveform and PicoCalc pins")
 
 
 def _run_library_route_check():

@@ -6,13 +6,14 @@ A model is a plain dict that saves as JSON (schema 2):
   sections [{'name', 'material', 'E', 'rho', 'shape', 'dims', 'I', 'A', 'W'}]
   supports [{'m', 'x', 'kind', 'kx', 'ky', 'kr', 'settle', 'case'}]
   hinges   [{'m', 'x'}]
-  loads    [{'kind', 'm', 'x', ('x2'), 'P' | 'M' | 'w1', ('w2'), 'dir', 'case'}]
+  loads    [{'kind', 'm', 'x', ('x2'), 'P' | 'M' | 'w1', ('w2'), 'dir', ('angle'), 'case'}]
   cases, combos, selfweight (None or a load case)
 Items sit on a member at x metres from its start joint. A straight beam is
 one member (or several in a row, where its section changes).
 
 Loads use the usual hand-calculation signs: forces and distributed loads
-act in their direction ('down', 'normal' or 'right') when positive, applied
+act in their direction ('down', 'normal' or 'right') when positive. Point
+forces also accept a global angle in degrees, counterclockwise from right. Applied
 moments turn counterclockwise when positive and settlements move a support
 down. Results: reactions up / right positive; along a member, sagging
 moment, shear (V = dM/dx), tension and deflection to the member's left
@@ -20,10 +21,10 @@ moment, shear (V = dM/dx), tension and deflection to the member's left
 
 No display or storage code lives here.
 """
-from math import pi, sqrt, atan2, cos, sin, radians, degrees
+from math import pi, sqrt, atan2, cos, sin, radians, degrees, isfinite
 from array import array
 
-TOOL = {'id': 'beams', 'title': 'Beam Lab', 'description': 'Beams and plane frames: supports, loads, sections and load cases.',
+TOOL = {'id': 'beams', 'title': 'Beam view', 'description': 'Beams and plane frames: supports, loads, sections and load cases.',
         'status': 'ready', 'planned_outputs': ('Support reactions', 'Shear, moment and normal force', 'Deflections')}
 
 SCHEMA = 2
@@ -39,6 +40,8 @@ SUPPORTS = ('Pin', 'Roller', 'Roller x', 'Fixed', 'Guide', 'Spring')
 SUPPORT_FLAGS = {'Pin': 'xy', 'Roller': 'y', 'Roller x': 'x', 'Fixed': 'xyr', 'Guide': 'xr', 'Spring': ''}
 DIRECTIONS = ('down', 'normal', 'right')
 DIRECTION_TITLES = ('Gravity (down)', 'Normal to member', 'Horizontal (right)')
+POINT_DIRECTIONS = DIRECTIONS + ('angle',)
+POINT_DIRECTION_TITLES = DIRECTION_TITLES + ('Custom angle',)
 MAX_CASES = 6
 MAX_COMBOS = 6
 MAX_ITEMS = 48
@@ -279,8 +282,11 @@ def support(m, x, kind='Pin'):
     return {'m': m, 'x': x, 'kind': kind, 'kx': 0.0, 'ky': 1e7, 'kr': 0.0, 'settle': 0.0, 'case': 0}
 
 
-def point_load(m, x, P=10e3, case=0, direction='down'):
-    return {'kind': 'point', 'm': m, 'x': x, 'P': P, 'dir': direction, 'case': case}
+def point_load(m, x, P=10e3, case=0, direction='down', angle=None):
+    load = {'kind': 'point', 'm': m, 'x': x, 'P': P, 'dir': direction, 'case': case}
+    if angle is not None:
+        load['dir'], load['angle'] = 'angle', angle
+    return load
 
 
 def moment_load(m, x, M=10e3, case=0):
@@ -449,8 +455,13 @@ def check(model):
             on_member(load, 'x2')
             if not load['x'] < load['x2'] - 1e-9:
                 raise ModelError('Distributed load needs start < end', where)
-        if load.get('dir', 'down') not in DIRECTIONS:
+        directions = POINT_DIRECTIONS if load['kind'] == 'point' else DIRECTIONS
+        if load.get('dir', 'down') not in directions:
             raise ModelError('Unknown load direction', where)
+        if load.get('dir') == 'angle':
+            angle = load.get('angle')
+            if type(angle) not in (int, float) or not isfinite(angle):
+                raise ModelError('Point force angle must be a finite number', where)
     for s in model['sections']:
         section_values(s)
     if not model['cases']:
@@ -470,6 +481,28 @@ def direction_vector(model, m, name):
         return 1.0, 0.0
     X0, Y0, c, s, L = member_axis(model, m)
     return s, -c  # toward the member's right: down for a member drawn left to right
+
+
+def load_vector(model, load):
+    """Global unit vector shared by the solver, equilibrium check and sketch."""
+    if load.get('dir') != 'angle':
+        return direction_vector(model, load['m'], load.get('dir', 'down'))
+    angle = load['angle'] % 360
+    # Use exact axes at cardinal angles; float32 cos(90) is not quite zero.
+    if angle == 0:return 1.0, 0.0
+    if angle == 90:return 0.0, 1.0
+    if angle == 180:return -1.0, 0.0
+    if angle == 270:return 0.0, -1.0
+    angle = radians(angle)
+    return cos(angle), sin(angle)
+
+
+def load_angle(model, load):
+    """Displayed global angle, including the live angle of a direction preset."""
+    if load.get('dir') == 'angle':
+        return load['angle'] % 360
+    dx, dy = load_vector(model, load)
+    return degrees(atan2(dy, dx)) % 360
 
 
 # ---------------------------------------------------------------- solving
@@ -569,7 +602,7 @@ class Solution:
             c, m = load['case'], load['m']
             where = point(model, m, load['x'])
             if load['kind'] == 'point':
-                dx, dy = direction_vector(model, m, load['dir'])
+                dx, dy = load_vector(model, load)
                 n = node(*where)
                 loads.append(('node_load', (c, n, ps.UX, load['P'] * dx)))
                 loads.append(('node_load', (c, n, ps.UY, load['P'] * dy)))
@@ -580,7 +613,7 @@ class Solution:
         for load in dist:
             c, m = load['case'], load['m']
             X0, Y0, cm, sm, L = member_axis(model, m)
-            dx, dy = direction_vector(model, m, load['dir'])
+            dx, dy = load_vector(model, load)
             across, along = dx * -sm + dy * cm, dx * cm + dy * sm  # onto local y and local x
             x1, x2, w1, w2 = load['x'], load['x2'], load['w1'], load['w2']
             for e in element_range(m, x1, x2):
@@ -726,7 +759,7 @@ class Solution:
             f = weights.get(load['case'], 0.0)
             if not f or load['kind'] == 'moment':
                 continue
-            dx, dy = direction_vector(self.model, load['m'], load['dir'])
+            dx, dy = load_vector(self.model, load)
             if load['kind'] == 'point':
                 size = load['P']
             else:
@@ -735,18 +768,25 @@ class Solution:
             fy += f * size * dy
         return fx, fy
 
-    def samples(self, line, view, target=240):
+    def samples(self, line, view, target=240, member=None):
         """(s, V, M, slope, w, N, u, starts): array('f') samples along a line
         (u is the axial displacement).
         Each element is sampled end to end, so jumps show at shared nodes;
-        `starts` lists the first sample of each element."""
-        cache_key = (line, view)
+        `starts` lists the first sample of each element. Optional member
+        restricts the sampled elements; S still measures along the run."""
+        run = self.lines[line]
+        if member is not None and member not in run:
+            raise ValueError('Beam does not belong to this run')
+        # A single-member run already supplies exactly this data.
+        if len(run) == 1:member = None
+        cache_key = (line, view, member)
         if cache_key in self._samples:
             return self._samples[cache_key]
-        run = self.lines[line]
         offsets, total = line_offsets(self.model, run)
+        if member is not None:total = member_length(self.model, member)
         spans = []
         for m, o in zip(run, offsets):
+            if member is not None and m != member:continue
             first, end = self.member_elements[m]
             for e in range(first, end):
                 spans.append((e, o + self.elements[e][3], o + self.elements[e][4]))
@@ -776,10 +816,10 @@ class Solution:
         self._samples[cache_key] = result
         return result
 
-    def extremes(self, line, view):
+    def extremes(self, line, view, member=None):
         """{quantity: (max, s_max, min, s_min)} for V, M, T (slope), W and N
-        along a line, interior peaks refined by golden-section search."""
-        S, V, M, T, W, N, U, starts = self.samples(line, view)
+        along a line (or one member), with interior peaks refined."""
+        S, V, M, T, W, N, U, starts = self.samples(line, view, member=member)
         ends = set(starts) | set(s - 1 for s in starts[1:]) | {len(S) - 1}
         result = {}
         for name, q, data in (('V', 0, V), ('M', 1, M), ('T', 2, T), ('W', 3, W), ('N', 4, N)):

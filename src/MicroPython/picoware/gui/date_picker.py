@@ -162,13 +162,16 @@ class DatePicker:
         lbl_cw = draw.len("M")
         col_w = w // 3
 
-        # Layout: two equal bands + a hint row at the bottom
+        from picoware.gui import style
+        header_h=style.HEAD_HEIGHT
+        style.header(draw,'Settings / Time / Date & Time',palette=style.system_palette(self._view_manager))
+        # Layout: header, two equal bands and a hint row at the bottom
         hint_h = lbl_h + draw.scale_y(6)
         gap = draw.scale_y(6)
-        band_h = (h - hint_h - gap) // 2
+        band_h = (h - header_h - hint_h - gap) // 2
 
-        date_y = pos.y
-        time_y = pos.y + band_h + gap
+        date_y = pos.y + header_h
+        time_y = date_y + band_h + gap
 
         # Date band: Month | Day | Year
         self.__band(

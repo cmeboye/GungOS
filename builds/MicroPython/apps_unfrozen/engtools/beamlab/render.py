@@ -8,18 +8,84 @@ from engtools import units
 from engtools.ui import theme
 from . import model as bm
 from . import items
+from engtools.ui.viewport import Viewport
 
 LEFT, RIGHT = 20, 300
-BEAM_Y = 78
+BEAM_Y = 104
 ROW = 15
 CASE_COLORS = (None, theme.AMBER, 0xF81F, 0x07E0, 0xFFE0, 0xA51F)
-# Model page layout: a straight beam keeps a short sketch, frames get more room.
-BEAM_LAYOUT = {'box': (LEFT, BEAM_Y, RIGHT, BEAM_Y), 'bottom': 121, 'status': 123, 'list': 146}
-FRAME_LAYOUT = {'box': (LEFT + 8, 58, RIGHT - 8, 136), 'bottom': 160, 'status': 162, 'list': 192}
+# Fixed calculator-style preview above a scrolling property panel.
+PREVIEW_RECT = (8, 43, 304, 142)
+PROPERTIES_TOP = 191
+BEAM_LAYOUT = {'box': (32, BEAM_Y, 288, BEAM_Y), 'bottom': 158, 'status': 162, 'list': 217}
+FRAME_LAYOUT = {'box': (42, 84, 278, 134), 'bottom': 158, 'status': 162, 'list': 217}
 
 
 def layout(model):
     return BEAM_LAYOUT if bm.is_straight_beam(model) else FRAME_LAYOUT
+
+
+def panel(draw, p, rect, title, status='', fill=None):
+    x,y,w,h=rect
+    draw._fill_rectangle(x,y,w,h,p.BG if fill is None else fill)
+    draw._rectangle(x,y,w,h,p.GRID)
+    bounded=Viewport(draw,(x+5,y+4,x+w-5,y+h-4))
+    text(bounded,x+8,y+7,title,p.ACCENT)
+    if status:right_text(bounded,x+w-8,y+7,status,p.MUTED)
+
+
+def model_tabs(draw,p,rect,labels,selected,counts):
+    """Theme-coloured tabs contained in the property panel's header."""
+    from picoware.gui.status_bar import foreground
+    x,y,w,h=rect
+    panel(draw,p,rect,'')
+    width=w-2
+    for i,label in enumerate(labels):
+        left=x+1+i*width//len(labels)
+        right=x+1+(i+1)*width//len(labels)
+        active=i==selected
+        color=p.ACCENT if active else p.PANEL
+        draw._fill_rectangle(left,y+1,right-left,20,color)
+        title=label+' '+str(counts[i])
+        text(draw,left+(right-left-draw.len(title,SM))//2,y+5,title,
+             foreground(color) if active else p.MUTED,SM)
+    draw._line(x+1,y+21,x+w-2,y+21,p.GRID)
+
+
+def chrome(draw,p,page,message='',error=False):
+    from engtools.ui import breadcrumbs
+    breadcrumbs.paint(draw,p,fallback=('modules','structural','Beam view'))
+    width,height=int(draw.size.x),int(draw.size.y)
+    draw._fill_rectangle(0,18,width,20,p.PANEL)
+    text(draw,8,22,'BEAM VIEW',p.ACCENT,SM)
+    right_text(draw,width-8,24,page.upper(),p.TEXT)
+    bottom=height-12
+    draw._fill_rectangle(0,bottom,width,12,p.PANEL)
+    text(draw,6,bottom+2,'F9 Help',p.ACCENT)
+    if message:text(draw,58,bottom+2,message[:42],p.ERROR if error else p.MUTED)
+    if error and message:
+        lines=wrap(message,max(1,(width-32)//6))[:2]
+        h=10*len(lines)+8
+        y=bottom-h-3
+        draw._fill_rectangle(8,y,width-16,h,p.BG)
+        draw._rectangle(8,y,width-16,h,p.ERROR)
+        for i,line in enumerate(lines):text(draw,16,y+4+10*i,line,p.ERROR)
+
+
+def menu(draw,p,rows,selected,title,bottom):
+    panel(draw,p,(8,43,int(draw.size.x)-16,bottom-46),title)
+    top=67;capacity=max(1,(bottom-6-top)//29)
+    first=min(max(0,selected-capacity//2),max(0,len(rows)-capacity))
+    bounded=Viewport(draw,(12,64,int(draw.size.x)-12,bottom-6))
+    for i in range(first,min(len(rows),first+capacity)):
+        y=top+(i-first)*29
+        if i==selected:
+            bounded._fill_rectangle(14,y-2,int(draw.size.x)-28,27,p.SELECT)
+            bounded._rectangle(14,y-2,int(draw.size.x)-29,26,p.ACCENT)
+        label,detail=rows[i]
+        text(bounded,20,y,label,p.TEXT,SM)
+        text(bounded,20,y+14,detail,p.MUTED)
+    right_text(draw,int(draw.size.x)-16,50,'%d/%d'%(selected+1,len(rows)),p.MUTED)
 
 
 def mix(a, b, n, d):
@@ -38,7 +104,7 @@ def right_text(draw, x, y, value, color, font=XS):
     draw._text(int(x - draw.len(value, font)), int(y), value, color, font)
 
 
-def centre_text(draw, x, y, value, color, font=XS, low=2, high=318):
+def centre_text(draw, x, y, value, color, font=XS, low=16, high=304):
     value = str(value)
     w = draw.len(value, font)
     left = min(max(int(x - w // 2), low), high - w)
@@ -192,14 +258,14 @@ def dist_levels(model):
     return levels
 
 
-def screen_direction(model, m, name):
-    dx, dy = bm.direction_vector(model, m, name)
+def screen_direction(model, load):
+    dx, dy = bm.load_vector(model, load)
     return dx, -dy
 
 
 # ---------------------------------------------------------------- the sketch
 
-def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members, bottom):
+def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members, bottom, active_member=None):
     """The structure with its supports, hinges and loads. cursor is
     ((X, Y), distance along the line), or None."""
     accent = p.ACCENT
@@ -209,27 +275,29 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
         return accent if items.same(ref, selected) else color
     if cursor is not None and straight:
         cx = view.p(*cursor[0])[0]
-        dashed(draw, cx, 27, 106, p.SELECT if p.SELECT != p.BG else p.GRID)
+        dashed(draw, cx, 64, 140, p.SELECT if p.SELECT != p.BG else p.GRID)
     # Deflected shape of the current view.
     for points in shape or ():
         previous = None
         for point in points:
             if previous is not None and point != previous:
-                clip(draw, previous[0], previous[1], point[0], point[1], p.MUTED, 24, bottom)
+                clip(draw, previous[0], previous[1], point[0], point[1], p.MUTED, 64, bottom)
             previous = point
     # Members, the current line brighter, with section names when there are several.
     several = len(model['sections']) > 1
     for m in range(len(model['members'])):
         member = model['members'][m]
         a, b = view.p(*model['joints'][member['a']]), view.p(*model['joints'][member['b']])
-        thick(draw, a, b, pick(('member', m), p.TEXT if straight or m in line_members else p.MUTED), 24, bottom)
+        color = p.TEXT if straight or m in line_members else p.MUTED
+        color = (accent if m == active_member else color) if active_member is not None else pick(('member', m), color)
+        thick(draw, a, b, color, 64, bottom)
         if several:
             X0, Y0, c, s, L = bm.member_axis(model, m)
             mx, my = (a[0] + b[0]) // 2, (a[1] + b[1]) // 2
             name = model['sections'][member['section']]['name']
             if straight:
                 centre_text(draw, mx, BEAM_Y + 5, name, pick(('member', m), p.MUTED))
-            elif 24 < my < bottom - 8:
+            elif 64 < my < bottom - 8:
                 text(draw, mx + int(7 * s) - 4, my + int(7 * c) - 3, name, pick(('member', m), p.MUTED))
     if straight and several:
         for m in range(1, len(model['members'])):
@@ -248,7 +316,7 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
                 if not attached:
                     outward = -c if s['x'] < 1e-9 else c
                     wall = -1 if outward < 0 else 1
-        if 24 < y < bottom:
+        if 64 < y < bottom:
             support_shape(draw, x, y, s['kind'], pick(('support', s), p.MUTED if s['kind'] == 'Spring' else p.TEXT), wall)
     # Hinges: open circles, pulled into their member at a joint.
     for h in model['hinges']:
@@ -256,7 +324,7 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
         inset = 5 if h['x'] < 1e-9 else -5 if h['x'] > L - 1e-9 else 0
         x, y = view.p(*bm.point(model, h['m'], h['x']))
         x, y = int(x + inset * c), int(y - inset * s_)
-        if 24 < y < bottom:
+        if 64 < y < bottom:
             draw._fill_circle(x, y, 3, p.BG)
             draw._circle(x, y, 3, pick(('hinge', h), p.TEXT))
     # Loads, coming onto their member along their direction.
@@ -268,23 +336,23 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
         color = pick(('load', load), case_color(p, model, load['case']))
         x, y = view.p(*bm.point(model, load['m'], load['x']))
         if load['kind'] == 'moment':
-            if 24 < y < bottom:
+            if 64 < y < bottom:
                 moment_shape(draw, x, y, load['M'], color)
                 text(draw, x + 6, y - 21, units.number(units.from_si(load['M'], 'kNm'), 3), color)
             continue
-        ux, uy = screen_direction(model, load['m'], load['dir'])
+        ux, uy = screen_direction(model, load)
         if load['kind'] == 'point':
             near, far = (x - ux * 3, y - uy * 3), (x - ux * 30, y - uy * 30)
             if load['P'] >= 0:
-                clip(draw, far[0], far[1], near[0], near[1], color, 24, bottom)
-                if 24 < near[1] < bottom:
+                clip(draw, far[0], far[1], near[0], near[1], color, 64, bottom)
+                if 64 < near[1] < bottom:
                     head(draw, near[0], near[1], ux, uy, color)
             else:
-                clip(draw, near[0], near[1], far[0], far[1], color, 24, bottom)
-                if 24 < far[1] < bottom:
+                clip(draw, near[0], near[1], far[0], far[1], color, 64, bottom)
+                if 64 < far[1] < bottom:
                     head(draw, far[0], far[1], -ux, -uy, color)
             lx, ly = x - ux * 38, y - uy * 38
-            if 24 < ly < bottom - 8:
+            if 64 < ly < bottom - 8:
                 centre_text(draw, lx, ly - 4, units.number(units.from_si(load['P'], 'kN'), 3), color)
             continue
         x2, y2 = view.p(*bm.point(model, load['m'], load['x2']))
@@ -293,9 +361,9 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
         h2 = 4 + int(9 * abs(load['w2']) / wmax)
         a0, b0 = (x - ux * lift, y - uy * lift), (x2 - ux * lift, y2 - uy * lift)
         a1, b1 = (a0[0] - ux * h1, a0[1] - uy * h1), (b0[0] - ux * h2, b0[1] - uy * h2)
-        clip(draw, a1[0], a1[1], b1[0], b1[1], color, 24, bottom)
-        clip(draw, a1[0], a1[1], a0[0], a0[1], color, 24, bottom)
-        clip(draw, b1[0], b1[1], b0[0], b0[1], color, 24, bottom)
+        clip(draw, a1[0], a1[1], b1[0], b1[1], color, 64, bottom)
+        clip(draw, a1[0], a1[1], a0[0], a0[1], color, 64, bottom)
+        clip(draw, b1[0], b1[1], b0[0], b0[1], color, 64, bottom)
         span = sqrt((b0[0] - a0[0]) ** 2 + (b0[1] - a0[1]) ** 2)
         count = max(1, int(span // 12))
         for i in range(count + 1):
@@ -303,7 +371,7 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
             bx, by = a0[0] + (b0[0] - a0[0]) * t, a0[1] + (b0[1] - a0[1]) * t
             hh = h1 + (h2 - h1) * t
             w = load['w1'] + (load['w2'] - load['w1']) * t
-            if not 24 < by < bottom:
+            if not 64 < by < bottom:
                 continue
             if w >= 0:
                 head(draw, bx, by, ux, uy, color, 3)
@@ -313,13 +381,13 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
         if load['w2'] != load['w1']:
             label += '..' + units.number(units.from_si(load['w2'], 'kN/m'), 3)
         mx, my = (a1[0] + b1[0]) / 2 - ux * 6, (a1[1] + b1[1]) / 2 - uy * 6
-        if 24 < my - 4 < bottom - 8:
-            centre_text(draw, mx, my - 4, label, color)
+        if 64 < (a0[1]+b0[1])/2 < bottom - 8:
+            centre_text(draw, mx, max(60,my-4), label, color)
     # Cursor: a dimension line for a straight beam, a marker on a frame.
     if cursor is not None:
         cx, cy = view.p(*cursor[0])
         if straight:
-            y = 106
+            y = 140
             draw._line(LEFT, y, RIGHT, y, p.GRID)
             for s in items.stops(model, 0):
                 x = view.p(*items.cursor_point(model, 0, s))[0]
@@ -331,13 +399,13 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
             length = 'L ' + units.show(total, 'm')
             lw = draw.len(length, XS)
             if abs(cx - (RIGHT - lw // 2)) > (draw.len(label, XS) + lw) // 2 + 6:
-                right_text(draw, 318, y + 6, length, p.MUTED)
-        elif 24 < cy < bottom:
+                right_text(draw, 304, y + 6, length, p.MUTED)
+        elif 64 < cy < bottom:
             for (ax, ay), (bx, by) in (((-5, 0), (0, -5)), ((0, -5), (5, 0)), ((5, 0), (0, 5)), ((0, 5), (-5, 0))):
                 draw._line(cx + ax, cy + ay, cx + bx, cy + by, accent)
     if problem is not None and problem.where is not None:
         ex, ey = view.p(*problem.where)
-        if 24 < ey < bottom:
+        if 64 < ey < bottom:
             draw._line(ex - 5, ey - 5, ex + 5, ey + 5, p.ERROR)
             draw._line(ex - 5, ey + 5, ex + 5, ey - 5, p.ERROR)
 
@@ -381,7 +449,7 @@ def wrap(value, width):
 
 def status(draw, p, lines, colors, top):
     for i, (line, color) in enumerate(zip(lines[:3], colors)):
-        text(draw, 6, top + 9 * i, line[:51], color)
+        text(draw, 16, top + 9 * i, line[:48], color)
 
 
 # ---------------------------------------------------------------- cross-sections
@@ -407,10 +475,10 @@ def section_parts(shape, dims):
     return [], 0, 0
 
 
-def cross_section(draw, p, section, field, box):
+def cross_section(draw, p, section, field, box, border=True):
     """The section to scale in box, the size being edited highlighted."""
     left, top, right, bottom = box
-    draw._rectangle(left, top, right - left, bottom - top, p.GRID)
+    if border:draw._rectangle(left, top, right - left, bottom - top, p.GRID)
     shape = section['shape']
     if shape == 'Direct':
         centre_text(draw, (left + right) // 2, (top + bottom) // 2 - 8, 'Direct values:', p.MUTED, XS, left, right)
@@ -475,7 +543,7 @@ def section_panel(draw, p, model, section, x, top):
             ('EI', units.show(v['E'] * v['I'], 'kNm2')))
     for i, (label, value) in enumerate(rows):
         text(draw, x, top + 12 * i, label, p.MUTED)
-        right_text(draw, 314, top + 12 * i, value, p.TEXT)
+        right_text(draw, 304, top + 12 * i, value, p.TEXT)
     users = [str(m + 1) for m, member in enumerate(model['members']) if model['sections'][member['section']] is section]
     if users:
         text(draw, x, top + 12 * len(rows) + 4, ('Members ' + ', '.join(users))[:23], p.MUTED)
@@ -484,66 +552,70 @@ def section_panel(draw, p, model, section, x, top):
 # ---------------------------------------------------------------- lists
 
 def form(draw, p, rows, selected, edit, top, bottom):
-    """Rows are (kind, label, value, editable); kind 'head' or 'field'.
-    Scrolls to keep `selected` visible."""
-    capacity = max(1, (bottom - top) // ROW)
-    first = min(max(0, selected - capacity // 2), max(0, len(rows) - capacity))
-    width = int(draw.size.x)
-    for index in range(first, min(len(rows), first + capacity)):
-        kind, label, value, editable = rows[index]
-        y = top + (index - first) * ROW
-        chosen = index == selected
+    """Scroll properties inside their panel, retaining inline edit and units."""
+    left,right=12,int(draw.size.x)-12
+    draw=Viewport(draw,(left,top-3,right,bottom))
+    capacity=max(1,(bottom-top)//ROW)
+    first=min(max(0,selected-capacity//2),max(0,len(rows)-capacity))
+    for index in range(first,min(len(rows),first+capacity)):
+        kind,label,value,editable=rows[index]
+        y=top+(index-first)*ROW;chosen=index==selected
         if chosen:
-            draw._fill_rectangle(4, y - 2, width - 8, ROW, p.SELECT)
-            draw._rectangle(4, y - 2, width - 8, ROW, p.ACCENT)
-        if kind == 'head':
-            draw._fill_rectangle(4, y - 2, 3, ROW, p.ACCENT)
-            text(draw, 11, y, label[:37], p.TEXT, SM)
+            draw._fill_rectangle(left+2,y-2,right-left-4,ROW,p.SELECT)
+            draw._rectangle(left+2,y-2,right-left-4,ROW,p.ACCENT)
+        if kind=='head':
+            draw._fill_rectangle(left+2,y-2,3,ROW,p.ACCENT)
+            text(draw,left+10,y,label,p.TEXT,SM)
             continue
-        text(draw, 20, y + 2, label, p.MUTED)
+        label_end=right-155
+        label_draw=Viewport(draw,(left,top-3,label_end,bottom))
+        text(label_draw,left+12,y+2,label,p.MUTED)
         if chosen and edit is not None:
-            unit = value.split(' ')[-1] if ' ' in value else ''
-            uw = draw.len(unit, XS) + 4 if unit else 0
-            box = 150
-            draw._fill_rectangle(width - box - 10, y - 1, box, ROW - 2, p.BG)
-            edit.draw(draw, width - box - 7, y, box - 8 - uw, p.TEXT, p.ACCENT, SM)
-            if unit:
-                right_text(draw, width - 12, y + 2, unit, p.MUTED)
+            unit=value.split(' ')[-1] if ' ' in value else ''
+            uw=draw.len(unit,XS)+4 if unit else 0
+            box=150;x=right-box-5
+            draw._fill_rectangle(x,y-1,box,ROW-2,p.BG)
+            edit.draw(draw,x+3,y,box-8-uw,p.TEXT,p.ACCENT,SM)
+            if unit:right_text(draw,right-6,y+2,unit,p.MUTED)
         else:
-            right_text(draw, width - 12, y, value, p.TEXT if editable else p.MUTED, SM)
-    if first > 0:
-        draw._fill_triangle(width - 8, top - 4, width - 11, top - 1, width - 5, top - 1, p.MUTED)
-    if first + capacity < len(rows):
-        y = top + capacity * ROW - 2
-        draw._fill_triangle(width - 8, y + 2, width - 11, y - 1, width - 5, y - 1, p.MUTED)
+            value_draw=Viewport(draw,(label_end+2,top-3,right-5,bottom))
+            right_text(value_draw,right-6,y,value,p.TEXT if editable else p.MUTED,SM)
+    if first:
+        draw._fill_triangle(right-4,top-2,right-7,top+1,right-1,top+1,p.MUTED)
+    if first+capacity<len(rows):
+        y=top+capacity*ROW-3
+        draw._fill_triangle(right-4,y+2,right-7,y-1,right-1,y-1,p.MUTED)
 
 
-def popup(draw, p, title, options, selected):
-    width, height = int(draw.size.x), int(draw.size.y)
-    rows = min(len(options), 8)
-    h = 24 + rows * 15
-    x, y, w = 50, max(30, (height - h) // 2), width - 100
-    draw._fill_rectangle(x, y, w, h, p.PANEL)
-    draw._rectangle(x, y, w, h, p.ACCENT)
-    text(draw, x + 7, y + 6, title, p.ACCENT)
-    first = min(max(0, selected - rows // 2), max(0, len(options) - rows))
-    for i in range(first, min(len(options), first + rows)):
-        yy = y + 20 + (i - first) * 15
-        if i == selected:
-            draw._fill_rectangle(x + 3, yy - 2, w - 6, 15, p.SELECT)
-        text(draw, x + 9, yy, options[i][:23], p.TEXT, SM)
+def popup(draw,p,title,options,selected,box=None):
+    if box is None:
+        width,height=int(draw.size.x),int(draw.size.y)
+        h=min(24+min(len(options),8)*17,height-70)
+        box=(20,max(43,(height-h)//2),width-40,h)
+    x,y,w,h=box
+    panel(draw,p,box,title,'%d/%d'%(selected+1,len(options)),p.PANEL)
+    bounded=Viewport(draw,(x+4,y+22,x+w-4,y+h-4))
+    capacity=max(1,(h-26)//17)
+    first=min(max(0,selected-capacity//2),max(0,len(options)-capacity))
+    for index in range(first,min(len(options),first+capacity)):
+        yy=y+25+(index-first)*17
+        if index==selected:
+            bounded._fill_rectangle(x+5,yy-2,w-10,16,p.SELECT)
+            bounded._rectangle(x+5,yy-2,w-10,16,p.ACCENT)
+        text(bounded,x+12,yy,options[index],p.TEXT,SM)
 
 
-def prompt(draw, p, title, detail, edit, message, error):
-    width = int(draw.size.x)
-    draw._fill_rectangle(0, theme.HEAD_HEIGHT, width, int(draw.size.y) - theme.HEAD_HEIGHT, p.BG)
-    text(draw, 12, 50, title, p.ACCENT, SM)
-    for i, line in enumerate(wrap(detail, 48)[:3]):
-        text(draw, 12, 70 + 10 * i, line, p.MUTED)
-    draw._rectangle(10, 108, width - 20, 22, p.ACCENT)
-    edit.draw(draw, 16, 113, width - 34, p.TEXT, p.ACCENT, SM)
-    for i, line in enumerate(wrap(message, 48)[:3]):
-        text(draw, 12, 140 + 10 * i, line, p.ERROR if error else p.MUTED)
+def prompt(draw,p,title,detail,edit,message,error,box=None):
+    if box is None:box=(8,43,int(draw.size.x)-16,int(draw.size.y)-60)
+    x,y,w,h=box
+    panel(draw,p,box,title)
+    bounded=Viewport(draw,(x+5,y+22,x+w-5,y+h-4))
+    lines=wrap(detail,max(1,(w-24)//6))[:2 if h>=110 else 1]
+    for i,line in enumerate(lines):text(bounded,x+10,y+25+10*i,line,p.MUTED)
+    ey=y+29+10*len(lines)
+    bounded._rectangle(x+8,ey,w-17,20,p.ACCENT)
+    edit.draw(bounded,x+14,ey+4,w-33,p.TEXT,p.ACCENT,SM)
+    text(bounded,x+10,ey+26,message,p.ERROR if error else p.MUTED)
 
 
 def results(draw, p, rows, selected, top, bottom):
@@ -567,11 +639,25 @@ def results(draw, p, rows, selected, top, bottom):
         text(draw, 10, y + 13, detail[:50], p.MUTED)
 
 
-def help_page(draw, p, lines, first):
-    capacity = (int(draw.size.y) - theme.FOOT_HEIGHT - theme.HEAD_HEIGHT - 8) // 11
-    for i, line in enumerate(lines[first:first + capacity]):
-        heading = line.endswith(':')
-        text(draw, 8 if heading else 14, theme.HEAD_HEIGHT + 6 + 11 * i, line, p.ACCENT if heading else p.TEXT)
+def help_capacity(bottom):
+    return max(1,(bottom-98)//11)
+
+
+def help_box(draw,p,lines,first,bottom):
+    capacity=help_capacity(bottom)
+    right=int(draw.size.x)-8
+    panel(draw,p,(8,43,right-8,bottom-46),'KEYBINDINGS',
+          '%d-%d / %d'%(first+1,min(first+capacity,len(lines)),len(lines)))
+    bounded=Viewport(draw,(14,65,right-12,bottom-25))
+    for i,line in enumerate(lines[first:first+capacity]):
+        text(bounded,18 if line.endswith(':') else 22,67+11*i,line,p.ACCENT if line.endswith(':') else p.TEXT)
+    # Scroll thumb and compact instructions stay inside the help box.
+    track=bottom-95
+    thumb=max(8,track*min(capacity,len(lines))//len(lines))
+    top=66+(track-thumb)*first//max(1,len(lines)-capacity)
+    draw._line(right-6,66,right-6,66+track,p.GRID)
+    draw._fill_rectangle(right-7,top,3,thumb,p.ACCENT)
+    text(draw,18,bottom-17,'UP/DOWN scroll   F9 / ESC close',p.MUTED)
 
 
 # ---------------------------------------------------------------- diagrams
@@ -579,20 +665,21 @@ def help_page(draw, p, lines, first):
 # title, unit, index in the at() results (samples() arrays are offset by one)
 QUANTITIES = {'V': ('Shear', 'kN', 0), 'M': ('Moment', 'kNm', 1), 'T': ('Slope', 'mrad', 2),
               'W': ('Deflection', 'mm', 3), 'N': ('Normal force', 'kN', 4)}
-PANEL_TOP, PANEL_H, PANEL_GAP = 62, 70, 4
+PANEL_TOP, PANEL_H, PANEL_GAP = 78, 72, 4
 
 
-def panel_bounds(index):
-    top = PANEL_TOP + index * (PANEL_H + PANEL_GAP)
-    return top, top + 11, top + PANEL_H - 2
+def panel_bounds(index,bottom=302):
+    h=max(30,(bottom-PANEL_TOP-2*PANEL_GAP)//3)
+    top=PANEL_TOP+index*(h+PANEL_GAP)
+    return top,top+11,top+h-2
 
 
-def diagram_cache(solution, line, view, panels):
+def diagram_cache(solution, line, view, panels, bottom=302, member=None):
     """Pixel polylines and scales for each panel, computed once per view."""
-    data = solution.samples(line, view)
+    data = solution.samples(line, view, member=member)
     S = data[0]
-    total = bm.line_offsets(solution.model, solution.lines[line])[1]
-    xs = [int(LEFT + (RIGHT - LEFT) * S[i] / total + 0.5) for i in range(len(S))]
+    start, total = diagram_range(solution,line,member)
+    xs = [int(LEFT + (RIGHT - LEFT) * (S[i]-start) / total + 0.5) for i in range(len(S))]
     out = []
     for slot, name in enumerate(panels):
         values = data[1 + QUANTITIES[name][2]]
@@ -606,7 +693,7 @@ def diagram_cache(solution, line, view, panels):
         span = hi - lo
         if span < 1e-9 * max(1.0, abs(hi), abs(lo)) or span == 0:
             span, lo, hi = 1.0, lo - 0.5, hi + 0.5
-        top, plot_top, plot_bottom = panel_bounds(slot)
+        top, plot_top, plot_bottom = panel_bounds(slot,bottom)
         scale = (plot_bottom - plot_top) / span
         ys = [int(plot_bottom - (values[i] - lo) * scale + 0.5) for i in range(len(values))]
         zero = int(plot_bottom - (0 - lo) * scale + 0.5)
@@ -617,26 +704,41 @@ def diagram_cache(solution, line, view, panels):
 COLORS = {'V': None, 'M': theme.AMBER, 'W': 0xF81F, 'T': 0x07E0, 'N': 0xFFE0}
 
 
-def diagrams(draw, p, solution, line, view, panels, cache, cursor_s, readout, note, marks, title):
+def diagram_range(solution,line,member=None):
+    run=solution.lines[line]
+    offsets,total=bm.line_offsets(solution.model,run)
+    if member is None:return 0.0,total
+    return offsets[run.index(member)],bm.member_length(solution.model,member)
+
+
+def diagram_header(draw,p,title,view_name,readout):
+    width=int(draw.size.x)
+    text(draw,16,47,title,p.TEXT,SM)
+    available=width-40-draw.len(title,SM)
+    while view_name and draw.len(view_name,SM)>available:view_name=view_name[:-1]
+    right_text(draw,width-16,47,view_name,p.ACCENT,SM)
+    text(draw,16,60,readout[:52],p.TEXT)
+
+
+def diagrams(draw, p, solution, line, view, panels, cache, cursor_s, readout, note, marks, title, bottom=302, member=None):
     width = int(draw.size.x)
-    total = bm.line_offsets(solution.model, solution.lines[line])[1]
-    cx = int(LEFT + (RIGHT - LEFT) * cursor_s / total + 0.5)
-    text(draw, 6, 27, title, p.TEXT, SM)
-    right_text(draw, width - 6, 27, solution.view_names()[view][:20], p.ACCENT, SM)
-    text(draw, 6, 41, readout[:52], p.TEXT)
+    start,total = diagram_range(solution,line,member)
+    cx = int(LEFT + (RIGHT - LEFT) * (cursor_s-start) / total + 0.5)
+    diagram_header(draw,p,title,solution.view_names()[view],readout)
     if note:
-        text(draw, 6, 51, note[:52], theme.AMBER)
+        text(draw, 16, 69, note[:52], theme.AMBER)
     run = solution.lines[line]
     offsets = dict(zip(run, bm.line_offsets(solution.model, run)[0]))
-    supports = [int(LEFT + (RIGHT - LEFT) * (offsets[s['m']] + s['x']) / total + 0.5)
-                for s in solution.model['supports'] if s['m'] in offsets]
+    supports = [int(LEFT + (RIGHT - LEFT) * (offsets[s['m']] + s['x']-start) / total + 0.5)
+                for s in solution.model['supports'] if s['m'] in offsets
+                and start <= offsets[s['m']]+s['x'] <= start+total]
     for slot, name in enumerate(panels):
         xs, ys, zero, lo, hi = cache[slot]
         title_text, unit, q = QUANTITIES[name]
-        top, plot_top, plot_bottom = panel_bounds(slot)
+        top, plot_top, plot_bottom = panel_bounds(slot,bottom)
         color = COLORS[name] or p.ACCENT
         shade = mix(p.BG, color, 1, 3)
-        draw._rectangle(LEFT - 2, top, RIGHT - LEFT + 5, PANEL_H, p.GRID)
+        draw._rectangle(LEFT - 2, top, RIGHT - LEFT + 5, plot_bottom-top+2, p.GRID)
         text(draw, LEFT + 1, top + 2, '%s %s' % (title_text, unit), color)
         peak = units.number(units.from_si(hi, unit), 3) + ' / ' + units.number(units.from_si(lo, unit), 3)
         right_text(draw, RIGHT, top + 2, peak, p.MUTED)
@@ -653,7 +755,7 @@ def diagrams(draw, p, solution, line, view, panels, cache, cursor_s, readout, no
             draw._line(xs[i - 1], ys[i - 1], xs[i], ys[i], color)
         for mark_s, mark_q in marks:
             if mark_q == name:
-                mx = int(LEFT + (RIGHT - LEFT) * mark_s / total + 0.5)
+                mx = int(LEFT + (RIGHT - LEFT) * (mark_s-start) / total + 0.5)
                 draw._circle(mx, plot_top - 3, 2, theme.AMBER)
         draw._line(cx, plot_top - 1, cx, plot_bottom + 1, p.TEXT)
 
@@ -661,7 +763,7 @@ def diagrams(draw, p, solution, line, view, panels, cache, cursor_s, readout, no
 OVERVIEW = ('M', 'V', 'N', 'W')
 
 
-def overview(draw, p, model, solution, view, quantity, cursor, current_line, box):
+def overview(draw, p, model, solution, view, quantity, cursor, current_line, box, active_member=None):
     """The whole structure with one quantity drawn along every member:
     moment on the tension side, shear and normal force on the member's left
     when positive, the deflected shape exaggerated."""
@@ -671,7 +773,8 @@ def overview(draw, p, model, solution, view, quantity, cursor, current_line, box
     shade = mix(p.BG, color, 1, 3)
     for m, member in enumerate(model['members']):
         a, b = v.p(*model['joints'][member['a']]), v.p(*model['joints'][member['b']])
-        thick(draw, a, b, p.TEXT if m in solution.lines[current_line] else p.MUTED, 24, 284)
+        color = p.ACCENT if m == active_member else p.TEXT if active_member is None and m in solution.lines[current_line] else p.MUTED
+        thick(draw, a, b, color, 24, 284)
     for s in model['supports']:
         x, y = v.p(*bm.point(model, s['m'], s['x']))
         support_shape(draw, x, y, s['kind'], p.MUTED)
@@ -684,7 +787,7 @@ def overview(draw, p, model, solution, view, quantity, cursor, current_line, box
             if quantity == 'W':
                 peak = max(peak, abs(d[6][i]))
     caption = title + ' ' + unit + (', tension side' if quantity == 'M' else '')
-    text(draw, 6, 62, caption, color)
+    text(draw, 16, 78, caption, color)
     if peak <= 1e-12:
         centre_text(draw, 160, 270, 'No %s in this view' % title.lower(), p.MUTED, SM)
         return

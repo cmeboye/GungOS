@@ -135,7 +135,7 @@ from engtools.calculator.statistics import OPTIONS,SAVE_DIRECTORY
 vm = ViewManager()
 vm.add(View('parent',lambda vm:None,lambda vm:True,lambda vm:None)); vm.switch_to('parent')
 vm.add(View('lab',lab.run,lab.start,lab.stop)); vm.switch_to('lab')
-lab._selected = len(lab.TOOLS)+4
+lab._enter('tools');lab._selected = 2
 
 def key(button):
     vm.input_manager._last_button = button

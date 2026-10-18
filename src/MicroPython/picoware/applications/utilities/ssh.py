@@ -15,9 +15,15 @@ import _thread
 from gc import collect
 from picoware.system.decorator import storage_required, wifi_required
 
-# The password lives in internal flash; older releases kept it on the SD card.
+# The complete connection profile lives in internal flash, never newly on SD.
 SSH_PASSWORD_SECRET = "ssh_password"
 LEGACY_SSH_PASSWORD_PATH = "picoware/ssh/password.txt"
+SSH_PROFILE_FIELDS = (
+    ("ssh_host", "host.txt", ""),
+    ("ssh_port", "port.txt", "22"),
+    ("ssh_username", "username.txt", ""),
+    (SSH_PASSWORD_SECRET, "password.txt", ""),
+)
 
 # View constants
 VIEW_MAIN_MENU = const(0)
@@ -1336,62 +1342,81 @@ def _handle_terminal_input(view_manager) -> None:
 
 
 def __load_ssh_credentials(view_manager) -> bool:
-    """Load SSH credentials from storage"""
+    """Load the on-chip profile and migrate old SD files without losing them."""
     global ssh_host, ssh_port, ssh_username, ssh_password
     from picoware.system import secrets
+
     storage = view_manager.storage
+    stored = secrets.load()
+    profile = {}
+    pending = {}
+    legacy_paths = []
+    for key, filename, default in SSH_PROFILE_FIELDS:
+        path = "picoware/ssh/" + filename
+        exists = storage.exists(path)
+        if exists:
+            legacy_paths.append((key, path))
+        value = stored.get(key)
+        if not isinstance(value, str):
+            legacy = storage.read(path) if exists else None
+            value = legacy if isinstance(legacy, str) else default
+            if isinstance(legacy, str):
+                pending[key] = value
+        profile[key] = value
 
-    stored_host = storage.read("picoware/ssh/host.txt")
-    stored_port = storage.read("picoware/ssh/port.txt")
-    stored_username = storage.read("picoware/ssh/username.txt")
-    stored_password = secrets.get(SSH_PASSWORD_SECRET, "")
-    # Older SD cards hold the password in plain text: move it to flash.
-    legacy_password = storage.read(LEGACY_SSH_PASSWORD_PATH) if storage.exists(LEGACY_SSH_PASSWORD_PATH) else ""
-    if legacy_password and secrets.update({SSH_PASSWORD_SECRET: legacy_password}):
-        storage.remove(LEGACY_SSH_PASSWORD_PATH)
-        stored_password = legacy_password
+    if pending:
+        if secrets.update(pending):
+            stored.update(pending)
+        else:
+            view_manager.log("SSH profile migration failed; old SD files retained.", 2)
 
-    if stored_host:
-        ssh_host = stored_host
-    if stored_port:
-        ssh_port = stored_port
-    else:
-        storage.write("picoware/ssh/port.txt", "22")
-        ssh_port = "22"
-    if stored_username:
-        ssh_username = stored_username
-    if stored_password:
-        ssh_password = stored_password
+    # Existing on-chip values take priority over stale files. Delete a legacy
+    # value only after that field has a successfully saved on-chip counterpart.
+    for key, path in legacy_paths:
+        if isinstance(stored.get(key), str) and not storage.remove(path):
+            view_manager.log("Could not remove an old SSH profile file from SD.", 2)
 
-    return ssh_host != "" and ssh_username != "" and ssh_password != ""
+    ssh_host = profile["ssh_host"]
+    ssh_port = profile["ssh_port"] or "22"
+    ssh_username = profile["ssh_username"]
+    ssh_password = profile[SSH_PASSWORD_SECRET]
+    return bool(ssh_host and ssh_username and ssh_password)
 
 
 def _keyboard_save(view_manager) -> bool:
-    """Keyboard callback function"""
+    """Save one profile field to internal flash before applying it in memory."""
     global ssh_host, ssh_port, ssh_username, ssh_password
-    storage = view_manager.storage
-    kb = view_manager.keyboard
+    from picoware.system import secrets
 
-    file_path = ""
-    if current_view == VIEW_KEYBOARD_HOST:
-        file_path = "picoware/ssh/host.txt"
-        ssh_host = kb.response
-    elif current_view == VIEW_KEYBOARD_PORT:
-        file_path = "picoware/ssh/port.txt"
-        ssh_port = kb.response
-    elif current_view == VIEW_KEYBOARD_USERNAME:
-        file_path = "picoware/ssh/username.txt"
-        ssh_username = kb.response
-    elif current_view == VIEW_KEYBOARD_PASSWORD:
-        from picoware.system import secrets
-        if not secrets.update({SSH_PASSWORD_SECRET: kb.response}):
-            return False
-        ssh_password = kb.response
-        return True
+    fields = {
+        VIEW_KEYBOARD_HOST: "ssh_host",
+        VIEW_KEYBOARD_PORT: "ssh_port",
+        VIEW_KEYBOARD_USERNAME: "ssh_username",
+        VIEW_KEYBOARD_PASSWORD: SSH_PASSWORD_SECRET,
+    }
+    key = fields.get(current_view)
+    if key is None:
+        return False
+    value = view_manager.keyboard.response
+    if not secrets.update({key: value}):
+        return False
 
-    if file_path:
-        return storage.write(file_path, kb.response)
-    return False
+    if key == "ssh_host":
+        ssh_host = value
+    elif key == "ssh_port":
+        ssh_port = value
+    elif key == "ssh_username":
+        ssh_username = value
+    else:
+        ssh_password = value
+
+    for field, filename, _ in SSH_PROFILE_FIELDS:
+        if field == key:
+            path = "picoware/ssh/" + filename
+            if view_manager.storage.exists(path) and not view_manager.storage.remove(path):
+                view_manager.log("Could not remove an old SSH profile file from SD.", 2)
+            break
+    return True
 
 
 def _keyboard_run(view_manager) -> bool:
@@ -1591,7 +1616,7 @@ def run(view_manager) -> None:
             try:
                 port = int(ssh_port) if ssh_port else 22
                 view_manager.log(
-                    f"Connecting to {ssh_host}:{port} as {ssh_username}..."
+                    "Connecting to the configured SSH server..."
                 )
                 success = _ssh_client.connect(
                     ssh_host, port, ssh_username, ssh_password

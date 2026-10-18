@@ -40,13 +40,13 @@ changing source checkout or compiler installation.
 Drawing uses the shared C gfx core, and presentation converts and sends only
 changed rows through DMA. `draw.swap()` reports how many rows were sent.
 
-The screen image lives in PSRAM by default. **System > Settings > Fast Drawing**
-moves it to on-chip SRAM: drawing is about 2.5× faster, but the 102,400-byte
+The screen image lives in PSRAM by default. The retained SD preference
+`fast_drawing` moves it to on-chip SRAM (its menu toggle has been removed): drawing is about 2.5× faster, but the 102,400-byte
 image comes out of the Python heap. Animated apps borrow SRAM only while open
 by calling `view_manager.request_fast_drawing()` in `start`; the view manager
 returns it when the view stops, including after a crash. Graph3D, Tetris and full-screen Lorenz do
 this. If there is no free 100 KB block, the screen stays in PSRAM and the
-Settings choice applies after a restart.
+saved preference applies after a restart.
 
 First device measurements (v1.1 performance test):
 

@@ -41,8 +41,6 @@ class LineEdit:
             self.cursor = 0
         elif button == keys.BUTTON_END:
             self.cursor = len(self.text)
-        elif button == keys.BUTTON_DELETE:
-            self.text = self.text[:self.cursor] + self.text[self.cursor + 1:]
         elif erase_key(vm, button):
             if self.cursor:
                 self.text = self.text[:self.cursor - 1] + self.text[self.cursor:]

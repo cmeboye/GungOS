@@ -66,9 +66,10 @@ PRIORITY={'move':1,'rotate':1,'menu':2,'hold':2,'lock':2,'line_fall':2,
 EFFECTS=('menu','move','rotate','clear','tetris','level','game_over','line_fall','lock')
 
 class Playback:
-    def __init__(self,enabled=True,volume=25,storage=None):
+    def __init__(self,enabled=True,volume=25,storage=None,music_enabled=True,effects_enabled=True):
         self.enabled,self.volume=bool(enabled),max(0,min(100,int(volume)))
         self.storage=storage
+        self.music_enabled,self.effects_enabled=bool(music_enabled),bool(effects_enabled)
         self.player,self.native,self.music,self.sink=None,None,None,None
         self.assets={}
         self.voices=[None,None];self.priorities=[0,0];self.pending=[]
@@ -86,28 +87,31 @@ class Playback:
         if self.storage is None or not self.storage.mount_vfs():raise OSError('Audio requires an SD card')
         return self.storage.vfs_prefix+'/'+path
     def ensure(self):
-        if self.player:return
+        if self.player and (not self.music_enabled or self.music is not None) and (not self.effects_enabled or self.assets):return
         from gc import collect,mem_free
         collect()
         if mem_free()<96*1024:raise MemoryError('Not enough heap for PCM audio and the UI reserve')
         try:import picoware_pcm
         except ImportError:raise RuntimeError('Tetris audio needs the new PCM firmware')
         self.native=picoware_pcm
-        self.buffers=[bytearray(FRAMES*2) for _ in range(4)]
-        self.zero=bytes(FRAMES*2)
-        self.music=Wave(self.path('music'),True)
+        if not self.buffers:
+            self.buffers=[bytearray(FRAMES*2) for _ in range(4)]
+            self.zero=bytes(FRAMES*2)
+        if self.music_enabled and self.music is None:self.music=Wave(self.path('music'),True)
         # Validate once and retain streaming readers. Repeated keys never reopen
         # files; the two voices refer to these readers, not independent handles.
-        for name in EFFECTS:self.assets[name]=Wave(self.path(name))
-        self.player=self.native.Player(RATE)
-        if platform in ('darwin','linux','win32'):
+        if self.effects_enabled:
+            for name in EFFECTS:
+                if name not in self.assets:self.assets[name]=Wave(self.path(name))
+        if self.player is None:self.player=self.native.Player(RATE)
+        if platform in ('darwin','linux','win32') and self.sink is None:
             import sim_tetris_audio
             self.sink=sim_tetris_audio.Output(RATE)
         self.error=''
     def rewind_queued(self):
         if self.player:
             queued=self.player.queued()
-            if self.music and self.music_active and queued:
+            if self.music and self.music_active and self.music_enabled and queued:
                 self.music.seek((self.music.position-queued)%self.music.frames)
             self.player.clear()
             if self.sink:self.sink.clear()
@@ -117,21 +121,28 @@ class Playback:
         self.pending=[]
     def restart(self):
         self.silence();self.paused=False;self.music_active=True;self.error=''
+        if self.music:self.music.seek(0)
         if self.enabled and self.volume:
             try:
-                self.ensure();self.music.seek(0);self.tick()
+                if self.music_enabled:
+                    self.ensure();self.music.seek(0)
+                self.tick()
             except Exception as exc:self.fail(exc)
     def pause(self,paused=True):
         self.silence();self.paused=bool(paused)
         if not self.paused:self.tick()
-    def configure(self,enabled,volume):
+    def configure(self,enabled,volume,music_enabled=None,effects_enabled=None):
         self.silence()
         self.enabled,self.volume=bool(enabled),max(0,min(100,int(volume)))
+        if music_enabled is None and effects_enabled is None:
+            music_enabled=effects_enabled=bool(enabled)
+        if music_enabled is not None:self.music_enabled=bool(music_enabled)
+        if effects_enabled is not None:self.effects_enabled=bool(effects_enabled)
         if self.enabled and self.volume:self.tick()
     def play(self,event,from_queue=False):
         self.last_event=event
-        if event=='game_over':self.music_active=False
-        if not self.enabled or not self.volume or self.paused or event not in PRIORITY:return
+        if event=='game_over':self.silence();self.music_active=False
+        if not self.enabled or not self.effects_enabled or not self.volume or self.paused or event not in PRIORITY:return
         try:
             self.ensure()
             if event=='game_over':
@@ -155,6 +166,7 @@ class Playback:
         except Exception as exc:self.fail(exc)
     def tick(self,now=None):
         if not self.enabled or not self.volume or self.paused:return
+        if not self.music_enabled and not any(self.voices) and not self.pending:return
         try:
             self.ensure()
             for _ in range(4):
@@ -162,10 +174,10 @@ class Playback:
                 if self.pending and not any(self.voices):
                     self.play(self.pending.pop(0),True)
                     if self.player is None:return
-                if not self.music_active and not any(self.voices):break
+                if not (self.music_active and self.music_enabled) and not any(self.voices):break
                 music,a,b,out=self.buffers
                 music_data=None
-                if self.music_active:self.music.read_into(music,self.zero);music_data=music
+                if self.music_active and self.music_enabled:self.music.read_into(music,self.zero);music_data=music
                 fx=[None,None]
                 important=any(v and p>=3 for v,p in zip(self.voices,self.priorities))
                 for i,buffer in enumerate((a,b)):

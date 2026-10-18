@@ -92,7 +92,7 @@ the formula bar/editor retains its full contents.
 
 ## Files
 
-F1 offers New, Open, Save, Save as, Import CSV, Export CSV and Load example.
+F1 offers New, Open, Save, Save as, Open CSV, Export CSV and Load example.
 The example is a parts-cost worksheet and is **not automatically saved**.
 
 Documents live in **`picoware/documents/eggcel/`**. `.egg` files are versioned
@@ -102,6 +102,16 @@ Files are limited to 48 KiB. Saves write and read-verify a temporary file before
 replacing the target, with a temporary `.bak` of existing documents. If recovery
 leaves a `.bak`, preserve/recover it before saving over that name again. This
 does not guarantee survival of every possible power failure.
+
+Open CSV opens the system's two-pane file browser, starting in `picoware` and
+remembering the last browsed folder for this session. It shows directories and
+CSV files anywhere on the SD card. Enter opens a folder or imports the selected
+CSV; Esc cancels. Unsaved changes are checked first, and invalid files leave the
+current workbook intact. Imported data opens as an unsaved workbook; Save creates
+an `.egg` file without overwriting the source CSV. Beam view's **Export CSV
+(Eggcel)** writes a sampled table in `picoware/engineering/exports` that fits
+Eggcel's 512 populated cells and A1:Z200 limits; its full-resolution export is
+intended for desktop spreadsheets.
 
 CSV exports calculated values, not formulas or formatting. CSV imports treat
 leading `=` as literal data, accept commas/doubled quotes/CRLF, and require

@@ -55,18 +55,84 @@ finally:
 assert Settings(storage).wifi_settings['password'] == 'kept-on-card'
 assert 'wifi_password' not in storage.deserialize(SETTINGS_PATH)
 
-# SSH: an old SD password file migrates; new passwords are written to flash only.
+# SSH: migrate all fields in one verified flash update, then remove SD copies.
 from picoware.applications.utilities import ssh
 storage.mkdir('picoware/ssh')
-for name, value in (('host.txt', 'example.local'), ('username.txt', 'pi'), ('password.txt', 'ssh-legacy')):
-    assert storage.write('picoware/ssh/' + name, value)
-assert getattr(ssh, '__load_ssh_credentials')(vm)
-assert ssh.ssh_password == 'ssh-legacy' and secrets.get('ssh_password') == 'ssh-legacy'
-assert not storage.exists('picoware/ssh/password.txt')
-ssh.current_view = ssh.VIEW_KEYBOARD_PASSWORD
-vm.keyboard.response = 'ssh-new'
-assert ssh._keyboard_save(vm)
-assert secrets.get('ssh_password') == 'ssh-new' and not storage.exists('picoware/ssh/password.txt')
+fields = (
+    ('ssh_host', 'host.txt', ssh.VIEW_KEYBOARD_HOST, 'example.local'),
+    ('ssh_port', 'port.txt', ssh.VIEW_KEYBOARD_PORT, '2222'),
+    ('ssh_username', 'username.txt', ssh.VIEW_KEYBOARD_USERNAME, 'pi'),
+    ('ssh_password', 'password.txt', ssh.VIEW_KEYBOARD_PASSWORD, 'ssh-legacy'),
+)
+load_ssh = getattr(ssh, '__load_ssh_credentials')
+for key, filename, mode, value in fields:
+    assert storage.write('picoware/ssh/' + filename, value)
+assert load_ssh(vm)
+for key, filename, mode, value in fields:
+    assert secrets.get(key) == value
+    assert not storage.exists('picoware/ssh/' + filename)
+assert ssh.ssh_host == 'example.local' and ssh.ssh_port == '2222'
+assert ssh.ssh_username == 'pi' and ssh.ssh_password == 'ssh-legacy'
+assert secrets.get('wifi_password') == 'kept-on-card'
+
+# Each editor writes flash only, and a fresh load restores the entire profile.
+new_values = ('new.example.local', '2200', 'engineer', 'ssh-new')
+for (key, filename, mode, _), value in zip(fields, new_values):
+    ssh.current_view = mode
+    vm.keyboard.response = value
+    assert ssh._keyboard_save(vm)
+    assert secrets.get(key) == value
+    assert not storage.exists('picoware/ssh/' + filename)
+ssh.ssh_host = ssh.ssh_port = ssh.ssh_username = ssh.ssh_password = ''
+assert load_ssh(vm)
+assert (ssh.ssh_host, ssh.ssh_port, ssh.ssh_username, ssh.ssh_password) == new_values
+
+# A failed edit must not change the active or saved connection profile.
+ssh.current_view = ssh.VIEW_KEYBOARD_USERNAME
+vm.keyboard.response = 'unsaved-user'
+secrets.update = lambda values: False
+try:
+    assert not ssh._keyboard_save(vm)
+    assert ssh.ssh_username == 'engineer' and secrets.get('ssh_username') == 'engineer'
+finally:
+    secrets.update = working_update
+
+# Device credentials win over stale cards, even an intentionally empty field.
+assert secrets.update({'ssh_username': ''})
+assert storage.write('picoware/ssh/username.txt', 'stale-user')
+assert not load_ssh(vm)
+assert ssh.ssh_username == '' and not storage.exists('picoware/ssh/username.txt')
+
+# If migration fails, retain every SD original for recovery and a later retry.
+assert secrets.update({key: None for key, _, _, _ in fields})
+for key, filename, mode, value in fields:
+    assert storage.write('picoware/ssh/' + filename, value)
+secrets.update = lambda values: False
+try:
+    assert load_ssh(vm)  # old values remain usable in RAM for this visit
+    for key, filename, mode, value in fields:
+        assert storage.read('picoware/ssh/' + filename) == value
+        assert key not in secrets.load()
+finally:
+    secrets.update = working_update
+assert load_ssh(vm)
+for key, filename, mode, value in fields:
+    assert secrets.get(key) == value and not storage.exists('picoware/ssh/' + filename)
+
+# Cleanup failure must not replace the verified on-chip value with a stale SD one.
+class ReadOnlyCleanup:
+    def exists(self, path): return storage.exists(path)
+    def read(self, path): return storage.read(path)
+    def remove(self, path): return False
+class SSHView:
+    storage = ReadOnlyCleanup()
+    def log(self, *args): pass
+assert storage.write('picoware/ssh/password.txt', 'stale-password')
+assert load_ssh(SSHView())
+assert ssh.ssh_password == 'ssh-legacy'
+assert storage.exists('picoware/ssh/password.txt')
+assert load_ssh(vm) and not storage.exists('picoware/ssh/password.txt')
+print('PASS: full SSH profile stays on-chip; verified migration, failed edits and stale/read-only SD recovery')
 
 # Web server access point: an SD password migrates; saving writes flash only.
 from picoware.applications.wifi import server

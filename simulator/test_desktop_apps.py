@@ -150,5 +150,5 @@ assert paint.page=='confirm'
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);assert vm.current_view.name=='desk' and paint.model is None
 key(vm.input_manager._key_esc);assert vm.current_view.name=='parent'
 vm.add(View('lab',PicoLAB.run,PicoLAB.start,PicoLAB.stop));vm.switch_to('lab')
-PicoLAB._selected=0;key(k.BUTTON_UP);assert PicoLAB._selected==len(PicoLAB.TOOLS)+4
+PicoLAB._selected=0;key(k.BUTTON_UP);assert PicoLAB._selected==2 and PicoLAB._page=='root'
 print('PASS: independent PicoDESK, equation entry, fonts/colours, SD verification, Paint fill/cancel/export and return')

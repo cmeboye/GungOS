@@ -125,6 +125,52 @@ EI = stiffness(m)
 near(sol.at(0, 3.0, 0)[3], -10e3 * 27 / (3 * EI) + 4e3 * 9 / (2 * EI))
 print('PASS: cantilever')
 
+# A global angled point force must give the same reactions, bending and
+# axial/transverse displacements as its analytical components. Check all
+# quadrants, cardinal axes, reversed magnitudes and a rotated member.
+for beam_angle in (0,37,90):
+    c,sine=cos(radians(beam_angle)),sin(radians(beam_angle))
+    for angle in (0,45,90,135,180,225,270,315,-45,765):
+        for magnitude in (10000,-10000):
+            m=bm.template(1)
+            bm.set_member(m,0,3,beam_angle)
+            _,_,c,sine,_=bm.member_axis(m,0)
+            m['loads']=[bm.point_load(0,3,magnitude,angle=angle)]
+            sol=bm.Solution(m)
+            axes={0:(1,0),90:(0,1),180:(-1,0),270:(0,-1)}
+            dx,dy=axes.get(angle%360,(cos(radians(angle%360)),sin(radians(angle%360))))
+            fx,fy=magnitude*dx,magnitude*dy
+            support,rx,ry,mz=sol.reactions(0)[0]
+            near(rx,-fx);near(ry,-fy);near(mz,-(3*c*fy-3*sine*fx))
+            applied=sol.applied(0);near(applied[0],fx);near(applied[1],fy)
+            values=bm.section_values(m['sections'][0])
+            u=(fx*c+fy*sine)*3/(values['E']*values['A'])
+            v=(-fx*sine+fy*c)*27/(3*values['E']*values['I'])
+            ux,uy=sol.displacement(*m['joints'][1],0)
+            near(ux*1000,(u*c-v*sine)*1000)
+            near(uy*1000,(u*sine+v*c)*1000)
+            balance(sol,0)
+            sol.free()
+m=bm.template(1);m['cases']=['A','B']
+m['loads']=[bm.point_load(0,3,8000,case=0,angle=315),bm.point_load(0,1,3000,case=1,angle=135)]
+m['combos']=[{'name':'ULS','factors':[1.35,1.5]}]
+sol=bm.Solution(m)
+for view in range(3):balance(sol,view)
+near(sol.applied(2)[0],(1.35*8000-1.5*3000)*cos(pi/4))
+near(sol.applied(2)[1],(-1.35*8000+1.5*3000)*sin(pi/4))
+sol.free()
+for invalid in (None,True,'45',float('nan'),float('inf'),-float('inf')):
+    m=bm.template(1);m['loads'][0]['dir']='angle';m['loads'][0]['angle']=invalid
+    try:bm.check(m)
+    except bm.ModelError as exc:assert 'finite' in str(exc)
+    else:raise AssertionError('Invalid point angle accepted')
+m=bm.template(0);m['loads'][0]['dir']='angle';m['loads'][0]['angle']=45
+try:bm.check(m)
+except bm.ModelError as exc:assert 'direction' in str(exc)
+else:raise AssertionError('Custom distributed direction accepted')
+print('PASS: angled point forces: all quadrants, cardinal axes, rotated members, reactions, displacements, signs, combinations and validation')
+
+
 # Two spans, uniform load: middle reaction 5wL/4 per span L, hogging wL^2/8.
 m = bm.template(4)
 sol = bm.Solution(m)
@@ -331,7 +377,7 @@ def pick(index):
     key(k.BUTTON_CENTER)
 
 
-lab._selected = 3
+lab._enter('structural');lab._selected = 0
 key(k.BUTTON_CENTER)
 a = ui()
 assert a.page == 'start' and a.model is None
@@ -339,10 +385,13 @@ shot('start')
 key(k.BUTTON_CENTER)                                   # simply supported template
 assert a.page == 'model' and a.solution is not None and a.problem is None
 shot('model')
-assert a.s == 0 and a.sel[0][0] == 'support'
+assert a.s == 0 and a.model_tab == 0 and a.sel[0][0] == 'member'
 key(k.BUTTON_RIGHT)
-assert a.s == 6.0
-key(k.BUTTON_LEFT)
+assert a.model_tab == 1 and a.sel[0][0] == 'support'
+key(k.BUTTON_DOWN)
+assert a.s == 6.0 and a.sel[0][1] is a.model['supports'][1]
+key(k.BUTTON_UP)
+assert a.s == 0 and a.sel[0][1] is a.model['supports'][0]
 # Add a point load: P inserts it, typing sets its position.
 text('p')
 assert a.sel[1] == 'x' and len(a.model['loads']) == 2
@@ -375,20 +424,23 @@ assert load['dir'] == 'right' and a.problem is None
 balance(a.solution, a.view)
 key(k.BUTTON_CENTER); pick(0)
 key(k.BUTTON_DOWN)
+assert a.sel[1] == 'angle'
+key(k.BUTTON_DOWN)
 assert a.sel[1] == 'case'
 key(k.BUTTON_CENTER)
 assert a.popup is not None
 esc()
 # Removing the left support makes a mechanism, shown on the beam; Z undoes.
+cursor = (a.line,a.s)
 key(k.BUTTON_LEFT)
-assert a.s == 0 and a.sel[0][0] == 'support'
+assert (a.line,a.s) == cursor and a.sel[0][0] == 'support'
 key(k.BUTTON_BACKSPACE)
 assert a.problem is not None and a.solution is None
 shot('model-problem')
 text('z')
 assert a.problem is None and len(a.model['supports']) == 2
 # The section editor: from the beam's own row, change material, shape and depth.
-a.sel = (('member', 0), 'edit')
+a.focus(('member', 0), 'edit')
 key(k.BUTTON_CENTER)
 assert a.page == 'section' and a.section is a.model['sections'][0]
 shot('section-i')
@@ -451,7 +503,7 @@ text('d'); assert a.third == 'T'
 shot('diagrams-slope')
 text('d'); assert a.third == 'W'
 # Load cases and a combination.
-key(k.BUTTON_F6)
+key(k.BUTTON_F3)
 assert a.page == 'options'
 a.menu_index = beam_app.OPTIONS.index('Load cases'); key(k.BUTTON_CENTER)
 assert a.page == 'cases'
@@ -497,19 +549,19 @@ text('v')
 key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
 assert a.page == 'diagrams'
 # Save, open and export.
-key(k.BUTTON_F6)
+key(k.BUTTON_F3)
 a.menu_index = beam_app.OPTIONS.index('Save'); key(k.BUTTON_CENTER)
 assert a.prompt is not None
 for _ in range(10): key(k.BUTTON_BACKSPACE)
 text('test beam'); key(k.BUTTON_CENTER)
 assert a.prompt is None and a.message == 'Saved test-beam', a.message
-a.menu_index = beam_app.OPTIONS.index('Export CSV'); key(k.BUTTON_CENTER)
-assert a.message.startswith('Exported test-beam-001.csv'), a.message
+a.menu_index = beam_app.OPTIONS.index('Export CSV (Eggcel)'); key(k.BUTTON_CENTER)
+assert a.message.startswith('Exported test-beam-eggcel-001.csv'), a.message
 a.menu_index = beam_app.OPTIONS.index('New beam'); key(k.BUTTON_CENTER)
 a.menu_index = 1; key(k.BUTTON_CENTER)               # cantilever
 assert a.model['supports'][0]['kind'] == 'Fixed'
 shot('cantilever')
-key(k.BUTTON_F6)
+key(k.BUTTON_F3)
 a.menu_index = beam_app.OPTIONS.index('Open'); key(k.BUTTON_CENTER)
 assert a.files == ['gable-frame', 'test-beam'], a.files
 a.menu_index = 1; key(k.BUTTON_CENTER)
@@ -517,13 +569,13 @@ assert a.model['name'] == 'test-beam' and a.model['cases'] == ['Dead', 'Live'] a
 # A beam saved by the first Beam Lab opens through the app.
 from json import dumps
 vm.storage.write(cases.CASE_DIRECTORY + '/old-beam.json', dumps(dict(old, version=1)))
-key(k.BUTTON_F6)
+key(k.BUTTON_F3)
 a.menu_index = beam_app.OPTIONS.index('Open'); key(k.BUTTON_CENTER)
 a.menu_index = a.files.index('old-beam'); key(k.BUTTON_CENTER)
 assert a.model['schema'] == 2 and len(a.model['members']) == 2 and a.problem is None, a.message
 shot('model-upgraded')
 # Frames: the portal template, runs, member angle, the whole-frame view.
-key(k.BUTTON_F6)
+key(k.BUTTON_F3)
 a.menu_index = beam_app.OPTIONS.index('New beam'); key(k.BUTTON_CENTER)
 a.menu_index = 7; key(k.BUTTON_CENTER)
 assert a.problem is None and not bm.is_straight_beam(a.model) and len(bm.lines(a.model)) == 3
@@ -563,7 +615,7 @@ key(k.BUTTON_F5)
 rows = a.result_rows()
 assert any(r[0] == 'Equilibrium' and r[1] == 'OK' for r in rows), [r for r in rows if r[0] == 'Equilibrium']
 shot('portal-results')
-key(k.BUTTON_F6)
+key(k.BUTTON_F3)
 a.menu_index = beam_app.OPTIONS.index('New beam'); key(k.BUTTON_CENTER)
 a.menu_index = 8; key(k.BUTTON_CENTER)
 assert a.problem is None
@@ -572,7 +624,7 @@ key(k.BUTTON_F4); text('f')
 shot('gable-moment')
 # Help, then leave; PicoLAB keeps the model for the next visit.
 text('?')
-assert a.page == 'help'
+assert a.help_open and a.page == 'diagrams'
 shot('help')
 esc(); esc(); esc()
 assert vm.get_view('beam_lab') is None

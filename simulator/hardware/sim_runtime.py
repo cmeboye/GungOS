@@ -119,8 +119,8 @@ KEY_NAMES.update({"alt-" + chr(97 + i): 0xE1 + i for i in range(26)})
 
 LIBRARY_ITEMS = {"apps": 0, "applications": 0, "system": 1, "comms": 2, "utils": 3, "utilities": 3}
 APPLICATION_ITEMS = {"picodesk": 0, "picolab": 1, "games": 2, "misc": 3}
-SYSTEM_ITEMS = {"settings": 0, "about": 1, "system info": 2, "bootloader": 3, "restart": 4, "shutdown": 5, "stop": 6}
-COMMS_ITEMS = {"bluetooth": 0, "infrared": 1, "ir": 1, "usb": 2, "wifi": 3}
+SYSTEM_ITEMS = {"settings": 0, "about": 1, "system info": 2, "restart": 3, "shutdown": 4}
+COMMS_ITEMS = {"bluetooth": 0, "usb": 1, "wifi": 2}
 UTILITY_ITEMS = {"file manager": 0, "filemanager": 0, "picoide": 1, "python editor": 1, "pythoneditor": 1, "python repl": 2, "repl": 2, "serial terminal": 3, "serial": 3, "ssh terminal": 4, "ssh": 4}
 SCRIPT_ITEMS = {"python apps": 0, "custom": 0}
 _MENU_ITEMS = {"apps": APPLICATION_ITEMS, "system": SYSTEM_ITEMS, "comms": COMMS_ITEMS, "utils": UTILITY_ITEMS, "scripts": SCRIPT_ITEMS}
@@ -992,11 +992,29 @@ def request_open(name):
                     break
     if parts and parts[0] not in ("apps", "system", "comms", "utils"):
         raise LaunchTargetError("Menu route not found: " + str(name))
-    if len(parts) > 3 or (len(parts) == 3 and parts[1] not in nested and parts[:2] != ["apps", "scripts"]):
+    lab_indices=None
+    if len(parts)>2 and parts[:2]==['apps','picolab']:
+        import PicoLAB as lab
+        tail=parts[2:]
+        aliases={'graph':('tools','graph'),'graph3d':('tools','graph3d'),
+                 'scientific calculator':('tools','scientific calculator'),
+                 'plot previews':('checks','plot previews'),
+                 'numerics checks':('checks','numerics check'),
+                 'numerics check':('checks','numerics check'),
+                 'beam lab':('modules','structural','beam view'),
+                 'beam view':('modules','structural','beam view')}
+        if len(tail)==1:tail=list(aliases.get(tail[0],tail))
+        page='root';lab_indices=[]
+        for item in tail:
+            entries=lab.MENUS.get(page,())
+            index=next((i for i,row in enumerate(entries) if item in (row[0].lower(),row[1].lower())),None)
+            if index is None:raise LaunchTargetError('PicoLAB route not found: '+str(name))
+            lab_indices.append(index);page=entries[index][0]
+    if lab_indices is None and (len(parts) > 3 or (len(parts) == 3 and parts[1] not in nested and parts[:2] != ["apps", "scripts"])):
         raise LaunchTargetError("Menu route is not a submenu: " + str(name))
     if len(parts) > 1 and parts[1] not in _MENU_ITEMS[parts[0]]:
         raise LaunchTargetError("Menu route not found: " + str(name))
-    if len(parts)>2:
+    if len(parts)>2 and lab_indices is None:
         choices=nested.get(parts[1],tuple(SCRIPT_ITEMS))
         if parts[2] not in choices:raise LaunchTargetError('Submenu route not found: '+str(name))
     from picoware.applications import library
@@ -1014,7 +1032,11 @@ def request_open(name):
     if len(parts)==1: return
     for _ in range(_MENU_ITEMS[parts[0]][parts[1]]): push_key(KEY_NAMES['down'])
     push_key(KEY_NAMES['enter'])
-    if len(parts)>2:
+    if lab_indices is not None:
+        for index in lab_indices:
+            for _ in range(index):push_key(KEY_NAMES['down'])
+            push_key(KEY_NAMES['enter'])
+    elif len(parts)>2:
         for _ in range(choices.index(parts[2])):push_key(KEY_NAMES['down'])
         push_key(KEY_NAMES['enter'])
 
