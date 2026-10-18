@@ -1,6 +1,12 @@
 /*
- * A beam model and its solve: nodes on the x axis, Euler-Bernoulli elements,
+ * A beam or plane-frame model and its solve: Euler-Bernoulli elements,
  * supports, springs, hinges, load cases and support settlement.
+ *
+ * A beam has its nodes on the x axis and two DOFs per node (v, theta). A
+ * frame has nodes anywhere in the x-y plane, three DOFs per node (u, v,
+ * theta) and elements that also carry axial force. Element loads and
+ * element results are in the element's local axes: x from the first node
+ * to the second, y turned 90 degrees counterclockwise from it.
  *
  * Memory comes in three caller-owned blocks, each sized before it is needed:
  *   model  - ps_model_bytes() before ps_model_init()
@@ -24,14 +30,16 @@
 #include "../core/dofmap.h"
 #include "../core/skyline.h"
 
-/* DOF flags for supports, springs and node loads. */
+/* DOF flags for supports, springs and node loads. PS_UX is for frames. */
 #define PS_UY 1u
 #define PS_RZ 2u
+#define PS_UX 4u
 /* Element end releases (hinges) for rotation. */
 #define PS_RELEASE_START 1u
 #define PS_RELEASE_END 2u
 
 #define PS_BEAM_DOF_PER_NODE 2
+#define PS_FRAME_DOF_PER_NODE 3
 
 typedef enum
 {
@@ -40,6 +48,8 @@ typedef enum
     PS_LOAD_POINT,  /* element force w1 at a */
     PS_LOAD_MOMENT, /* element counterclockwise moment w1 at a */
     PS_LOAD_LINE,   /* element line load from w1 at a to w2 at b */
+    PS_LOAD_AXIAL_POINT, /* frame element: force w1 along local x at a */
+    PS_LOAD_AXIAL_LINE,  /* frame element: w1 at a to w2 at b along local x */
 } ps_load_kind;
 
 /* Inputs are kept as float32: they arrive from Python as float32, so double
@@ -61,12 +71,14 @@ typedef enum
 typedef struct
 {
     int32_t nodes, elements, sections, load_capacity, cases;
+    int32_t dpn; /* DOFs per node: PS_BEAM_DOF_PER_NODE or PS_FRAME_DOF_PER_NODE */
     int32_t load_count;
     /* model block */
     float *x, *spring, *modulus, *inertia; /* float32 inputs, see ps_load */
+    float *y, *area;                       /* frames only (NULL for beams) */
     ps_load *load;
     int32_t *connect, *section_of;
-    uint8_t *fixed, *release;
+    uint8_t *fixed, *release; /* fixed: bit d set when DOF d is restrained */
     /* index block: numbering plus lookups built once at prepare */
     ps_dofmap map;
     int32_t *dof; /* map.dof: equation number, or PS_DOF_FIXED / PS_DOF_FREE_HINGE */
@@ -91,11 +103,19 @@ typedef struct
 size_t ps_model_bytes(int32_t nodes, int32_t elements, int32_t sections, int32_t loads);
 ps_status ps_model_init(ps_model *m, void *block, int32_t nodes, int32_t elements,
                         int32_t sections, int32_t loads, int32_t cases);
+/* The same for a plane frame. */
+size_t ps_frame_bytes(int32_t nodes, int32_t elements, int32_t sections, int32_t loads);
+ps_status ps_frame_init(ps_model *m, void *block, int32_t nodes, int32_t elements,
+                        int32_t sections, int32_t loads, int32_t cases);
 
 ps_status ps_model_node(ps_model *m, int32_t node, double x);
+/* Frames: a node anywhere in the plane. */
+ps_status ps_model_node_xy(ps_model *m, int32_t node, double x, double y);
 ps_status ps_model_support(ps_model *m, int32_t node, uint32_t flags);
 ps_status ps_model_spring(ps_model *m, int32_t node, uint32_t flag, double stiffness);
 ps_status ps_model_section(ps_model *m, int32_t section, double modulus, double inertia);
+/* Frames: cross-section area (m^2) for axial stiffness. */
+ps_status ps_model_section_area(ps_model *m, int32_t section, double area);
 ps_status ps_model_element(ps_model *m, int32_t element, int32_t start, int32_t end,
                            int32_t section, uint32_t releases);
 ps_status ps_model_load(ps_model *m, ps_load_kind kind, int32_t load_case, int32_t target,
@@ -111,16 +131,21 @@ ps_status ps_model_solve(ps_model *m, void *block, ps_precision precision, ps_co
 
 /* Results: NaN for the rotation of a node where every element end is a hinge. */
 double ps_model_displacement(const ps_model *m, int32_t load_case, int32_t node, uint32_t flag);
-/* Forces the nodes apply to the element: fy1, m1, fy2, m2. */
+/* Forces the nodes apply to the element, in local axes: fy1, m1, fy2, m2 for
+ * a beam; fx1, fy1, m1, fx2, fy2, m2 for a frame. */
 ps_status ps_model_end_forces(const ps_model *m, int32_t load_case, int32_t element, double *forces);
-/* Support reaction (or spring force) on a node: fy, mz. */
+/* Support reaction (or spring force) on a node, global: fy, mz for a beam;
+ * fx, fy, mz for a frame. */
 ps_status ps_model_reaction(const ps_model *m, int32_t load_case, int32_t node, double *reaction);
-/* At x from the element start: shear, moment, slope, deflection. */
+/* At x from the element start, local axes: shear, moment, slope, deflection
+ * (v), normal force (tension +) and axial displacement (u). out holds 6;
+ * the last two are 0 for a beam. */
 ps_status ps_model_section_at(const ps_model *m, int32_t load_case, int32_t element,
                               double x, double *out);
 /* samples evenly spaced sections from start to end of the element; any
  * output may be NULL. */
 ps_status ps_model_diagram(const ps_model *m, int32_t load_case, int32_t element, int32_t samples,
-                           float *shear, float *moment, float *slope, float *deflection);
+                           float *shear, float *moment, float *slope, float *deflection,
+                           float *normal, float *axial);
 
 #endif

@@ -66,6 +66,27 @@ b.at(1, 0.75)                                # (shear, moment, slope, deflection
 b.diagram(1, 64, None, moments, None, None)  # fill array('f') buffers
 ```
 
+Plane frames use the same methods on `ps.Frame`, with three DOFs per node
+(`ps.UX`, `ps.UY`, `ps.RZ`), nodes anywhere in the plane and an area for
+axial stiffness:
+
+```python
+f = ps.Frame(nodes=4, elements=3, loads=4)
+f.section(0, 210e9, 8.36e-5, 5.38e-3)        # E, I, A
+f.node(0, 0, 0); f.node(1, 0, 4); f.node(2, 6, 4); f.node(3, 6, 0)
+f.element(0, 0, 1); f.element(1, 1, 2); f.element(2, 3, 2)
+f.support(0, ps.UX | ps.UY | ps.RZ); f.support(3, ps.UX | ps.UY | ps.RZ)
+f.line(0, 1, 0.0, 6.0, -10e3)                # element loads in local axes
+f.axial_line(0, 0, 0.0, 4.0, -1e3)           # along the element: axial_point too
+f.solve()
+f.reaction(0)                                # (fx, fy, mz)
+f.at(1, 3.0)                                 # (+ normal force, axial displacement)
+f.axial_diagram(1, 64, normal, axial)
+```
+
+A frame element's local x runs from its first node to its second, local y
+90 degrees counterclockwise from it. Normal force is tension positive.
+
 Other loads: `point(case, e, a, P)`, `moment(case, e, a, M)`,
 `node_load(case, node, ps.UY or ps.RZ, value)`, `settle(case, node, flag,
 delta)`. Hinges: `element(e, a, b, section, ps.RELEASE_START | ps.RELEASE_END)`.
@@ -226,7 +247,11 @@ host. The tests compare against closed-form results:
 - triangular, partial trapezoidal, point and moment loads;
 - superposition of load cases;
 - scrambled node numbering (checks reordering);
-- every error path.
+- every error path;
+- frames: a horizontal frame member against the beam, an inclined
+  cantilever (bending and axial), axial point and line loads, portal frame
+  equilibrium, invariance when the whole frame is rotated, hinged knees,
+  and the frame-only errors.
 
 The solver is also checked against dense arithmetic, and condensation and
 reordering are tested on their own.
@@ -242,10 +267,10 @@ The tests are also run under AddressSanitizer and UBSan.
 ## Next
 
 1. Calibrate the AUTO precision threshold with the device benchmark.
-2. The beam suite in picoLAB: model editor, diagrams, max/min values,
-   load cases.
-3. 2-D frames on the same DOF map (3 DOF per node, element rotation), then
-   trusses.
+2. ~~The beam suite in picoLAB~~: done as Beam Lab
+   ([guide](../../../guides/BeamLab.md)). Envelopes over combinations next.
+3. ~~2-D frames on the same DOF map~~: done (`ps.Frame`). Trusses (pinned
+   members, axial only) and inclined supports next.
 4. Formulas as solver inputs: load functions w(x) and other user-written
    data for the suites, through `Formula`.
 5. Later solvers: banded/dense LU with pivoting, real and complex (circuits);

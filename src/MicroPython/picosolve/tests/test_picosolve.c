@@ -129,7 +129,7 @@ static double reaction(beam *b, int c, int node, int d)
 
 static double section(beam *b, int c, int e, double x, int what)
 {
-    double out[4];
+    double out[6];
     CHECK(ps_model_section_at(&b->m, c, e, x, out) == PS_OK);
     return out[what];
 }
@@ -206,7 +206,7 @@ static void invariants(beam *b)
         double v_scale = 1e-300, t_scale = 1e-300;
         for (int e = 0; e < m->elements; e++)
         {
-            double mid[4];
+            double mid[6];
             double half = 0.5 * ((double)m->x[m->connect[2 * e + 1]] - (double)m->x[m->connect[2 * e]]);
             ps_model_section_at(m, c, e, half, mid);
             v_scale = fabs(mid[3]) > v_scale ? fabs(mid[3]) : v_scale;
@@ -224,7 +224,7 @@ static void invariants(beam *b)
             int n2 = m->connect[2 * e + 1];
             double length = (double)m->x[n2] - (double)m->x[m->connect[2 * e]];
             double v2 = ps_model_displacement(m, c, n2, PS_UY);
-            double end[4];
+            double end[6];
             ps_model_section_at(m, c, e, length, end);
                         checks++;
             if (fabs(end[3] - v2) > 1e-9 * v_scale)
@@ -711,17 +711,17 @@ static void test_diagram(void)
         S = 7
     };
     float v[S], mo[S], sl[S], de[S];
-    CHECK(ps_model_diagram(&b.m, 0, 1, S, v, mo, sl, de) == PS_OK);
+    CHECK(ps_model_diagram(&b.m, 0, 1, S, v, mo, sl, de, NULL, NULL) == PS_OK);
     for (int i = 0; i < S; i++)
     {
-        double out[4];
+        double out[6];
         ps_model_section_at(&b.m, 0, 1, (L / 2) * i / (S - 1), out);
         NEAR((double)v[i], (double)(float)out[0]);
         NEAR((double)mo[i], (double)(float)out[1]);
         NEAR((double)de[i], (double)(float)out[3]);
     }
-    CHECK(ps_model_diagram(&b.m, 0, 1, S, NULL, mo, NULL, NULL) == PS_OK);
-    CHECK(ps_model_diagram(&b.m, 0, 1, 1, v, mo, sl, de) == PS_ERR_ARGUMENT);
+    CHECK(ps_model_diagram(&b.m, 0, 1, S, NULL, mo, NULL, NULL, NULL, NULL) == PS_OK);
+    CHECK(ps_model_diagram(&b.m, 0, 1, 1, v, mo, sl, de, NULL, NULL) == PS_ERR_ARGUMENT);
     beam_free(&b);
 }
 
@@ -809,6 +809,259 @@ static void beam_suite(void)
     benchmark();
 }
 
+/* ------------------------------------------------------------------------ */
+/* Plane frames                                                             */
+/* ------------------------------------------------------------------------ */
+
+/* Inclined members have float32 coordinates: compare at float32 accuracy. */
+#define NEARF(got, want)                                                         \
+    do                                                                           \
+    {                                                                            \
+        double g_ = (got), w_ = (want);                                          \
+        checks++;                                                                \
+        if (!near(g_, w_, 1e-6))                                                 \
+        {                                                                        \
+            failures++;                                                          \
+            printf("FAIL %s:%d: %s = %.12g, want %.12g\n", __FILE__, __LINE__, \
+                   #got, g_, w_);                                                \
+        }                                                                        \
+    } while (0)
+
+enum
+{
+    NORMAL = 4,
+    AXIAL = 5,
+};
+
+static void frame_new(beam *b, int nodes, int elements, int sections, int loads, int cases)
+{
+    memset(b, 0, sizeof(*b));
+    b->model_block = malloc(ps_frame_bytes(nodes, elements, sections, loads));
+    CHECK(ps_frame_init(&b->m, b->model_block, nodes, elements, sections, loads, cases) == PS_OK);
+}
+
+static double frame_reaction(beam *b, int c, int node, int d)
+{
+    double r[3];
+    CHECK(ps_model_reaction(&b->m, c, node, r) == PS_OK);
+    return r[d];
+}
+
+/* A horizontal frame member gives the beam's results, with no axial force. */
+static void test_frame_matches_beam(void)
+{
+    const double Lf = 6.0, E = 2.1e11, I = 8.36e-5, A = 5.38e-3, w = -5e3;
+    beam b;
+    frame_new(&b, 3, 2, 1, 2, 1);
+    for (int i = 0; i < 3; i++)
+        CHECK(ps_model_node_xy(&b.m, i, Lf * i / 2, 0.0) == PS_OK);
+    ps_model_section(&b.m, 0, E, I);
+    CHECK(ps_model_section_area(&b.m, 0, A) == PS_OK);
+    for (int e = 0; e < 2; e++)
+    {
+        ps_model_element(&b.m, e, e, e + 1, 0, 0);
+        ps_model_load(&b.m, PS_LOAD_LINE, 0, e, 0, 0.0, Lf / 2, w, w);
+    }
+    ps_model_support(&b.m, 0, PS_UX | PS_UY);
+    ps_model_support(&b.m, 2, PS_UY);
+    CHECK(beam_solve(&b) == PS_OK);
+    CHECK(b.m.equations == 6);
+    NEAR(section(&b, 0, 0, Lf / 2, MOMENT), -w * Lf * Lf / 8);
+    NEAR(section(&b, 0, 0, Lf / 2, DEFLECTION), 5 * w * Lf * Lf * Lf * Lf / (384 * E * I));
+    NEAR(section(&b, 0, 0, Lf / 2, NORMAL), 0.0);
+    NEAR(frame_reaction(&b, 0, 0, 0), 0.0);
+    NEAR(frame_reaction(&b, 0, 0, 1), -w * Lf / 2);
+    NEAR(ps_model_displacement(&b.m, 0, 1, PS_UY), 5 * w * Lf * Lf * Lf * Lf / (384 * E * I));
+    beam_free(&b);
+}
+
+/* An inclined cantilever with a vertical tip load: bending and axial parts. */
+static void test_frame_inclined_cantilever(void)
+{
+    const double Lf = 4.0, E = 2.0e11, I = 2.0e-5, A = 1.0e-3, Pf = 8e3, t = 0.5235987755982988;
+    const double c = cos(t), s = sin(t);
+    beam b;
+    frame_new(&b, 2, 1, 1, 1, 1);
+    ps_model_node_xy(&b.m, 0, 0.0, 0.0);
+    ps_model_node_xy(&b.m, 1, Lf * c, Lf * s);
+    ps_model_section(&b.m, 0, E, I);
+    ps_model_section_area(&b.m, 0, A);
+    ps_model_element(&b.m, 0, 0, 1, 0, 0);
+    ps_model_support(&b.m, 0, PS_UX | PS_UY | PS_RZ);
+    CHECK(ps_model_load(&b.m, PS_LOAD_NODE, 0, 1, PS_UY, 0, 0, -Pf, 0) == PS_OK);
+    CHECK(beam_solve(&b) == PS_OK);
+    const double q = -Pf * c, n = -Pf * s; /* local transverse and axial parts */
+    const double v = q * Lf * Lf * Lf / (3 * E * I), u = n * Lf / (E * A);
+    NEARF(ps_model_displacement(&b.m, 0, 1, PS_UX), c * u - s * v);
+    NEARF(ps_model_displacement(&b.m, 0, 1, PS_UY), s * u + c * v);
+    NEARF(ps_model_displacement(&b.m, 0, 1, PS_RZ), q * Lf * Lf / (2 * E * I));
+    NEARF(frame_reaction(&b, 0, 0, 0), 0.0);
+    NEARF(frame_reaction(&b, 0, 0, 1), Pf);
+    NEARF(frame_reaction(&b, 0, 0, 2), Pf * Lf * c);
+    NEARF(section(&b, 0, 0, 0.0, MOMENT), q * Lf);
+    NEARF(section(&b, 0, 0, Lf / 3, NORMAL), n);
+    NEARF(section(&b, 0, 0, Lf, AXIAL), u);
+    double f[6];
+    CHECK(ps_model_end_forces(&b.m, 0, 0, f) == PS_OK);
+    NEARF(f[3], n); /* the tip node pushes the element with the load's axial part */
+    beam_free(&b);
+}
+
+/* A column under its own weight, as an axial line load. */
+static void test_frame_axial_line(void)
+{
+    const double H = 3.0, E = 3.0e10, I = 1.0e-3, A = 0.09, q = 2.25e3;
+    beam b;
+    frame_new(&b, 2, 1, 1, 2, 1);
+    ps_model_node_xy(&b.m, 0, 0.0, 0.0);
+    ps_model_node_xy(&b.m, 1, 0.0, H);
+    ps_model_section(&b.m, 0, E, I);
+    ps_model_section_area(&b.m, 0, A);
+    ps_model_element(&b.m, 0, 0, 1, 0, 0);
+    ps_model_support(&b.m, 0, PS_UX | PS_UY | PS_RZ);
+    CHECK(ps_model_load(&b.m, PS_LOAD_AXIAL_LINE, 0, 0, 0, 0.0, H, -q, -q) == PS_OK);
+    CHECK(beam_solve(&b) == PS_OK);
+    NEAR(section(&b, 0, 0, 0.0, NORMAL), -q * H);
+    NEAR(section(&b, 0, 0, H / 3, NORMAL), -q * 2 * H / 3);
+    NEAR(section(&b, 0, 0, H, NORMAL), 0.0);
+    NEAR(section(&b, 0, 0, H, AXIAL), -q * H * H / (2 * E * A));
+    NEAR(ps_model_displacement(&b.m, 0, 1, PS_UY), -q * H * H / (2 * E * A));
+    NEAR(frame_reaction(&b, 0, 0, 1), q * H);
+    NEAR(section(&b, 0, 0, H / 2, MOMENT), 0.0);
+    /* A point load along the axis halfway up. */
+    ps_model_clear_loads(&b.m);
+    CHECK(ps_model_load(&b.m, PS_LOAD_AXIAL_POINT, 0, 0, 0, H / 2, 0.0, -q, 0.0) == PS_OK);
+    CHECK(beam_solve(&b) == PS_OK);
+    NEAR(section(&b, 0, 0, H / 4, NORMAL), -q);
+    NEAR(section(&b, 0, 0, 3 * H / 4, NORMAL), 0.0);
+    NEAR(section(&b, 0, 0, H, AXIAL), -q * H / 2 / (E * A));
+    float normal[5], axial[5];
+    CHECK(ps_model_diagram(&b.m, 0, 0, 5, NULL, NULL, NULL, NULL, normal, axial) == PS_OK);
+    NEAR((double)normal[1], -q);
+    NEAR((double)axial[4], -q * H / 2 / (E * A));
+    beam_free(&b);
+}
+
+/* Portal frame: two fixed columns and a beam, rotated by phi. Uniform load
+ * on the beam and a sideways point load at the top left. */
+static void portal(beam *b, double phi, double hinge, int top_hinges)
+{
+    const double H = 4.0, Lf = 6.0, c = cos(phi), s = sin(phi);
+    const double px[4] = {0.0, 0.0, Lf, Lf}, py[4] = {0.0, H, H, 0.0};
+    frame_new(b, 4, 3, 1, 3, 1);
+    for (int i = 0; i < 4; i++)
+        ps_model_node_xy(&b->m, i, c * px[i] - s * py[i], s * px[i] + c * py[i]);
+    ps_model_section(&b->m, 0, 2.1e11, 8.36e-5);
+    ps_model_section_area(&b->m, 0, 5.38e-3);
+    ps_model_element(&b->m, 0, 0, 1, 0, top_hinges ? PS_RELEASE_END : 0);
+    ps_model_element(&b->m, 1, 1, 2, 0, 0);
+    ps_model_element(&b->m, 2, 2, 3, 0, top_hinges ? PS_RELEASE_START : 0);
+    for (int i = 0; i < 4; i += 3)
+        ps_model_support(&b->m, i, hinge ? (PS_UX | PS_UY) : (PS_UX | PS_UY | PS_RZ));
+    ps_model_load(&b->m, PS_LOAD_LINE, 0, 1, 0, 0.0, Lf, -10e3, -10e3);
+    /* 5 kN to the right, turned with the frame. */
+    ps_model_load(&b->m, PS_LOAD_NODE, 0, 1, PS_UX, 0, 0, 5e3 * c, 0);
+    ps_model_load(&b->m, PS_LOAD_NODE, 0, 1, PS_UY, 0, 0, 5e3 * s, 0);
+}
+
+static void test_frame_portal(void)
+{
+    beam a, b;
+    portal(&a, 0.0, 0, 0);
+    CHECK(beam_solve(&a) == PS_OK);
+    /* Equilibrium of the whole frame. */
+    double fx = 0, fy = 0, mz = 0;
+    for (int i = 0; i < 4; i += 3)
+    {
+        double r[3];
+        ps_model_reaction(&a.m, 0, i, r);
+        fx += r[0];
+        fy += r[1];
+        mz += r[2] + (i == 3 ? 6.0 * r[1] : 0.0);
+    }
+    NEAR(fx, -5e3);
+    NEAR(fy, 60e3);
+    NEAR(mz, 60e3 * 3.0 + 5e3 * 4.0);
+    /* The same frame turned by 37 degrees: identical member forces. */
+    portal(&b, 0.6457718232379019, 0, 0);
+    CHECK(beam_solve(&b) == PS_OK);
+    for (int e = 0; e < 3; e++)
+        for (int q = 0; q < 6; q++)
+            if (q != SLOPE)
+                for (int k = 0; k <= 4; k++)
+                {
+                    const double length = e == 1 ? 6.0 : 4.0;
+                    /* Rotated coordinates are float32 inputs: compare at float32 accuracy. */
+                    const double got = section(&b, 0, e, length * k / 4, q);
+                    const double want = section(&a, 0, e, length * k / 4, q);
+                    checks++;
+                    if (!near(got, want, 1e-5))
+                    {
+                        failures++;
+                        printf("FAIL rotated portal e%d q%d k%d: %.9g vs %.9g\n", e, q, k, got, want);
+                    }
+                }
+    beam_free(&a);
+    beam_free(&b);
+    /* Three-hinged frame (pinned feet, hinges at both knees here): the knee
+     * moments vanish. Without the sideways load it is symmetric. */
+    portal(&a, 0.0, 1, 1);
+    ps_model_clear_loads(&a.m);
+    ps_model_load(&a.m, PS_LOAD_LINE, 0, 1, 0, 0.0, 6.0, -10e3, -10e3);
+    ps_model_load(&a.m, PS_LOAD_NODE, 0, 1, PS_UX, 0, 0, 0.0, 0);
+    /* Pinned feet and hinged knees make a mechanism sideways... */
+    CHECK(beam_solve(&a) == PS_ERR_MECHANISM);
+    beam_free(&a);
+    /* ...so keep the left knee rigid: one hinge at the right knee. */
+    portal(&a, 0.0, 1, 0);
+    a.m.release[2] = PS_RELEASE_START;
+    CHECK(beam_solve(&a) == PS_OK);
+    NEAR(section(&a, 0, 2, 0.0, MOMENT), 0.0);
+    NEAR(section(&a, 0, 1, 6.0, MOMENT), 0.0);
+    NEAR(section(&a, 0, 0, 0.0, MOMENT), 0.0);
+    beam_free(&a);
+}
+
+static void test_frame_errors(void)
+{
+    beam b;
+    /* Beams refuse frame inputs. */
+    beam_new(&b, 2, 1, 1, 2, 1);
+    CHECK(ps_model_node_xy(&b.m, 0, 0.0, 1.0) == PS_ERR_ARGUMENT);
+    CHECK(ps_model_section_area(&b.m, 0, 1.0) == PS_ERR_ARGUMENT);
+    CHECK(ps_model_support(&b.m, 0, PS_UX) == PS_ERR_ARGUMENT);
+    CHECK(ps_model_load(&b.m, PS_LOAD_AXIAL_POINT, 0, 0, 0, 0.0, 0.0, 1.0, 0.0) == PS_ERR_ARGUMENT);
+    beam_free(&b);
+    /* A frame needs an area, and something to stop it sliding. */
+    frame_new(&b, 3, 2, 1, 1, 1);
+    for (int i = 0; i < 3; i++)
+        ps_model_node_xy(&b.m, i, 2.0 * i, 0.0);
+    ps_model_section(&b.m, 0, 2e11, 1e-5);
+    ps_model_element(&b.m, 0, 0, 1, 0, 0);
+    ps_model_element(&b.m, 1, 1, 2, 0, 0);
+    ps_model_support(&b.m, 0, PS_UY);
+    ps_model_support(&b.m, 2, PS_UY);
+    CHECK(beam_solve(&b) == PS_ERR_SECTION);
+    ps_model_section_area(&b.m, 0, 1e-3);
+    CHECK(beam_solve(&b) == PS_ERR_MECHANISM);
+    CHECK(b.m.error_dof == 0); /* horizontal movement */
+    ps_model_support(&b.m, 0, PS_UX | PS_UY);
+    CHECK(beam_solve(&b) == PS_OK);
+    /* Two nodes in the same place make a zero-length element. */
+    ps_model_node_xy(&b.m, 1, 0.0, 0.0);
+    CHECK(beam_solve(&b) == PS_ERR_GEOMETRY);
+    beam_free(&b);
+}
+
+static void frame_suite(void)
+{
+    test_frame_matches_beam();
+    test_frame_inclined_cantilever();
+    test_frame_axial_line();
+    test_frame_portal();
+    test_frame_errors();
+}
+
 int main(void)
 {
     test_skyline_against_dense();
@@ -816,8 +1069,10 @@ int main(void)
     test_rcm();
     test_single_memory();
     beam_suite();
+    frame_suite();
     first_precision = PS_SINGLE;
     beam_suite();
+    frame_suite();
     printf("%s: %d checks, %d failures\n", failures ? "FAIL" : "PASS", checks, failures);
     return failures ? 1 : 0;
 }

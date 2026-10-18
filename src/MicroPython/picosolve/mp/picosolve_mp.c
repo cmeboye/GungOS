@@ -12,6 +12,14 @@
  *   b.end_forces(e, case=0); b.at(e, x, case=0) -> (shear, moment, slope, deflection)
  *   b.diagram(e, samples, shear, moment, slope, deflection, case=0)
  *
+ *   f = ps.Frame(nodes, elements, sections=1, loads=16, cases=1)  # plane frame
+ *   f.node(i, x, y); f.section(s, E, I, A); f.support(i, ps.UX | ps.UY | ps.RZ)
+ *   element loads are in local axes; also f.axial_point(case, e, a, P) and
+ *   f.axial_line(case, e, a, b, w1, w2); f.reaction(i) -> (fx, fy, mz);
+ *   f.end_forces(e) -> (fx1, fy1, m1, fx2, fy2, m2);
+ *   f.at(e, x) -> (shear, moment, slope, deflection, normal, axial)
+ *   f.axial_diagram(e, samples, normal, axial, case=0)
+ *
  *   f = ps.Formula("sin(x)*cos(y)", ("x", "y"), constants={"pi": math.pi})
  *   f(1.0, 2.0) -> float, or None where Python would raise or not be finite
  *   f.map(out, xs, 0.5)      # array('f') inputs or scalars -> results kept
@@ -60,6 +68,7 @@ typedef struct
 } beam_obj_t;
 
 const mp_obj_type_t picosolve_beam_type;
+const mp_obj_type_t picosolve_frame_type;
 
 /* The model, refusing one whose memory free() released. */
 static beam_obj_t *beam(mp_obj_t self)
@@ -77,8 +86,10 @@ static void editable(beam_obj_t *b)
     b->ready = false;
 }
 
-static const char *dof_name(int32_t dof)
+static const char *dof_name(const beam_obj_t *b, int32_t dof)
 {
+    if (b->m.dpn == PS_FRAME_DOF_PER_NODE)
+        return dof == 0 ? "horizontal movement" : dof == 1 ? "vertical movement" : "rotation";
     return dof == 1 ? "rotation" : "vertical movement";
 }
 
@@ -96,21 +107,27 @@ static void raise_status(beam_obj_t *b, ps_status status)
         if (item >= 0)
             mp_raise_msg_varg(&mp_type_SolveError,
                               MP_ERROR_TEXT("structure can move: %s of node %d is free (add a support or remove a hinge)"),
-                              dof_name(dof), (int)item);
+                              dof_name(b, dof), (int)item);
         mp_raise_msg(&mp_type_SolveError, MP_ERROR_TEXT("structure can move (add a support)"));
     case PS_ERR_UNCONNECTED:
         mp_raise_msg_varg(&mp_type_SolveError, MP_ERROR_TEXT("node %d is not attached to any element"), (int)item);
     case PS_ERR_GEOMETRY:
         mp_raise_msg_varg(&mp_type_SolveError,
-                          MP_ERROR_TEXT("element %d needs two different nodes, left to right"), (int)item);
+                          b->m.dpn == PS_FRAME_DOF_PER_NODE
+                              ? MP_ERROR_TEXT("element %d needs two nodes in different places")
+                              : MP_ERROR_TEXT("element %d needs two different nodes, left to right"),
+                          (int)item);
     case PS_ERR_SECTION:
-        mp_raise_msg_varg(&mp_type_SolveError, MP_ERROR_TEXT("section %d needs E and I above zero"), (int)item);
+        mp_raise_msg_varg(&mp_type_SolveError, b->m.dpn == PS_FRAME_DOF_PER_NODE
+                                                   ? MP_ERROR_TEXT("section %d needs E, I and A above zero")
+                                                   : MP_ERROR_TEXT("section %d needs E and I above zero"),
+                          (int)item);
     case PS_ERR_LOAD:
         mp_raise_msg_varg(&mp_type_SolveError, MP_ERROR_TEXT("load %d lies outside its element"), (int)item);
     case PS_ERR_SUPPORT:
         mp_raise_msg_varg(&mp_type_SolveError,
                           MP_ERROR_TEXT("node %d %s: springs need a free direction, settlements a support"),
-                          (int)item, dof_name(dof));
+                          (int)item, dof_name(b, dof));
     case PS_ERR_STATE:
         mp_raise_msg(&mp_type_SolveError, MP_ERROR_TEXT("solve the model first"));
     case PS_ERR_ACCURACY:
@@ -146,8 +163,9 @@ static void replace(void **slot, size_t *slot_bytes, size_t bytes)
 /* Building                                                                 */
 /* ------------------------------------------------------------------------ */
 
-static mp_obj_t beam_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all)
+static mp_obj_t model_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all)
 {
+    const bool frame = type == &picosolve_frame_type;
     enum
     {
         ARG_nodes,
@@ -173,9 +191,11 @@ static mp_obj_t beam_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
     beam_obj_t *b = mp_obj_malloc(beam_obj_t, type);
     b->index_block = b->value_block = NULL;
     b->index_bytes = b->value_bytes = 0;
-    b->model_bytes = ps_model_bytes(nodes, elements, sections, loads);
+    b->model_bytes = frame ? ps_frame_bytes(nodes, elements, sections, loads)
+                           : ps_model_bytes(nodes, elements, sections, loads);
     b->model_block = m_malloc(b->model_bytes);
-    check(ps_model_init(&b->m, b->model_block, nodes, elements, sections, loads, cases));
+    check(frame ? ps_frame_init(&b->m, b->model_block, nodes, elements, sections, loads, cases)
+                : ps_model_init(&b->m, b->model_block, nodes, elements, sections, loads, cases));
     b->ctl.cancel = b->ctl.done = b->ctl.total = 0;
     b->status = PS_OK;
     b->precision = PRECISION_AUTO;
@@ -184,13 +204,22 @@ static mp_obj_t beam_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
     return MP_OBJ_FROM_PTR(b);
 }
 
-static mp_obj_t beam_node(mp_obj_t self, mp_obj_t i, mp_obj_t x)
+/* node(i, x) on a beam; node(i, x, y) on a frame. */
+static mp_obj_t beam_node(size_t n, const mp_obj_t *args)
 {
-    editable(beam(self));
-    check(ps_model_node(&beam(self)->m, mp_obj_get_int(i), (double)mp_obj_get_float(x)));
+    beam_obj_t *b = beam(args[0]);
+    editable(b);
+    const mp_int_t i = mp_obj_get_int(args[1]);
+    const double x = (double)mp_obj_get_float(args[2]);
+    if (b->m.dpn == PS_FRAME_DOF_PER_NODE)
+        check(ps_model_node_xy(&b->m, i, x, n > 3 ? (double)mp_obj_get_float(args[3]) : 0.0));
+    else if (n > 3)
+        mp_raise_ValueError(MP_ERROR_TEXT("beam nodes lie on x; use a Frame for x, y"));
+    else
+        check(ps_model_node(&b->m, i, x));
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_3(beam_node_obj, beam_node);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_node_obj, 3, 4, beam_node);
 
 static mp_obj_t beam_support(mp_obj_t self, mp_obj_t i, mp_obj_t flags)
 {
@@ -210,15 +239,22 @@ static mp_obj_t beam_spring(size_t n, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_spring_obj, 4, 4, beam_spring);
 
+/* section(s, E, I) on a beam; section(s, E, I, A) on a frame. */
 static mp_obj_t beam_section(size_t n, const mp_obj_t *args)
 {
-    (void)n;
-    editable(beam(args[0]));
-    check(ps_model_section(&beam(args[0])->m, mp_obj_get_int(args[1]), (double)mp_obj_get_float(args[2]),
+    beam_obj_t *b = beam(args[0]);
+    editable(b);
+    check(ps_model_section(&b->m, mp_obj_get_int(args[1]), (double)mp_obj_get_float(args[2]),
                            (double)mp_obj_get_float(args[3])));
+    if (n > 4)
+    {
+        if (b->m.dpn != PS_FRAME_DOF_PER_NODE)
+            mp_raise_ValueError(MP_ERROR_TEXT("a beam section has no area; use a Frame"));
+        check(ps_model_section_area(&b->m, mp_obj_get_int(args[1]), (double)mp_obj_get_float(args[4])));
+    }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_section_obj, 4, 4, beam_section);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_section_obj, 4, 5, beam_section);
 
 static mp_obj_t beam_element(size_t n, const mp_obj_t *args)
 {
@@ -270,7 +306,35 @@ static mp_obj_t beam_line(size_t n, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_line_obj, 6, 7, beam_line);
 
-/* node_load(case, node, flag, value): force (UY) or moment (RZ) on a node. */
+static void frame_only(mp_obj_t self)
+{
+    if (beam(self)->m.dpn != PS_FRAME_DOF_PER_NODE)
+        mp_raise_ValueError(MP_ERROR_TEXT("axial loads need a Frame"));
+}
+
+/* axial_point(case, element, a, P): force along the element's local x at a. */
+static mp_obj_t beam_axial_point(size_t n, const mp_obj_t *args)
+{
+    (void)n;
+    frame_only(args[0]);
+    add_load(args[0], PS_LOAD_AXIAL_POINT, args[1], args[2], 0, (double)mp_obj_get_float(args[3]), 0.0,
+             (double)mp_obj_get_float(args[4]), 0.0);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_axial_point_obj, 5, 5, beam_axial_point);
+
+/* axial_line(case, element, a, b, w1, w2=w1): load per metre along local x. */
+static mp_obj_t beam_axial_line(size_t n, const mp_obj_t *args)
+{
+    frame_only(args[0]);
+    const double w1 = (double)mp_obj_get_float(args[5]);
+    add_load(args[0], PS_LOAD_AXIAL_LINE, args[1], args[2], 0, (double)mp_obj_get_float(args[3]),
+             (double)mp_obj_get_float(args[4]), w1, n > 6 ? (double)mp_obj_get_float(args[6]) : w1);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_axial_line_obj, 6, 7, beam_axial_line);
+
+/* node_load(case, node, flag, value): force (UX, UY) or moment (RZ) on a node. */
 static mp_obj_t beam_node_load(size_t n, const mp_obj_t *args)
 {
     (void)n;
@@ -446,7 +510,7 @@ static int32_t case_arg(size_t n, const mp_obj_t *args, size_t index, const beam
 
 static mp_obj_t tuple_of(const double *v, size_t count)
 {
-    mp_obj_t items[4];
+    mp_obj_t items[6];
     for (size_t i = 0; i < count; i++)
         items[i] = mp_obj_new_float((mp_float_t)v[i]);
     return mp_obj_new_tuple(count, items);
@@ -465,13 +529,14 @@ static mp_obj_t beam_displacement(size_t n, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_displacement_obj, 3, 4, beam_displacement);
 
-/* reaction(node, case=0) -> (fy, mz) the support (or spring) applies. */
+/* reaction(node, case=0) -> (fy, mz), or (fx, fy, mz) for a frame: what the
+ * support (or spring) applies. */
 static mp_obj_t beam_reaction(size_t n, const mp_obj_t *args)
 {
     beam_obj_t *b = solved(args[0]);
-    double r[2];
+    double r[3];
     check(ps_model_reaction(&b->m, case_arg(n, args, 2, b), mp_obj_get_int(args[1]), r));
-    return tuple_of(r, 2);
+    return tuple_of(r, (size_t)b->m.dpn);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_reaction_obj, 2, 3, beam_reaction);
 
@@ -479,20 +544,21 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_reaction_obj, 2, 3, beam_reactio
 static mp_obj_t beam_end_forces(size_t n, const mp_obj_t *args)
 {
     beam_obj_t *b = solved(args[0]);
-    double f[4];
+    double f[6];
     check(ps_model_end_forces(&b->m, case_arg(n, args, 2, b), mp_obj_get_int(args[1]), f));
-    return tuple_of(f, 4);
+    return tuple_of(f, 2 * (size_t)b->m.dpn);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_end_forces_obj, 2, 3, beam_end_forces);
 
-/* at(element, x, case=0) -> (shear, moment, slope, deflection). */
+/* at(element, x, case=0) -> (shear, moment, slope, deflection), plus
+ * (normal, axial displacement) for a frame. */
 static mp_obj_t beam_at(size_t n, const mp_obj_t *args)
 {
     beam_obj_t *b = solved(args[0]);
-    double out[4];
+    double out[6];
     check(ps_model_section_at(&b->m, case_arg(n, args, 3, b), mp_obj_get_int(args[1]),
                               (double)mp_obj_get_float(args[2]), out));
-    return tuple_of(out, 4);
+    return tuple_of(out, b->m.dpn == PS_FRAME_DOF_PER_NODE ? 6 : 4);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_at_obj, 3, 4, beam_at);
 
@@ -517,10 +583,24 @@ static mp_obj_t beam_diagram(size_t n, const mp_obj_t *args)
         mp_raise_ValueError(MP_ERROR_TEXT("need at least 2 samples"));
     check(ps_model_diagram(&b->m, case_arg(n, args, 7, b), mp_obj_get_int(args[1]), samples,
                            float_buffer(args[3], samples), float_buffer(args[4], samples),
-                           float_buffer(args[5], samples), float_buffer(args[6], samples)));
+                           float_buffer(args[5], samples), float_buffer(args[6], samples), NULL, NULL));
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_diagram_obj, 7, 8, beam_diagram);
+
+/* axial_diagram(element, samples, normal, axial, case=0): frames only. */
+static mp_obj_t beam_axial_diagram(size_t n, const mp_obj_t *args)
+{
+    frame_only(args[0]);
+    beam_obj_t *b = solved(args[0]);
+    const mp_int_t samples = mp_obj_get_int(args[2]);
+    if (samples < 2)
+        mp_raise_ValueError(MP_ERROR_TEXT("need at least 2 samples"));
+    check(ps_model_diagram(&b->m, case_arg(n, args, 5, b), mp_obj_get_int(args[1]), samples,
+                           NULL, NULL, NULL, NULL, float_buffer(args[3], samples), float_buffer(args[4], samples)));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(beam_axial_diagram_obj, 5, 6, beam_axial_diagram);
 
 /* info() -> dict: equations, stored values, precision, refinement steps,
  * smallest pivot ratio (how well conditioned), memory per block. */
@@ -568,6 +648,8 @@ static const mp_rom_map_elem_t beam_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_point), MP_ROM_PTR(&beam_point_obj)},
     {MP_ROM_QSTR(MP_QSTR_moment), MP_ROM_PTR(&beam_moment_obj)},
     {MP_ROM_QSTR(MP_QSTR_line), MP_ROM_PTR(&beam_line_obj)},
+    {MP_ROM_QSTR(MP_QSTR_axial_point), MP_ROM_PTR(&beam_axial_point_obj)},
+    {MP_ROM_QSTR(MP_QSTR_axial_line), MP_ROM_PTR(&beam_axial_line_obj)},
     {MP_ROM_QSTR(MP_QSTR_node_load), MP_ROM_PTR(&beam_node_load_obj)},
     {MP_ROM_QSTR(MP_QSTR_settle), MP_ROM_PTR(&beam_settle_obj)},
     {MP_ROM_QSTR(MP_QSTR_clear_loads), MP_ROM_PTR(&beam_clear_loads_obj)},
@@ -583,6 +665,7 @@ static const mp_rom_map_elem_t beam_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_end_forces), MP_ROM_PTR(&beam_end_forces_obj)},
     {MP_ROM_QSTR(MP_QSTR_at), MP_ROM_PTR(&beam_at_obj)},
     {MP_ROM_QSTR(MP_QSTR_diagram), MP_ROM_PTR(&beam_diagram_obj)},
+    {MP_ROM_QSTR(MP_QSTR_axial_diagram), MP_ROM_PTR(&beam_axial_diagram_obj)},
     {MP_ROM_QSTR(MP_QSTR_info), MP_ROM_PTR(&beam_info_obj)},
     {MP_ROM_QSTR(MP_QSTR_free), MP_ROM_PTR(&beam_del_obj)},
 };
@@ -592,7 +675,15 @@ MP_DEFINE_CONST_OBJ_TYPE(
     picosolve_beam_type,
     MP_QSTR_Beam,
     MP_TYPE_FLAG_NONE,
-    make_new, beam_make_new,
+    make_new, model_make_new,
+    locals_dict, &beam_locals);
+
+/* A plane frame: the same methods, three DOFs per node. */
+MP_DEFINE_CONST_OBJ_TYPE(
+    picosolve_frame_type,
+    MP_QSTR_Frame,
+    MP_TYPE_FLAG_NONE,
+    make_new, model_make_new,
     locals_dict, &beam_locals);
 
 /* ------------------------------------------------------------------------ */
@@ -960,10 +1051,12 @@ static const mp_rom_map_elem_t picosolve_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_iso_slab), MP_ROM_PTR(&geom_iso_slab_obj)},
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_picosolve)},
     {MP_ROM_QSTR(MP_QSTR_Beam), MP_ROM_PTR(&picosolve_beam_type)},
+    {MP_ROM_QSTR(MP_QSTR_Frame), MP_ROM_PTR(&picosolve_frame_type)},
     {MP_ROM_QSTR(MP_QSTR_Formula), MP_ROM_PTR(&picosolve_formula_type)},
     {MP_ROM_QSTR(MP_QSTR_SolveError), MP_ROM_PTR(&mp_type_SolveError)},
     {MP_ROM_QSTR(MP_QSTR_UY), MP_ROM_INT(PS_UY)},
     {MP_ROM_QSTR(MP_QSTR_RZ), MP_ROM_INT(PS_RZ)},
+    {MP_ROM_QSTR(MP_QSTR_UX), MP_ROM_INT(PS_UX)},
     {MP_ROM_QSTR(MP_QSTR_RELEASE_START), MP_ROM_INT(PS_RELEASE_START)},
     {MP_ROM_QSTR(MP_QSTR_RELEASE_END), MP_ROM_INT(PS_RELEASE_END)},
     {MP_ROM_QSTR(MP_QSTR_AUTO), MP_ROM_INT(PRECISION_AUTO)},
