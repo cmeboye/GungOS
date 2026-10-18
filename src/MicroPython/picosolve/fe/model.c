@@ -1,10 +1,13 @@
 #include "model.h"
 #include "beam.h"
 #include "../core/dense.h"
-#include "../core/order.h"
 #include <math.h>
 
 #define DPN PS_BEAM_DOF_PER_NODE
+/* Single precision refinement: give up after this many steps, or when a step
+ * shrinks the correction by less than half. */
+#define PS_REFINE_MAX 30
+#define PS_REFINE_TOLERANCE 1e-13
 
 static size_t align8(size_t n)
 {
@@ -35,6 +38,10 @@ static ps_status fail(ps_model *m, ps_status status, int32_t item, int32_t dof)
     m->error_dof = dof;
     return status;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Building the model                                                       */
+/* ------------------------------------------------------------------------ */
 
 size_t ps_model_bytes(int32_t nodes, int32_t elements, int32_t sections, int32_t loads)
 {
@@ -83,6 +90,8 @@ ps_status ps_model_init(ps_model *m, void *block, int32_t nodes, int32_t element
     }
     m->equations = 0;
     m->profile = 0;
+    m->precision = PS_DOUBLE;
+    m->refinements = 0;
     m->error_item = m->error_dof = -1;
     edited(m);
     return PS_OK;
@@ -175,12 +184,25 @@ void ps_model_clear_loads(ps_model *m)
     edited(m);
 }
 
+/* ------------------------------------------------------------------------ */
+/* Preparing: checks, numbering, lookups                                    */
+/* ------------------------------------------------------------------------ */
+
+static int element_nodes(const void *model, int32_t e, int32_t *nodes)
+{
+    const ps_model *m = model;
+    nodes[0] = m->connect[2 * e];
+    nodes[1] = m->connect[2 * e + 1];
+    return 2;
+}
+
 size_t ps_model_index_bytes(const ps_model *m)
 {
-    size_t n = (size_t)m->nodes, e = (size_t)m->elements;
-    return align8(n * DPN * sizeof(int32_t)) + align8((n * DPN + 1) * sizeof(uint32_t)) +
+    size_t n = (size_t)m->nodes, e = (size_t)m->elements, l = (size_t)m->load_capacity;
+    return ps_dofmap_bytes(m->nodes, DPN, 2 * m->elements) +
            align8((n + 1) * sizeof(int32_t)) + align8(2 * e * sizeof(int32_t)) +
-           2 * align8(n * sizeof(int32_t)) + align8(n);
+           align8((e + 1) * sizeof(int32_t)) + align8((n + 1) * sizeof(int32_t)) +
+           2 * align8(l * sizeof(int32_t));
 }
 
 static double element_length(const ps_model *m, int32_t e)
@@ -205,49 +227,31 @@ static uint32_t released_dofs(const ps_model *m, int32_t e)
     return mask;
 }
 
-static void element_equations(const ps_model *m, int32_t e, int32_t *eq)
+static int is_element_load(const ps_load *l)
 {
-    for (int end = 0; end < 2; end++)
-        for (int d = 0; d < DPN; d++)
-        {
-            int32_t v = m->dof[m->connect[2 * e + end] * DPN + d];
-            eq[end * DPN + d] = v >= 0 ? v : -1;
-        }
+    return l->kind == PS_LOAD_POINT || l->kind == PS_LOAD_MOMENT || l->kind == PS_LOAD_LINE;
 }
 
-/* Number the free DOFs node by node in the given order; return the profile. */
-static uint32_t number(ps_model *m, const int32_t *order)
+/* Compressed lists: ptr[k]..ptr[k+1] index into items. ptr has groups + 1 entries. */
+static void list_finish(int32_t *ptr, int32_t groups)
 {
-    int32_t next = 0;
-    for (int32_t k = 0; k < m->nodes; k++)
-    {
-        int32_t node = order ? order[k] : k;
-        for (int d = 0; d < DPN; d++)
-            if (m->dof[node * DPN + d] >= 0)
-                m->dof[node * DPN + d] = next++;
-    }
-    m->equations = next;
-    ps_sky_heights_init(m->ptr, next);
-    for (int32_t e = 0; e < m->elements; e++)
-    {
-        int32_t eq[PS_BEAM_DOF];
-        element_equations(m, e, eq);
-        ps_sky_heights_add(m->ptr, eq, PS_BEAM_DOF);
-    }
-    return ps_sky_heights_finish(m->ptr, next);
+    for (int32_t i = 0; i < groups; i++)
+        ptr[i + 1] += ptr[i];
 }
 
 ps_status ps_model_prepare(ps_model *m, void *block)
 {
     uint8_t *cursor = block;
-    const int32_t nn = m->nodes, ne = m->elements;
-    m->dof = take(&cursor, (size_t)nn * DPN * sizeof(int32_t));
-    m->ptr = take(&cursor, ((size_t)nn * DPN + 1) * sizeof(uint32_t));
-    m->xadj = take(&cursor, ((size_t)nn + 1) * sizeof(int32_t));
-    m->adj = take(&cursor, 2 * (size_t)ne * sizeof(int32_t));
-    m->perm = take(&cursor, (size_t)nn * sizeof(int32_t));
-    m->level = take(&cursor, (size_t)nn * sizeof(int32_t));
-    m->mask = take(&cursor, (size_t)nn);
+    const int32_t nn = m->nodes, ne = m->elements, nl = m->load_count;
+    const size_t map_bytes = ps_dofmap_bytes(nn, DPN, 2 * ne);
+    ps_dofmap_init(&m->map, take(&cursor, map_bytes), nn, DPN, 2 * ne);
+    m->dof = m->map.dof;
+    m->incident_ptr = take(&cursor, ((size_t)nn + 1) * sizeof(int32_t));
+    m->incident = take(&cursor, 2 * (size_t)ne * sizeof(int32_t));
+    m->element_load_ptr = take(&cursor, ((size_t)ne + 1) * sizeof(int32_t));
+    m->node_load_ptr = take(&cursor, ((size_t)nn + 1) * sizeof(int32_t));
+    m->element_load = take(&cursor, (size_t)m->load_capacity * sizeof(int32_t));
+    m->node_load = take(&cursor, (size_t)m->load_capacity * sizeof(int32_t));
     m->state = PS_STATE_EDITED;
     m->error_item = m->error_dof = -1;
 
@@ -261,22 +265,34 @@ ps_status ps_model_prepare(ps_model *m, void *block)
         if (!(element_length(m, e) > 0.0))
             return fail(m, PS_ERR_GEOMETRY, e, -1);
     }
-    /* xadj first counts element ends per node, and rigid ends in level. */
+
+    /* Node -> element ends; also counts rigid (unreleased) rotation ends. */
+    int32_t *rigid = m->map.level; /* free until numbering */
     for (int32_t i = 0; i <= nn; i++)
-        m->xadj[i] = 0;
+        m->incident_ptr[i] = 0;
     for (int32_t i = 0; i < nn; i++)
-        m->level[i] = 0;
+        rigid[i] = 0;
     for (int32_t e = 0; e < ne; e++)
         for (int end = 0; end < 2; end++)
         {
             int32_t node = m->connect[2 * e + end];
-            m->xadj[node + 1]++;
+            m->incident_ptr[node + 1]++;
             if (!(m->release[e] & (end ? PS_RELEASE_END : PS_RELEASE_START)))
-                m->level[node]++;
+                rigid[node]++;
         }
+    list_finish(m->incident_ptr, nn);
+    for (int32_t i = 0; i < nn; i++)
+        m->map.perm[i] = m->incident_ptr[i];
+    for (int32_t e = 0; e < ne; e++)
+        for (int end = 0; end < 2; end++)
+        {
+            int32_t node = m->connect[2 * e + end];
+            m->incident[m->map.perm[node]++] = 2 * e + end;
+        }
+
     for (int32_t i = 0; i < nn; i++)
     {
-        if (m->xadj[i + 1] == 0)
+        if (m->incident_ptr[i + 1] == m->incident_ptr[i])
             return fail(m, PS_ERR_UNCONNECTED, i, -1);
         for (int d = 0; d < DPN; d++)
         {
@@ -284,21 +300,28 @@ ps_status ps_model_prepare(ps_model *m, void *block)
             if (fixed && m->spring[i * DPN + d] > 0.0)
                 return fail(m, PS_ERR_SUPPORT, i, d);
             int32_t code = fixed ? PS_DOF_FIXED : 0;
-            if (d == 1 && !fixed && m->level[i] == 0 && m->spring[i * DPN + d] == 0.0)
+            if (d == 1 && !fixed && rigid[i] == 0 && m->spring[i * DPN + d] == 0.0)
                 code = PS_DOF_FREE_HINGE;
             m->dof[i * DPN + d] = code;
         }
     }
-    for (int32_t k = 0; k < m->load_count; k++)
+
+    /* Check loads, then group them by element and by node. */
+    for (int32_t i = 0; i <= ne; i++)
+        m->element_load_ptr[i] = 0;
+    for (int32_t i = 0; i <= nn; i++)
+        m->node_load_ptr[i] = 0;
+    for (int32_t k = 0; k < nl; k++)
     {
         const ps_load *l = &m->load[k];
-        if (l->kind == PS_LOAD_NODE || l->kind == PS_LOAD_SETTLE)
+        if (!is_element_load(l))
         {
             int32_t code = m->dof[l->target * DPN + l->dof];
             if (l->kind == PS_LOAD_SETTLE && code != PS_DOF_FIXED)
                 return fail(m, PS_ERR_SUPPORT, l->target, l->dof);
             if (l->kind == PS_LOAD_NODE && code == PS_DOF_FREE_HINGE && l->w1 != 0.0)
                 return fail(m, PS_ERR_MECHANISM, l->target, l->dof);
+            m->node_load_ptr[l->target + 1]++;
             continue;
         }
         const double length = element_length(m, l->target);
@@ -308,31 +331,39 @@ ps_status ps_model_prepare(ps_model *m, void *block)
             ok = ok && l->b > l->a && l->b <= length + slack;
         if (!ok)
             return fail(m, PS_ERR_LOAD, k, -1);
+        m->element_load_ptr[l->target + 1]++;
     }
-    /* Node graph in compressed form, then reverse Cuthill-McKee. */
-    for (int32_t i = 0; i < nn; i++)
-        m->xadj[i + 1] += m->xadj[i];
-    for (int32_t i = 0; i < nn; i++)
-        m->level[i] = m->xadj[i];
-    for (int32_t e = 0; e < ne; e++)
+    list_finish(m->element_load_ptr, ne);
+    list_finish(m->node_load_ptr, nn);
     {
-        int32_t a = m->connect[2 * e], b = m->connect[2 * e + 1];
-        m->adj[m->level[a]++] = b;
-        m->adj[m->level[b]++] = a;
+        /* Fill cursors live in map.perm (nn) and map.adj (2 * ne >= ne). */
+        int32_t *ecur = m->map.adj, *ncur = m->map.perm;
+        for (int32_t i = 0; i < ne; i++)
+            ecur[i] = m->element_load_ptr[i];
+        for (int32_t i = 0; i < nn; i++)
+            ncur[i] = m->node_load_ptr[i];
+        for (int32_t k = 0; k < nl; k++)
+        {
+            const ps_load *l = &m->load[k];
+            if (is_element_load(l))
+                m->element_load[ecur[l->target]++] = k;
+            else
+                m->node_load[ncur[l->target]++] = k;
+        }
     }
-    ps_rcm(nn, m->xadj, m->adj, m->perm, m->level, m->mask);
-    uint32_t natural = number(m, NULL);
-    uint32_t reordered = number(m, m->perm);
-    m->profile = reordered < natural ? reordered : number(m, NULL);
+
+    ps_status status = ps_dofmap_number(&m->map, ne, element_nodes, m);
+    if (status != PS_OK)
+        return status;
+    m->equations = m->map.equations;
+    m->profile = m->map.profile;
     m->state = PS_STATE_PREPARED;
     return PS_OK;
 }
 
-size_t ps_model_value_bytes(const ps_model *m)
-{
-    return align8((size_t)m->profile * sizeof(double)) +
-           align8((size_t)m->cases * (size_t)m->equations * sizeof(double));
-}
+/* ------------------------------------------------------------------------ */
+/* Solving                                                                  */
+/* ------------------------------------------------------------------------ */
 
 static void beam_load(const ps_load *l, ps_beam_load *out)
 {
@@ -345,11 +376,6 @@ static void beam_load(const ps_load *l, ps_beam_load *out)
     out->w2 = l->w2;
 }
 
-static int is_element_load(const ps_load *l)
-{
-    return l->kind == PS_LOAD_POINT || l->kind == PS_LOAD_MOMENT || l->kind == PS_LOAD_LINE;
-}
-
 /* Element stiffness with hinges condensed out. */
 static void condensed_stiffness(const ps_model *m, int32_t e, double *k)
 {
@@ -357,57 +383,56 @@ static void condensed_stiffness(const ps_model *m, int32_t e, double *k)
     ps_condense(k, NULL, PS_BEAM_DOF, released_dofs(m, e));
 }
 
-ps_status ps_model_solve(ps_model *m, void *block, ps_control *ctl)
+static void element_equations(const ps_model *m, int32_t e, int32_t *eq)
 {
-    if (m->state == PS_STATE_EDITED)
-        return PS_ERR_STATE;
-    uint8_t *cursor = block;
-    const int32_t n = m->equations;
-    m->sky.n = n;
-    m->sky.ptr = m->ptr;
-    m->sky.val = take(&cursor, (size_t)m->profile * sizeof(double));
-    m->u = take(&cursor, (size_t)m->cases * (size_t)n * sizeof(double));
-    ps_sky_zero(&m->sky);
-    for (int32_t k = 0; k < m->cases * n; k++)
-        m->u[k] = 0.0;
+    int32_t nodes[2];
+    element_nodes(m, e, nodes);
+    ps_dofmap_equations(&m->map, nodes, 2, eq);
+}
 
+size_t ps_model_value_bytes(const ps_model *m, ps_precision precision)
+{
+    const size_t n = (size_t)m->equations, cases = (size_t)m->cases;
+    size_t bytes = align8(ps_sky_value_bytes(m->profile, precision)) +
+                   align8(cases * n * sizeof(double));
+    if (precision == PS_SINGLE)
+        /* right-hand sides, residual and the float correction */
+        bytes += align8(cases * n * sizeof(double)) + align8(n * sizeof(double)) +
+                 align8(n * sizeof(float));
+    return bytes;
+}
+
+/* Assemble the right-hand side of every load case into rhs (cases x n). */
+static void assemble_loads(const ps_model *m, double *rhs)
+{
+    const int32_t n = m->equations;
     double k[PS_BEAM_DOF * PS_BEAM_DOF];
     int32_t eq[PS_BEAM_DOF];
-    for (int32_t e = 0; e < m->elements; e++)
-    {
-        condensed_stiffness(m, e, k);
-        element_equations(m, e, eq);
-        ps_sky_add(&m->sky, eq, PS_BEAM_DOF, k);
-    }
-    for (int32_t i = 0; i < m->nodes * DPN; i++)
-        if (m->dof[i] >= 0 && m->spring[i] > 0.0)
-            ps_sky_add_diagonal(&m->sky, m->dof[i], m->spring[i]);
-
+    for (int32_t i = 0; i < m->cases * n; i++)
+        rhs[i] = 0.0;
     for (int32_t index = 0; index < m->load_count; index++)
     {
         const ps_load *l = &m->load[index];
-        double *rhs = m->u + (size_t)l->load_case * (size_t)n;
+        double *r = rhs + (size_t)l->load_case * (size_t)n;
         if (l->kind == PS_LOAD_NODE)
         {
             int32_t v = m->dof[l->target * DPN + l->dof];
             if (v >= 0)
-                rhs[v] += l->w1; /* loads on supports go straight into the reaction */
+                r[v] += l->w1; /* loads on supports go straight into the reaction */
         }
         else if (l->kind == PS_LOAD_SETTLE)
         {
             /* Move K_free,fixed * u_fixed to the right-hand side. */
-            for (int32_t e = 0; e < m->elements; e++)
-                for (int end = 0; end < 2; end++)
-                {
-                    if (m->connect[2 * e + end] != l->target)
-                        continue;
-                    condensed_stiffness(m, e, k);
-                    element_equations(m, e, eq);
-                    int column = end * DPN + l->dof;
-                    for (int a = 0; a < PS_BEAM_DOF; a++)
-                        if (eq[a] >= 0)
-                            rhs[eq[a]] -= k[a * PS_BEAM_DOF + column] * l->w1;
-                }
+            for (int32_t p = m->incident_ptr[l->target]; p < m->incident_ptr[l->target + 1]; p++)
+            {
+                const int32_t e = m->incident[p] / 2, end = m->incident[p] % 2;
+                condensed_stiffness(m, e, k);
+                element_equations(m, e, eq);
+                const int column = end * DPN + l->dof;
+                for (int a = 0; a < PS_BEAM_DOF; a++)
+                    if (eq[a] >= 0)
+                        r[eq[a]] -= k[a * PS_BEAM_DOF + column] * l->w1;
+            }
         }
         else
         {
@@ -425,9 +450,119 @@ ps_status ps_model_solve(ps_model *m, void *block, ps_control *ctl)
             element_equations(m, e, eq);
             for (int a = 0; a < PS_BEAM_DOF; a++)
                 if (eq[a] >= 0)
-                    rhs[eq[a]] += f[a];
+                    r[eq[a]] += f[a];
         }
     }
+}
+
+/* residual = rhs - K u, element by element in double precision. */
+static void residual(const ps_model *m, const double *rhs, const double *u, double *r)
+{
+    double k[PS_BEAM_DOF * PS_BEAM_DOF];
+    int32_t eq[PS_BEAM_DOF];
+    for (int32_t i = 0; i < m->equations; i++)
+        r[i] = rhs[i];
+    for (int32_t e = 0; e < m->elements; e++)
+    {
+        condensed_stiffness(m, e, k);
+        element_equations(m, e, eq);
+        for (int a = 0; a < PS_BEAM_DOF; a++)
+        {
+            if (eq[a] < 0)
+                continue;
+            double sum = 0.0;
+            for (int b = 0; b < PS_BEAM_DOF; b++)
+                if (eq[b] >= 0)
+                    sum += k[a * PS_BEAM_DOF + b] * u[eq[b]];
+            r[eq[a]] -= sum;
+        }
+    }
+    for (int32_t i = 0; i < m->nodes * DPN; i++)
+        if (m->dof[i] >= 0 && m->spring[i] > 0.0)
+            r[m->dof[i]] -= m->spring[i] * u[m->dof[i]];
+}
+
+static double max_abs(const double *v, int32_t n)
+{
+    double best = 0.0;
+    for (int32_t i = 0; i < n; i++)
+        if (fabs(v[i]) > best)
+            best = fabs(v[i]);
+    return best;
+}
+
+/* Iterative refinement: u += solve_single(rhs - K u) until corrections vanish. */
+static ps_status refine(ps_model *m, const double *rhs, double *u, double *r, float *d,
+                        ps_control *ctl)
+{
+    const int32_t n = m->equations;
+    double last = 0.0;
+    for (int32_t i = 0; i < n; i++)
+        u[i] = 0.0;
+    for (int32_t i = 0; i < n; i++)
+        r[i] = rhs[i];
+    for (int32_t step = 1; step <= PS_REFINE_MAX; step++)
+    {
+        if (ctl && ctl->cancel)
+            return PS_CANCELLED;
+        for (int32_t i = 0; i < n; i++)
+            d[i] = (float)r[i];
+        ps_sky_solve_single(&m->sky, d);
+        double change = 0.0;
+        for (int32_t i = 0; i < n; i++)
+        {
+            u[i] += (double)d[i];
+            if (fabs((double)d[i]) > change)
+                change = fabs((double)d[i]);
+        }
+        if (step > m->refinements)
+            m->refinements = step;
+        const double size = max_abs(u, n);
+        if (change <= PS_REFINE_TOLERANCE * size || size == 0.0)
+            return PS_OK;
+        if (step > 1 && change > 0.5 * last)
+            return PS_ERR_ACCURACY; /* converging too slowly: badly conditioned */
+        last = change;
+        residual(m, rhs, u, r);
+    }
+    return PS_ERR_ACCURACY;
+}
+
+ps_status ps_model_solve(ps_model *m, void *block, ps_precision precision, ps_control *ctl)
+{
+    if (m->state == PS_STATE_EDITED)
+        return PS_ERR_STATE;
+    uint8_t *cursor = block;
+    const int32_t n = m->equations;
+    m->state = PS_STATE_PREPARED;
+    m->precision = precision;
+    m->refinements = 0;
+    m->sky.n = n;
+    m->sky.ptr = m->map.ptr;
+    m->sky.precision = precision;
+    m->sky.val = take(&cursor, ps_sky_value_bytes(m->profile, precision));
+    m->u = take(&cursor, (size_t)m->cases * (size_t)n * sizeof(double));
+    double *rhs = m->u, *r = NULL;
+    float *d = NULL;
+    if (precision == PS_SINGLE)
+    {
+        rhs = take(&cursor, (size_t)m->cases * (size_t)n * sizeof(double));
+        r = take(&cursor, (size_t)n * sizeof(double));
+        d = take(&cursor, (size_t)n * sizeof(float));
+    }
+    ps_sky_zero(&m->sky);
+    double k[PS_BEAM_DOF * PS_BEAM_DOF];
+    int32_t eq[PS_BEAM_DOF];
+    for (int32_t e = 0; e < m->elements; e++)
+    {
+        condensed_stiffness(m, e, k);
+        element_equations(m, e, eq);
+        ps_sky_add(&m->sky, eq, PS_BEAM_DOF, k);
+    }
+    for (int32_t i = 0; i < m->nodes * DPN; i++)
+        if (m->dof[i] >= 0 && m->spring[i] > 0.0)
+            ps_sky_add_diagonal(&m->sky, m->dof[i], m->spring[i]);
+    assemble_loads(m, rhs);
 
     ps_status status = ps_sky_factor(&m->sky, &m->info, ctl);
     if (status == PS_ERR_MECHANISM)
@@ -440,18 +575,28 @@ ps_status ps_model_solve(ps_model *m, void *block, ps_control *ctl)
     if (status != PS_OK)
         return status;
     for (int32_t c = 0; c < m->cases; c++)
-        ps_sky_solve(&m->sky, m->u + (size_t)c * (size_t)n);
+    {
+        double *uc = m->u + (size_t)c * (size_t)n;
+        if (precision == PS_DOUBLE)
+            ps_sky_solve(&m->sky, uc);
+        else if ((status = refine(m, rhs + (size_t)c * (size_t)n, uc, r, d, ctl)) != PS_OK)
+            return status;
+    }
     m->state = PS_STATE_SOLVED;
     return PS_OK;
 }
 
+/* ------------------------------------------------------------------------ */
+/* Results                                                                  */
+/* ------------------------------------------------------------------------ */
+
 static double settlement(const ps_model *m, int32_t load_case, int32_t node, int d)
 {
     double value = 0.0;
-    for (int32_t k = 0; k < m->load_count; k++)
+    for (int32_t p = m->node_load_ptr[node]; p < m->node_load_ptr[node + 1]; p++)
     {
-        const ps_load *l = &m->load[k];
-        if (l->kind == PS_LOAD_SETTLE && l->load_case == load_case && l->target == node && l->dof == d)
+        const ps_load *l = &m->load[m->node_load[p]];
+        if (l->kind == PS_LOAD_SETTLE && l->load_case == load_case && l->dof == d)
             value += l->w1;
     }
     return value;
@@ -484,10 +629,10 @@ static ps_status element_result(const ps_model *m, int32_t load_case, int32_t e,
     double f[PS_BEAM_DOF] = {0.0, 0.0, 0.0, 0.0};
     const double length = element_length(m, e);
     ps_beam_stiffness(element_ei(m, e), length, k);
-    for (int32_t index = 0; index < m->load_count; index++)
+    for (int32_t p = m->element_load_ptr[e]; p < m->element_load_ptr[e + 1]; p++)
     {
-        const ps_load *l = &m->load[index];
-        if (is_element_load(l) && l->target == e && l->load_case == load_case)
+        const ps_load *l = &m->load[m->element_load[p]];
+        if (l->load_case == load_case)
         {
             ps_beam_load bl;
             beam_load(l, &bl);
@@ -548,26 +693,47 @@ ps_status ps_model_reaction(const ps_model *m, int32_t load_case, int32_t node, 
         return PS_OK;
     /* Node equilibrium: reaction = sum of element end forces - applied load. */
     double ue[PS_BEAM_DOF], forces[PS_BEAM_DOF];
-    for (int32_t e = 0; e < m->elements; e++)
-        for (int end = 0; end < 2; end++)
-        {
-            if (m->connect[2 * e + end] != node)
-                continue;
-            status = element_result(m, load_case, e, ue, forces);
-            if (status != PS_OK)
-                return status;
-            for (int d = 0; d < DPN; d++)
-                if (m->dof[node * DPN + d] == PS_DOF_FIXED)
-                    reaction[d] += forces[end * DPN + d];
-        }
-    for (int32_t k = 0; k < m->load_count; k++)
+    for (int32_t p = m->incident_ptr[node]; p < m->incident_ptr[node + 1]; p++)
     {
-        const ps_load *l = &m->load[k];
-        if (l->kind == PS_LOAD_NODE && l->target == node && l->load_case == load_case &&
+        const int32_t e = m->incident[p] / 2, end = m->incident[p] % 2;
+        status = element_result(m, load_case, e, ue, forces);
+        if (status != PS_OK)
+            return status;
+        for (int d = 0; d < DPN; d++)
+            if (m->dof[node * DPN + d] == PS_DOF_FIXED)
+                reaction[d] += forces[end * DPN + d];
+    }
+    for (int32_t p = m->node_load_ptr[node]; p < m->node_load_ptr[node + 1]; p++)
+    {
+        const ps_load *l = &m->load[m->node_load[p]];
+        if (l->kind == PS_LOAD_NODE && l->load_case == load_case &&
             m->dof[node * DPN + l->dof] == PS_DOF_FIXED)
             reaction[l->dof] -= l->w1;
     }
     return PS_OK;
+}
+
+/* Shear, moment, slope and deflection at x, from end results already known. */
+static void section(const ps_model *m, int32_t load_case, int32_t element, const double *ue,
+                    const double *forces, double x, double *out)
+{
+    ps_beam_section s;
+    ps_beam_section_start(forces[0], forces[1], x, &s);
+    for (int32_t p = m->element_load_ptr[element]; p < m->element_load_ptr[element + 1]; p++)
+    {
+        const ps_load *l = &m->load[m->element_load[p]];
+        if (l->load_case == load_case)
+        {
+            ps_beam_load bl;
+            beam_load(l, &bl);
+            ps_beam_section_add(&bl, x, &s);
+        }
+    }
+    const double ei = element_ei(m, element);
+    out[0] = s.shear;
+    out[1] = s.moment;
+    out[2] = ue[1] + s.slope_ei / ei;
+    out[3] = ue[0] + ue[1] * x + s.deflection_ei / ei;
 }
 
 ps_status ps_model_section_at(const ps_model *m, int32_t load_case, int32_t element,
@@ -582,22 +748,34 @@ ps_status ps_model_section_at(const ps_model *m, int32_t load_case, int32_t elem
     status = element_result(m, load_case, element, ue, forces);
     if (status != PS_OK)
         return status;
-    ps_beam_section s;
-    ps_beam_section_start(forces[0], forces[1], x, &s);
-    for (int32_t k = 0; k < m->load_count; k++)
+    section(m, load_case, element, ue, forces, x, out);
+    return PS_OK;
+}
+
+ps_status ps_model_diagram(const ps_model *m, int32_t load_case, int32_t element, int32_t samples,
+                           float *shear, float *moment, float *slope, float *deflection)
+{
+    ps_status status = check_result(m, load_case);
+    if (status != PS_OK)
+        return status;
+    if (element < 0 || element >= m->elements || samples < 2)
+        return PS_ERR_ARGUMENT;
+    double ue[PS_BEAM_DOF], forces[PS_BEAM_DOF], out[4];
+    status = element_result(m, load_case, element, ue, forces);
+    if (status != PS_OK)
+        return status;
+    const double length = element_length(m, element);
+    for (int32_t i = 0; i < samples; i++)
     {
-        const ps_load *l = &m->load[k];
-        if (is_element_load(l) && l->target == element && l->load_case == load_case)
-        {
-            ps_beam_load bl;
-            beam_load(l, &bl);
-            ps_beam_section_add(&bl, x, &s);
-        }
+        section(m, load_case, element, ue, forces, length * i / (samples - 1), out);
+        if (shear)
+            shear[i] = (float)out[0];
+        if (moment)
+            moment[i] = (float)out[1];
+        if (slope)
+            slope[i] = (float)out[2];
+        if (deflection)
+            deflection[i] = (float)out[3];
     }
-    const double ei = element_ei(m, element);
-    out[0] = s.shear;
-    out[1] = s.moment;
-    out[2] = ue[1] + s.slope_ei / ei;
-    out[3] = ue[0] + ue[1] * x + s.deflection_ei / ei;
     return PS_OK;
 }

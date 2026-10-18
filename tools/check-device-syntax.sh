@@ -14,7 +14,9 @@ mp="$root/src/MicroPython"
 stubs="$root/tools/device-syntax"
 if [ "$#" -eq 0 ]; then
     set -- "$mp/PicoCalc/picoware_lcd/lcd.c" "$mp/PicoCalc/picoware_lcd/picoware_lcd.c" \
-        "$mp/gfx/gfx.c" "$mp/gfx/gfx_lcd.c" "$mp/gfx/gfx_mesh.c"
+        "$mp/gfx/gfx.c" "$mp/gfx/gfx_lcd.c" "$mp/gfx/gfx_mesh.c" \
+        "$mp/picosolve/core/skyline.c" "$mp/picosolve/core/order.c" "$mp/picosolve/core/dense.c" \
+        "$mp/picosolve/core/dofmap.c" "$mp/picosolve/fe/beam.c" "$mp/picosolve/fe/model.c"
 fi
 includes=$(find "$sdk/src/common" "$sdk/src/rp2_common" "$sdk/src/rp2350" -type d -name include \
     | grep -v riscv | sed 's/^/-I/' | tr '\n' ' ')

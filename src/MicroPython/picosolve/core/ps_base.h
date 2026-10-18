@@ -31,6 +31,7 @@ typedef enum
     PS_ERR_UNCONNECTED,/* node not attached to any element; item = node */
     PS_ERR_SUPPORT,    /* spring or settlement on an unsuitable DOF; item = node, dof */
     PS_ERR_MECHANISM,  /* structure can move freely; item = node, dof */
+    PS_ERR_ACCURACY,   /* single precision is not enough; solve again in double */
 } ps_status;
 
 /* Shared between the solving core and the UI core. */

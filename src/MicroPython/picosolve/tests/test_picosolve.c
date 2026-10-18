@@ -60,6 +60,10 @@ static void beam_new(beam *b, int nodes, int elements, int sections, int loads, 
     CHECK(ps_model_init(&b->m, b->model_block, nodes, elements, sections, loads, cases) == PS_OK);
 }
 
+/* Precision tried first; single falls back to double, as the binding does. */
+static ps_precision first_precision = PS_DOUBLE;
+static int escalations = 0;
+
 static ps_status beam_solve(beam *b)
 {
     free(b->index_block);
@@ -69,8 +73,16 @@ static ps_status beam_solve(beam *b)
     ps_status status = ps_model_prepare(&b->m, b->index_block);
     if (status != PS_OK)
         return status;
-    b->value_block = malloc(ps_model_value_bytes(&b->m) + 8);
-    return ps_model_solve(&b->m, b->value_block, NULL);
+    b->value_block = malloc(ps_model_value_bytes(&b->m, first_precision) + 8);
+    status = ps_model_solve(&b->m, b->value_block, first_precision, NULL);
+    if (status == PS_ERR_ACCURACY)
+    {
+        escalations++;
+        free(b->value_block);
+        b->value_block = malloc(ps_model_value_bytes(&b->m, PS_DOUBLE) + 8);
+        status = ps_model_solve(&b->m, b->value_block, PS_DOUBLE, NULL);
+    }
+    return status;
 }
 
 static void beam_free(beam *b)
@@ -249,7 +261,7 @@ static void test_skyline_against_dense(void)
         ptr[j] = (uint32_t)(j - first[j] + 1);
     uint32_t nnz = ps_sky_heights_finish(ptr, N);
     double *val = malloc(nnz * sizeof(double));
-    ps_sky s = {N, ptr, val};
+    ps_sky s = {N, ptr, val, PS_DOUBLE};
     ps_sky_zero(&s);
     for (int j = 0; j < N; j++)
         for (int i = first[j]; i <= j; i++)
@@ -283,7 +295,7 @@ static void test_skyline_against_dense(void)
     uint32_t p2[4] = {1, 2, 2};
     ps_sky_heights_finish(p2, 3);
     double v2[5];
-    ps_sky s2 = {3, p2, v2};
+    ps_sky s2 = {3, p2, v2, PS_DOUBLE};
     ps_sky_zero(&s2);
     int32_t d01[2] = {0, 1}, d12[2] = {1, 2};
     double spring[4] = {1.0, -1.0, -1.0, 1.0};
@@ -295,6 +307,37 @@ static void test_skyline_against_dense(void)
     ps_sky_zero(&s2);
     ps_sky_add_diagonal(&s2, 0, 1.0);
     CHECK(ps_sky_factor(&s2, &info, &ctl) == PS_CANCELLED);
+
+    /* Single precision: same matrix, float accuracy; a singular one asks for double. */
+    float *fval = malloc(nnz * sizeof(float));
+    ps_sky f = {N, ptr, fval, PS_SINGLE};
+    ps_sky_zero(&f);
+    for (int j = 0; j < N; j++)
+        for (int i = first[j]; i <= j; i++)
+        {
+            int32_t d[2] = {i, j};
+            double block[4] = {0.0, i == j ? 0.0 : a[i][j], 0.0, 0.0};
+            if (i == j)
+                ps_sky_add_diagonal(&f, j, a[j][j]);
+            else
+                ps_sky_add(&f, d, 2, block);
+        }
+    CHECK(ps_sky_factor(&f, &info, NULL) == PS_OK);
+    float fx[N];
+    for (int i = 0; i < N; i++)
+        fx[i] = (float)b[i];
+    ps_sky_solve_single(&f, fx);
+    double ferr = 0.0;
+    for (int i = 0; i < N; i++)
+        ferr = fabs((double)fx[i] - x[i]) > ferr ? fabs((double)fx[i] - x[i]) : ferr;
+    CHECK(ferr < 1e-5);
+    free(fval);
+    float fv2[5];
+    ps_sky f2 = {3, p2, fv2, PS_SINGLE};
+    ps_sky_zero(&f2);
+    ps_sky_add(&f2, d01, 2, spring);
+    ps_sky_add(&f2, d12, 2, spring);
+    CHECK(ps_sky_factor(&f2, &info, NULL) == PS_ERR_ACCURACY);
 }
 
 static void test_condense(void)
@@ -610,7 +653,7 @@ static void test_errors(void)
     beam b;
     uniform(&b, 2, L, EI, 2, 1);
     ps_model_support(&b.m, 0, PS_UY);
-    CHECK(beam_solve(&b) == PS_ERR_MECHANISM);
+    CHECK(beam_solve(&b) == PS_ERR_MECHANISM); /* decided in double, also after single */
     CHECK(b.m.error_item >= 0);
     CHECK(ps_model_reaction(&b.m, 0, 0, (double[2]){0}) == PS_ERR_STATE);
 
@@ -639,6 +682,77 @@ static void test_errors(void)
     beam_free(&lonely);
 }
 
+static void test_diagram(void)
+{
+    beam b;
+    uniform(&b, 2, L, EI, 3, 1);
+    ps_model_support(&b.m, 0, PS_UY | PS_RZ);
+    ps_model_support(&b.m, 2, PS_UY);
+    ps_model_load(&b.m, PS_LOAD_LINE, 0, 0, 0, 0.5, 2.5, W, 2 * W);
+    ps_model_load(&b.m, PS_LOAD_POINT, 0, 1, 0, 1.0, 0, P, 0);
+    CHECK(beam_solve(&b) == PS_OK);
+    enum
+    {
+        S = 7
+    };
+    float v[S], mo[S], sl[S], de[S];
+    CHECK(ps_model_diagram(&b.m, 0, 1, S, v, mo, sl, de) == PS_OK);
+    for (int i = 0; i < S; i++)
+    {
+        double out[4];
+        ps_model_section_at(&b.m, 0, 1, (L / 2) * i / (S - 1), out);
+        NEAR((double)v[i], (double)(float)out[0]);
+        NEAR((double)mo[i], (double)(float)out[1]);
+        NEAR((double)de[i], (double)(float)out[3]);
+    }
+    CHECK(ps_model_diagram(&b.m, 0, 1, S, NULL, mo, NULL, NULL) == PS_OK);
+    CHECK(ps_model_diagram(&b.m, 0, 1, 1, v, mo, sl, de) == PS_ERR_ARGUMENT);
+    beam_free(&b);
+}
+
+/* Stiffness ratios too large for float32: single asks for double. */
+static void test_ill_conditioned(void)
+{
+    const int before = escalations;
+    beam b;
+    beam_new(&b, 4, 3, 2, 1, 1);
+    for (int i = 0; i < 4; i++)
+        ps_model_node(&b.m, i, L * i);
+    ps_model_section(&b.m, 0, EI, 1.0);
+    ps_model_section(&b.m, 1, EI * 1e7, 1.0);
+    ps_model_element(&b.m, 0, 0, 1, 0, 0);
+    ps_model_element(&b.m, 1, 1, 2, 1, 0);
+    ps_model_element(&b.m, 2, 2, 3, 0, 0);
+    ps_model_support(&b.m, 0, PS_UY);
+    ps_model_support(&b.m, 3, PS_UY);
+    ps_model_load(&b.m, PS_LOAD_NODE, 0, 1, PS_UY, 0, 0, P, 0);
+    CHECK(beam_solve(&b) == PS_OK);
+    if (first_precision == PS_SINGLE)
+        CHECK(escalations > before && b.m.precision == PS_DOUBLE);
+    /* Supported only at the ends, so statically determinate: the load at a
+     * third of the span splits 2/3 : 1/3 whatever the stiffnesses. */
+    double r0[2], r3[2];
+    ps_model_reaction(&b.m, 0, 0, r0);
+    ps_model_reaction(&b.m, 0, 3, r3);
+    CHECK(fabs(r0[0] + 2.0 * P / 3.0) < 1e-6 * fabs(P) && fabs(r3[0] + P / 3.0) < 1e-6 * fabs(P));
+    beam_free(&b);
+}
+
+static void test_single_memory(void)
+{
+    beam b;
+    uniform(&b, 400, 400.0, EI, 0, 1);
+    for (int i = 0; i <= 400; i += 5)
+        ps_model_support(&b.m, i, PS_UY);
+    void *index = malloc(ps_model_index_bytes(&b.m));
+    CHECK(ps_model_prepare(&b.m, index) == PS_OK);
+    size_t single = ps_model_value_bytes(&b.m, PS_SINGLE), dbl = ps_model_value_bytes(&b.m, PS_DOUBLE);
+    printf("values block, 400 elements: double %zu bytes, single %zu bytes\n", dbl, single);
+    CHECK(single > 0 && dbl > 0);
+    free(index);
+    beam_free(&b);
+}
+
 static void benchmark(void)
 {
     enum
@@ -654,16 +768,14 @@ static void benchmark(void)
     clock_t start = clock();
     CHECK(beam_solve(&b) == PS_OK);
     double ms = 1000.0 * (double)(clock() - start) / CLOCKS_PER_SEC;
-    printf("host benchmark: %d elements, %d equations, %u stored values, %.2f ms\n",
-           SPANS, b.m.equations, b.m.profile, ms);
+    printf("host benchmark (%s): %d elements, %d equations, %u stored values, %d refinement steps, %.2f ms\n",
+           first_precision == PS_SINGLE ? "single" : "double", SPANS, b.m.equations, b.m.profile,
+           b.m.refinements, ms);
     beam_free(&b);
 }
 
-int main(void)
+static void beam_suite(void)
 {
-    test_skyline_against_dense();
-    test_condense();
-    test_rcm();
     test_simply_supported_udl();
     test_cantilever_point();
     test_fixed_fixed_udl();
@@ -677,7 +789,20 @@ int main(void)
     test_load_cases_superpose();
     test_scrambled_numbering();
     test_errors();
+    test_diagram();
+    test_ill_conditioned();
     benchmark();
+}
+
+int main(void)
+{
+    test_skyline_against_dense();
+    test_condense();
+    test_rcm();
+    test_single_memory();
+    beam_suite();
+    first_precision = PS_SINGLE;
+    beam_suite();
     printf("%s: %d checks, %d failures\n", failures ? "FAIL" : "PASS", checks, failures);
     return failures ? 1 : 0;
 }

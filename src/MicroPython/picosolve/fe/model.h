@@ -5,7 +5,12 @@
  * Memory comes in three caller-owned blocks, each sized before it is needed:
  *   model  - ps_model_bytes() before ps_model_init()
  *   index  - ps_model_index_bytes() before ps_model_prepare()
- *   values - ps_model_value_bytes() after prepare, before ps_model_solve()
+ *   values - ps_model_value_bytes(precision) after prepare, before solving
+ *
+ * Solving in PS_SINGLE precision factors in float32 (half the memory, the
+ * M33's hardware FPU) and refines the answer with double-precision residuals
+ * to full accuracy. If that does not converge it returns PS_ERR_ACCURACY and
+ * the caller solves again with a PS_DOUBLE values block.
  * Nothing is allocated during the solve, so it can run on the second core.
  * Editing the model afterwards requires prepare and solve again.
  *
@@ -15,6 +20,7 @@
 #define PICOSOLVE_MODEL_H
 
 #include "../core/ps_base.h"
+#include "../core/dofmap.h"
 #include "../core/skyline.h"
 
 /* DOF flags for supports, springs and node loads. */
@@ -58,24 +64,26 @@ typedef struct
     ps_load *load;
     int32_t *connect, *section_of;
     uint8_t *fixed, *release;
-    /* index block */
-    int32_t *dof; /* equation number, or PS_DOF_FIXED / PS_DOF_FREE_HINGE */
-    uint32_t *ptr;
-    int32_t *xadj, *adj, *perm, *level;
-    uint8_t *mask;
+    /* index block: numbering plus lookups built once at prepare */
+    ps_dofmap map;
+    int32_t *dof; /* map.dof: equation number, or PS_DOF_FIXED / PS_DOF_FREE_HINGE */
     int32_t equations;
     uint32_t profile;
+    int32_t *incident_ptr, *incident; /* node -> element ends (2 * element + end) */
+    int32_t *element_load_ptr, *element_load; /* element -> its loads */
+    int32_t *node_load_ptr, *node_load;       /* node -> node loads and settlements */
     /* values block */
     ps_sky sky;
     double *u; /* cases x equations */
+    ps_precision precision; /* of the last solve */
+    int32_t refinements;    /* most refinement steps any load case needed */
     ps_factor_info info;
     ps_state state;
     int32_t error_item, error_dof;
 } ps_model;
 
-#define PS_DOF_FIXED (-1)
 /* Rotation of a node where every attached element end is a hinge. */
-#define PS_DOF_FREE_HINGE (-2)
+#define PS_DOF_FREE_HINGE PS_DOF_DROPPED
 
 size_t ps_model_bytes(int32_t nodes, int32_t elements, int32_t sections, int32_t loads);
 ps_status ps_model_init(ps_model *m, void *block, int32_t nodes, int32_t elements,
@@ -93,8 +101,8 @@ void ps_model_clear_loads(ps_model *m);
 
 size_t ps_model_index_bytes(const ps_model *m);
 ps_status ps_model_prepare(ps_model *m, void *block);
-size_t ps_model_value_bytes(const ps_model *m);
-ps_status ps_model_solve(ps_model *m, void *block, ps_control *ctl);
+size_t ps_model_value_bytes(const ps_model *m, ps_precision precision);
+ps_status ps_model_solve(ps_model *m, void *block, ps_precision precision, ps_control *ctl);
 
 /* Results: NaN for the rotation of a node where every element end is a hinge. */
 double ps_model_displacement(const ps_model *m, int32_t load_case, int32_t node, uint32_t flag);
@@ -105,5 +113,9 @@ ps_status ps_model_reaction(const ps_model *m, int32_t load_case, int32_t node, 
 /* At x from the element start: shear, moment, slope, deflection. */
 ps_status ps_model_section_at(const ps_model *m, int32_t load_case, int32_t element,
                               double x, double *out);
+/* samples evenly spaced sections from start to end of the element; any
+ * output may be NULL. */
+ps_status ps_model_diagram(const ps_model *m, int32_t load_case, int32_t element, int32_t samples,
+                           float *shear, float *moment, float *slope, float *deflection);
 
 #endif
