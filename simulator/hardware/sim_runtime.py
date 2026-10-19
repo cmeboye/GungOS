@@ -973,7 +973,7 @@ def request_open(name):
     sync_menu_routes()
     nested={'picodesk':('eggcel','picoword','picopaint'),
             'picolab':('graph','graph3d','plot previews','numerics checks','scientific calculator'),
-            'misc':('screensavers',)}
+            'misc':('screensavers','engtool render benchmark')}
     open_target = name
     parts = [part.strip().lower().replace("_", " ") for part in str(name).replace("\\", "/").split("/") if part.strip()]
     # Accept the old Python launch path without reopening a one-item submenu.

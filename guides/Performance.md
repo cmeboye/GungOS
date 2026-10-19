@@ -1,4 +1,13 @@
-# v1.2 performance validation
+# Performance validation
+
+For **v1.32**, use [EngTool render benchmark](EngToolBenchmark.md) for the Beam and
+PicoCAD hardware stress ladder. Open Apps → Misc → EngTool render benchmark;
+F4 there opens the display/CPU suite described below. Build the current version
+with `sh tools/build-gungos-release.sh`; its version is read from `features.py`.
+
+The remainder of this guide records the v1.2 integration and historical results.
+
+## v1.2 performance validation
 
 GungOS v1.2 includes the native display, import-cache and numerical performance
 work while preserving the v1.1 desktop. Firmware and SD updates are packaged

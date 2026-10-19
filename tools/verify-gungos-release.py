@@ -6,6 +6,7 @@ import json
 import runpy
 from pathlib import Path
 import struct
+import subprocess
 import wave
 import zipfile
 
@@ -43,6 +44,7 @@ def uf2_info(path):
     markers=(b'GungOS',b'picoware_pcm',b'ulab',b'PicoDESK',
              b'misc/screensavers',b'picoware/gui/style.py',
              b'picoware/gui/theme_picker.py',b'picoware/gui/status_bar.py',
+             b'picoware/gui/appearance.py',b'picoware/gui/appearance_editor.py',
              ('preview-gungos-v'+VERSION).encode())
     for name in markers:
         assert name in image,'Expected firmware marker is missing: '+repr(name)
@@ -74,6 +76,7 @@ def verify_sd(root):
     assert not any(settings.get(key) for key in settings if 'api_key' in key or 'server_password' in key),'Release contains secrets'
     retired=runpy.run_path(str(root/'src/MicroPython/picoware/system/settings.py'))['RETIRED_SETTINGS']
     assert not any(key in settings for key in retired),'Release contains retired settings'
+    assert settings['background_color']==0 and settings['text_on_dark']==65535 and settings['text_on_light']==0,'Appearance defaults'
     assert settings['screensaver']=='Calculator Widget','Missing demonstration widget default'
     assert isinstance(settings['tetris_sound'],bool) and settings['tetris_volume']==25,'Sound defaults'
     for path in apps.rglob('*.wav'):
@@ -94,9 +97,16 @@ def main():
     args=parser.parse_args();root=args.root.resolve()
     info=uf2_info(root/'firmware'/FIRMWARE)
     verify_sd(root)
-    for path in root.rglob('*'):
-        if '.build' in path.relative_to(root).parts:continue
-        assert not path.is_symlink(),'External link in standalone release: '+str(path)
+    if (root/'.git').exists():
+        # A development checkout also contains ignored simulator SD symlinks
+        # and private build outputs. Check precisely the source archive set.
+        tracked=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+        paths=(root/name for name in tracked if name)
+    else:
+        # An extracted standalone source/release tree has no Git ignore set.
+        paths=(path for path in root.rglob('*') if '.build' not in path.relative_to(root).parts)
+    for path in paths:
+        assert not path.is_symlink(),'External link in standalone release source: '+str(path)
     for name in ('vendor/micropython/ports/rp2/CMakeLists.txt','vendor/picotool/CMakeLists.txt',
                  'src/MicroPython/ulab/upstream/LICENSE','LICENSE','THIRD_PARTY_NOTICES.md'):
         assert (root/name).is_file(),name

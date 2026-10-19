@@ -34,7 +34,8 @@ def main():
                 assert '..' not in Path(name).parts
                 package.extract(name,card)
     for name in ('settings','wifi','keyboard','engineering'):(card/'picoware'/name).mkdir()
-    defaults={'screen_brightness':100,'theme_color':31,'debug':False,
+    defaults={'screen_brightness':100,'theme_color':31,'background_color':0,
+              'text_on_dark':65535,'text_on_light':0,'debug':False,
               'gmt_offset':0,'onscreen_keyboard':False,
               'screensaver':'Calculator Widget','wifi_ssid':'',
               'tetris_sound':bool(list(card.rglob('*.wav'))),'tetris_volume':25}
@@ -51,6 +52,11 @@ def main():
                 'float_bits':32,'compiled_app_modules':len(list((card/'picoware/apps').rglob('*.mpy'))),'audio_assets':len(list(card.rglob('*.wav'))),
                 'validation':{'native_build':'passed','package_checks':'passed',
                               'physical_pico_calc':'pending user flash and device checks'}}
+    try:
+        build_info['source_revision']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True,stderr=subprocess.DEVNULL).strip()
+        build_info['source_dirty']=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT,text=True))
+    except (OSError,subprocess.CalledProcessError):
+        build_info['source_revision']='source archive (Git metadata unavailable)'
     report=ROOT/'verification/simulator-tests.json'
     if report.exists():
         suites=json.loads(report.read_text())['tests']

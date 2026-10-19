@@ -11,7 +11,7 @@ def start(vm):
     _menu=Menu(vm.draw,'Misc',0,vm.draw.size.y,vm.foreground_color,
                vm.background_color,vm.selected_color)
     _menu.add_item('Screensavers')
-    _menu.add_item('Benchmark')
+    _menu.add_item('EngTool render benchmark')
     _menu.set_selected(_selected);_menu.draw();return True
 
 
@@ -21,7 +21,7 @@ def run(vm):
     elif vm.button in (k.BUTTON_UP,k.BUTTON_LEFT):_menu.scroll_up()
     elif vm.button in (k.BUTTON_DOWN,k.BUTTON_RIGHT):_menu.scroll_down()
     elif vm.button==k.BUTTON_CENTER:
-        if _menu.current_item=='Benchmark':_open_sd_app(vm,'Benchmark','misc')
+        if _menu.current_item=='EngTool render benchmark':_open_sd_app(vm,'Benchmark','misc')
         else:
             from picoware.applications.library import launch
             launch(vm,_menu.current_item)

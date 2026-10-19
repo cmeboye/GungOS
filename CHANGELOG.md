@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## v1.32 — 2026-10-19
+
+- Add the on-device EngTool render benchmark under Apps → Misc. It measures
+  Beam model/diagram/overview drawing and direct PicoCAD geometry, camera and
+  rendering across PSRAM and SRAM, including a Full stress ladder, repeated
+  build/release cycles and explicitly labelled Beam cases beyond editor limits.
+  SD checkpoints, cancel/skip, time/heap guards and expected CAD refusal probes
+  help locate the hardware limit. F4 retains the display/CPU baseline suite.
 
 - Expand Settings → Appearance with accent, background, text on dark and text on
   light colours; include 32 swatches, custom hex entry, a combined contrast

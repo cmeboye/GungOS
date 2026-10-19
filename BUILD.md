@@ -1,4 +1,4 @@
-# Building GungOS v1.31
+# Building GungOS v1.32
 
 The release vendors its source dependencies. Building does not fetch from the
 network. Use the pinned sources in `vendor/`; no `git submodule update` is needed.
@@ -25,8 +25,8 @@ The script builds a matching `mpy-cross`, host picotool and the RP2350 firmware,
 compiles the shipped applications, regenerates clean SD contents and records
 checksums. Output:
 
-- `firmware/GungOS-v1.31-PicoCalc-Pico2W.uf2`
-- `sd-card/` and `GungOS-v1.31-SD.zip`
+- `firmware/GungOS-v1.32-PicoCalc-Pico2W.uf2`
+- `sd-card/` and `GungOS-v1.32-SD.zip`
 - `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
 
 Intermediate files live in `.build/` and can be deleted after building. To place
@@ -130,5 +130,8 @@ binary cannot be converted to the device UF2.
 
 Default panel transfers remain 16-bit. The Benchmark SD app can temporarily
 try 12-bit transfers and asks for a colour verdict. Device results are written
-to `picoware/benchmark.txt`. The picosolve C kernel and MicroPython binding are linked into this firmware;
+to `picoware/benchmark.txt`. In v1.32, open the EngTool render benchmark and
+press F4 to access that baseline suite. The default engineering run writes
+`picoware/engtool-render-benchmark.txt`; see [its hardware guide](guides/EngToolBenchmark.md).
+The picosolve C kernel and MicroPython binding are linked into this firmware;
 Beam, Formula and geometry entry points are available to the SD apps.

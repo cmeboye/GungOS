@@ -14,7 +14,7 @@ from picoware.system import buttons as k
 vm=ViewManager();vm._wifi=None
 sys.path.insert(0,root+'/builds/MicroPython/apps_unfrozen')  # engtools, as on the SD card
 sys.path.insert(0,sys.argv[1] if len(sys.argv)>1 else root+'/builds/MicroPython/apps_unfrozen/misc')
-import Benchmark as bench
+from engtools.bench import display as bench
 # A black status screen previously produced a cheap partial first sample,
 # paired with the row count from a later full transfer. Model that exact case.
 class Size:
