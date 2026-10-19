@@ -10,10 +10,12 @@ PicoLAB
 ├── Tools
 │   ├── Graph
 │   ├── Graph3D
-│   └── Scientific calculator
+│   ├── Scientific calculator
+│   └── PicoCAD
 └── Modules
     ├── Structural
     │   ├── Beam view
+    │   ├── Shrink fit
     │   └── Mohr circle
     ├── Dynamics
     ├── Thermal
@@ -38,7 +40,7 @@ content panels remain below it. Beam view, Mohr circle, Graph and Graph3D share 
 title bar, panels, property forms, editor panel and F9 help box
 (`engtools/ui/lab.py`); values are typed in place, with no on-screen keyboard.
 
-See [Beam view](BeamLab.md), [Mohr circle](MohrCircle.md), [Scientific calculator](ScientificCalculator.md),
+See [PicoCAD](PicoCAD.md), [Beam view](BeamLab.md), [Shrink fit](ShrinkFit.md), [Mohr circle](MohrCircle.md), [Scientific calculator](ScientificCalculator.md),
 [Graph](Graph.md), [Graph3D](Graph3D.md) and [plot previews](SharedPlots.md).
 
 The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Graph,

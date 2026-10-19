@@ -193,6 +193,28 @@ def prompt(draw,p,title,detail,edit,message,error,box=None):
     text(bounded,x+10,ey+26,message,p.ERROR if error else p.MUTED)
 
 
+def results(draw, p, rows, selected, top, bottom):
+    """A scrolling results list. Rows are (label, value, detail, color or
+    None); a row with no value and no detail is a section heading."""
+    width = int(draw.size.x)
+    capacity = max(1, (bottom - top) // 26)
+    first = min(max(0, selected - capacity // 2), max(0, len(rows) - capacity))
+    for index in range(first, min(len(rows), first + capacity)):
+        label, value, detail, color = rows[index]
+        y = top + (index - first) * 26
+        if value is None and not detail:
+            text(draw, 14, y + 10, label, p.ACCENT)
+            draw._line(14 + draw.len(label, XS) + 4, y + 14, width - 14, y + 14, p.GRID)
+            continue
+        if index == selected:
+            draw._fill_rectangle(12, y - 2, width - 24, 25, p.SELECT)
+            draw._rectangle(12, y - 2, width - 24, 25, p.ACCENT)
+        text(draw, 16, y, label[:22], p.TEXT, SM)
+        if value is not None:
+            right_text(draw, width - 16, y, value, color or p.ACCENT, SM)
+        text(draw, 16, y + 13, detail[:46], p.MUTED)
+
+
 def help_capacity(bottom):
     return max(1,(bottom-98)//11)
 

@@ -70,7 +70,7 @@ Escape returns/cancels. Back and Del erase before the cursor. F6–F10 use
 Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot from any screen. Menus and app chrome follow the system accent.
 
 [Desktop](guides/Desktop.md) · [Menu headers](guides/MenuHeaders.md) · [Themes](guides/Themes.md) · [Lorenz](guides/Lorenz.md) · [Lenia](guides/Lenia.md) · [Eggcel](guides/Eggcel.md) ·
-[PicoLAB](guides/PicoLAB.md) · [Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
+[PicoLAB](guides/PicoLAB.md) · [PicoCAD](guides/PicoCAD.md) · [Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
 [Graph3D](guides/Graph3D.md) · [Tetris](guides/Tetris.md) · [Audio](guides/TetrisAudio.md) ·
 [Connectivity review](guides/Connectivity.md) · [Comms and service independence](guides/Comms.md)
 

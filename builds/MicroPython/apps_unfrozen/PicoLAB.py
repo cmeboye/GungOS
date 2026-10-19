@@ -9,11 +9,13 @@ MENUS = {
                ('gallery','Plot previews','Shared 2D and 3D viewer examples')),
     'tools': (('Graph','Graph','2D expressions, curves and shading'),
               ('Graph3D','Graph3D','3D surfaces and implicit expressions'),
-              ('calculator','Scientific calculator','Expressions, statistics, solver and matrices')),
+              ('calculator','Scientific calculator','Expressions, statistics, solver and matrices'),
+              ('picocad','PicoCAD','Analytic primitives and Boolean part previews')),
     'modules': (('structural','Structural','Beams, frames, sections and stress'),
                 ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','No tools yet'),
                 ('electrical','Electrical','No tools yet'),('fluids','Fluids','No tools yet')),
     'structural': (('beam','Beam view','Supports, loads, sections and diagrams'),
+                   ('discs','Shrink fit','Rotating discs, thick cylinders, press fits'),
                    ('mohr','Mohr circle','2D/3D stress, element rotation, principal')),
     'dynamics': (), 'thermal': (), 'electrical': (), 'fluids': (),
 }
@@ -115,9 +117,10 @@ def _launch(view_manager,target):
     from engtools.ui import breadcrumbs
     before=view_manager.current_view
     name={'Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
-          'mohr':'mohr_view'}[target]
+          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view'}[target]
     path={'beam':('modules','structural','Beam view'),'mohr':('modules','structural','Mohr circle'),
-          'calculator':('tools','Scientific calculator')}.get(target,('tools',target))
+          'discs':('modules','structural','Shrink fit'),
+          'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD')}.get(target,('tools',target))
     breadcrumbs.bind(view_manager,path,name)
     _resume=True
     try:
@@ -127,8 +130,14 @@ def _launch(view_manager,target):
         elif target=='calculator':
             from engtools.calculator import app
             app.show(view_manager)
+        elif target=='picocad':
+            from engtools.picocad import app
+            app.show(view_manager)
         elif target=='mohr':
             from engtools.mohr import app
+            app.show(view_manager)
+        elif target=='discs':
+            from engtools.discs import app
             app.show(view_manager)
         else:
             from engtools.beamlab import app

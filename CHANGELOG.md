@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- PicoCAD in PicoLAB → Tools: direct analytic primitive wireframes, perspective
+  and parallel projection, camera controls, an XYZ guide and verified `.pcad`
+  project files. Supported Boolean cases include containment, box operations,
+  cavities, angled/blind bores and trimmed one-side cylindrical through-notches.
+  Typed diagnostics distinguish invalid input, unsupported operations, precision,
+  topology and resource limits; empty and unchanged results remain successful.
+  Includes geometry/UI regressions and a reproducible desktop benchmark.
+- Shrink fit in PicoLAB → Modules → Structural: up to six concentric discs or
+  cylinders (solid or bored) with rotation, inner and outer pressure and an
+  interference fit at each interface (Lamé, plane stress or plane strain).
+  Any N−1 of the speed, pressures, interferences and contact pressures can
+  be marked Find (SPACE) and are solved from the rest, so it also finds the
+  interference for a contact pressure or the speed at which a fit comes
+  loose; a wrong count or an impossible combination is reported. Hatched
+  cross-section or an orbiting 3D wireframe (F6 focuses the preview), stress
+  plots through the radius (F4) and results (F5): peaks, von Mises safety,
+  holding torque and axial force, assembly heating, loosening speed,
+  inertia and kinetic energy. Beam view's F1–F5 keys. About 64 KB of heap
+  while open. See [Shrink fit](guides/ShrinkFit.md).
+- The F5 results list is shared (`engtools/ui/lab.py`); Beam view's run
+  headings are no longer clipped at the left edge.
 - Mohr circle in PicoLAB → Modules → Structural: a 2D plane-stress or 3D
   stress state typed in MPa, drawn as Mohr's circle(s) beside the element
   turned by theta. Left/Right turn the element 1 deg ([ / ] 15 deg), P and S

@@ -10,7 +10,7 @@ from . import model as bm
 from . import items
 from engtools.ui.viewport import Viewport
 from engtools.ui.lab import (mix, text, right_text, centre_text, wrap, panel, chrome, menu, form, popup, prompt,
-                              help_capacity, help_box, tabs as model_tabs)
+                              help_capacity, help_box, results, tabs as model_tabs)
 
 LEFT, RIGHT = 20, 300
 BEAM_Y = 136
@@ -471,27 +471,6 @@ def section_panel(draw, p, model, section, x, top):
 
 
 # ---------------------------------------------------------------- lists
-
-def results(draw, p, rows, selected, top, bottom):
-    """Rows are (label, value, detail, color or None)."""
-    width = int(draw.size.x)
-    capacity = max(1, (bottom - top) // 26)
-    first = min(max(0, selected - capacity // 2), max(0, len(rows) - capacity))
-    for index in range(first, min(len(rows), first + capacity)):
-        label, value, detail, color = rows[index]
-        y = top + (index - first) * 26
-        if value is None and not detail:
-            text(draw, 8, y + 10, label, p.ACCENT)
-            draw._line(8 + draw.len(label, XS) + 4, y + 14, width - 8, y + 14, p.GRID)
-            continue
-        if index == selected:
-            draw._fill_rectangle(4, y - 2, width - 8, 25, p.SELECT)
-            draw._rectangle(4, y - 2, width - 8, 25, p.ACCENT)
-        text(draw, 10, y, label[:22], p.TEXT, SM)
-        if value is not None:
-            right_text(draw, width - 10, y, value, color or p.ACCENT, SM)
-        text(draw, 10, y + 13, detail[:50], p.MUTED)
-
 
 # ---------------------------------------------------------------- diagrams
 

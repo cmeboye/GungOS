@@ -1006,7 +1006,8 @@ def request_open(name):
                  'numerics check':('checks','numerics check'),
                  'beam lab':('modules','structural','beam view'),
                  'beam view':('modules','structural','beam view'),
-                 'mohr circle':('modules','structural','mohr circle')}
+                 'mohr circle':('modules','structural','mohr circle'),
+                 'shrink fit':('modules','structural','shrink fit')}
         if len(tail)==1:tail=list(aliases.get(tail[0],tail))
         page='root';lab_indices=[]
         for item in tail:

@@ -50,7 +50,7 @@ key(k.BUTTON_ESCAPE);assert lab._page=='gallery'
 key(k.BUTTON_ESCAPE);assert lab._page=='checks' and lab._selected==1
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==0
 pick('Tools');path('tools');shot('tools')
-assert [r[1] for r in lab.MENUS['tools']]==['Graph','Graph3D','Scientific calculator']
+assert [r[1] for r in lab.MENUS['tools']]==['Graph','Graph3D','Scientific calculator','PicoCAD']
 pick('Scientific calculator');assert vm.current_view.name=='eng_calculator'
 path('tools','Scientific calculator');shot('calculator')
 from engtools.calculator import app as calc
