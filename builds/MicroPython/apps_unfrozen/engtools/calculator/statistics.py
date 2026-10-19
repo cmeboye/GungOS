@@ -255,49 +255,49 @@ class Workspace:
             first = max(0,self.selected-capacity+1)
             for index in range(first,min(len(rows),first+capacity)):
                 y = 129+(index-first)*21
-                if index == self.selected: r.fill(8,y-3,width-16,20,theme.SELECT)
+                if index == self.selected: r.fill(8,y-3,width-16,20,self.calc.palette.SELECT)
                 title,result,_ = rows[index]
-                r.text(15,y,title[:27],theme.TEXT,FONT_XTRA_SMALL)
+                r.text(15,y,title[:27],self.calc.palette.TEXT,FONT_XTRA_SMALL)
                 text = format_value(result,self.calc.engineering) if result is not None else '--'
                 r.text(width-15-len(text)*6,y,text,self.calc.accent,FONT_XTRA_SMALL)
             self.footer(r,width,height,'F3 Data  F4 Summary  F5 Fit  F6 Options',self.calc.error or self.message or note)
             draw.swap()
             return
         r = self.calc.draw_top(draw,width,height,status=status)
-        r.text(130,22,'n='+str(dataset.observation_count()),theme.TEXT,FONT_XTRA_SMALL)
-        r.text(width-70,22,'FREQ '+('ON' if dataset.frequency else 'OFF'),theme.MUTED,FONT_XTRA_SMALL)
+        r.text(130,22,'n='+str(dataset.observation_count()),self.calc.palette.TEXT,FONT_XTRA_SMALL)
+        r.text(width-70,22,'FREQ '+('ON' if dataset.frequency else 'OFF'),self.calc.palette.MUTED,FONT_XTRA_SMALL)
         bottom = height-self.calc.footer_height
         prompt_top = bottom-68
-        r.rect(8,122,width-16,bottom-125,theme.GRID)
+        r.rect(8,122,width-16,bottom-125,self.calc.palette.GRID)
         if self.predicting:
             fit = dataset.fit()
             r.text(16,133,'LINEAR PREDICTION',self.calc.accent,FONT_SMALL)
-            r.text(16,155,'Y = a + b*X',theme.TEXT,FONT_SMALL)
-            r.text(16,176,'a='+format_value(fit['intercept'])+'  b='+format_value(fit['slope']),theme.MUTED,FONT_XTRA_SMALL)
+            r.text(16,155,'Y = a + b*X',self.calc.palette.TEXT,FONT_SMALL)
+            r.text(16,176,'a='+format_value(fit['intercept'])+'  b='+format_value(fit['slope']),self.calc.palette.MUTED,FONT_XTRA_SMALL)
         else:
             columns = dataset.columns()
             if len(columns) == 3: positions = [(46,86),(138,86),(230,width-246)]
             elif len(columns) == 2:
                 positions = [(46,124),(180,width-196)] if dataset.paired else [(46,175),(235,width-251)]
             else: positions = [(46,width-62)]
-            r.text(15,129,'ROW',theme.MUTED,FONT_XTRA_SMALL)
+            r.text(15,129,'ROW',self.calc.palette.MUTED,FONT_XTRA_SMALL)
             for column,(x,_) in zip(columns,positions): r.text(x+4,127,column,self.calc.accent,FONT_SMALL)
-            r.line(9,142,width-10,142,theme.GRID)
+            r.line(9,142,width-10,142,self.calc.palette.GRID)
             capacity = max(1,(prompt_top-146)//16)
             first = max(0,self.row-capacity+1)
             for index in range(first,min(dataset.rows,first+capacity)):
                 y = 146+(index-first)*16
-                r.text(15,y,str(index+1),theme.MUTED,FONT_XTRA_SMALL)
+                r.text(15,y,str(index+1),self.calc.palette.MUTED,FONT_XTRA_SMALL)
                 for column_index,(column,(x,w)) in enumerate(zip(columns,positions)):
                     chosen = index == self.row and column_index == self.column
                     if chosen:
-                        r.fill(x,y-2,w,15,theme.SELECT)
+                        r.fill(x,y-2,w,15,self.calc.palette.SELECT)
                         r.rect(x,y-2,w,15,self.calc.accent)
                     value = dataset.get(index,column)
                     text = format_value(value) if value is not None else '--'
                     font = FONT_SMALL if len(text)*8 <= w-8 else FONT_XTRA_SMALL
-                    r.text(x+4,y,text,theme.TEXT if value is not None else theme.MUTED,font)
-        r.line(9,prompt_top,width-10,prompt_top,theme.GRID)
+                    r.text(x+4,y,text,self.calc.palette.TEXT if value is not None else self.calc.palette.MUTED,font)
+        r.line(9,prompt_top,width-10,prompt_top,self.calc.palette.GRID)
         r.text(16,prompt_top+7,'>>',self.calc.accent,FONT_SMALL)
         show_note = self.calc.show_hints or self.calc.error or self.message
         input_renderer = self.calc.renderer(draw,(40,prompt_top+5,width-17,bottom-(19 if show_note else 5)))
@@ -306,10 +306,10 @@ class Workspace:
             hint = self.editor.hint() if self.editor.parents else ('Enter X for prediction' if self.predicting else 'ENTER down | TAB across | ESC cancels')
         else:
             value = dataset.get(self.row,dataset.columns()[self.column])
-            input_renderer.text(43,prompt_top+10,format_value(value) if value is not None else ('Type a value or press ENTER' if self.calc.show_hints else '--'),theme.MUTED,FONT_SMALL)
+            input_renderer.text(43,prompt_top+10,format_value(value) if value is not None else ('Type a value or press ENTER' if self.calc.show_hints else '--'),self.calc.palette.MUTED,FONT_SMALL)
             hint = 'ARROWS browse | DEL row | BS clears cell'
         if show_note:
-            r.text(16,bottom-15,(self.calc.error or self.message or hint)[:48],theme.ERROR if self.calc.error else theme.MUTED,FONT_XTRA_SMALL)
+            r.text(16,bottom-15,(self.calc.error or self.message or hint)[:48],self.calc.palette.ERROR if self.calc.error else self.calc.palette.MUTED,FONT_XTRA_SMALL)
         if self.editing:
             self.footer(r,width,height,'ENTER commit  TAB slots/across  ESC cancel',
                         'F2 Mode  F5 Clear  F7 Math  F8 Variables')
@@ -340,15 +340,15 @@ class Workspace:
             rows = [('Distributions are planned','Normal, binomial and Poisson come later')]
             hint = 'ESC returns to Statistics'
         r = self.calc.renderer(draw,(0,18,width,height))
-        r.fill(0,18,width,24,theme.PANEL)
+        r.fill(0,18,width,24,self.calc.palette.PANEL)
         r.text(9,24,'STATISTICS / '+self.page.upper(),self.calc.accent,FONT_SMALL)
         capacity = max(1,(height-self.calc.footer_height-51)//29)
         first = max(0,self.selected-capacity+1)
         for index in range(first,min(len(rows),first+capacity)):
             y = 53+(index-first)*29
-            if index == self.selected: r.fill(8,y-3,width-16,27,theme.SELECT)
+            if index == self.selected: r.fill(8,y-3,width-16,27,self.calc.palette.SELECT)
             label,detail = rows[index]
-            r.text(15,y,label[:36],theme.TEXT,FONT_SMALL)
-            r.text(15,y+14,detail[:48],theme.MUTED,FONT_XTRA_SMALL)
+            r.text(15,y,label[:36],self.calc.palette.TEXT,FONT_SMALL)
+            r.text(15,y+14,detail[:48],self.calc.palette.MUTED,FONT_XTRA_SMALL)
         self.footer(r,width,height,hint,self.calc.error or self.message or 'UP/DOWN choose')
         draw.swap()

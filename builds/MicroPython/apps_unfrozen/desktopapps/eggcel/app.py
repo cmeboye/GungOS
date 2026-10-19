@@ -528,8 +528,8 @@ class Spreadsheet:
         panel=blend(bg,fg,1,12);grid=blend(bg,fg,1,4);muted=blend(bg,fg,2,3)
         selected=blend(bg,accent,1,4)
         # Choose readable text when a theme-colour header is filled.
-        brightness=((accent>>11)&31)*299/31+((accent>>5)&63)*587/63+(accent&31)*114/31
-        contrast=0 if brightness>540 else 0xFFFF
+        from picoware.gui.status_bar import foreground
+        contrast=foreground(accent)
         d.fill_screen(bg)
         from engtools.ui import theme
         path='Eggcel'+(' / '+self.page.replace('_',' ').upper() if self.page!='grid' else '')

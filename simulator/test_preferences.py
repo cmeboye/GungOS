@@ -29,7 +29,7 @@ Input.button = property(simulator_input)
 
 
 from picoware.applications import settings as app
-from picoware.system.buttons import BUTTON_CENTER
+from picoware.system.buttons import BUTTON_CENTER, BUTTON_F1
 vm=ViewManager()
 alerts=[]
 ViewManager.alert=lambda self, message, *args: alerts.append(message)
@@ -39,9 +39,9 @@ assert app.start(vm)
 # Credentials saved elsewhere after opening Settings must not be overwritten.
 assert utils.save_wifi_ssid(vm.storage, 'Updated')
 assert utils.save_wifi_password(vm.storage, 'updated-pass')
-app.__open_theme_picker()
-app._theme_picker._select(0)
-vm._button=BUTTON_CENTER
+app.__open_appearance()
+app._appearance.values['theme_color']=0xF800
+vm._button=BUTTON_F1
 app.run(vm)
 from picoware.gui.theme_picker import PRESETS
 red=PRESETS[0][1]
@@ -83,11 +83,12 @@ for claim_success in (False, True):
     assert app._choice is not None
     assert sim_runtime.lcd_brightness==40 and Settings(storage).screen_brightness==40
     assert alerts and 'Could not save brightness' in alerts[-1]
-    app.__open_theme_picker()
-    app._theme_picker._select(1)
+    app.__open_appearance()
+    app._appearance.values['theme_color']=0x07E0
+    vm._button=BUTTON_F1
     app.run(vm)
     assert vm.selected_color==red and Settings(storage).theme_color==red
-    assert 'Save failed' in app._theme_picker.error
+    assert 'Save failed' in app._appearance.error
     failed=Settings(FailedWrites(storage,claim_success))
     try:
         failed.screen_brightness=90

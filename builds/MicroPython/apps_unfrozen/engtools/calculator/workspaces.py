@@ -45,9 +45,9 @@ class Workspace:
 
     def chrome(self,draw,title,hint):
         width,height=int(draw.size.x),int(draw.size.y)
-        draw.fill_screen(theme.BG)
+        draw.fill_screen(self.calc.palette.BG)
         r=self.calc.renderer(draw,(0,18,width,height))
-        r.fill(0,18,width,24,theme.PANEL)
+        r.fill(0,18,width,24,self.calc.palette.PANEL)
         r.text(9,25,title,self.calc.accent,SMALL)
         self.calc.footer(r,width,height,hint,'F2 Modes F4 Vars F9 Hide ESC returns')
         return r,width,height
@@ -66,23 +66,23 @@ class Workspace:
         first=max(0,selected-capacity+1)
         for i in range(first,min(len(rows),first+capacity)):
             y=51+(i-first)*24
-            if i==selected: r.fill(7,y-3,width-14,23,theme.SELECT)
+            if i==selected: r.fill(7,y-3,width-14,23,self.calc.palette.SELECT)
             label,value=rows[i]
-            r.text(13,y,label[:(width-24)//8],theme.TEXT,SMALL)
-            r.text(13,y+12,str(value)[:(width-24)//6],theme.MUTED,TINY)
+            r.text(13,y,label[:(width-24)//8],self.calc.palette.TEXT,SMALL)
+            r.text(13,y+12,str(value)[:(width-24)//6],self.calc.palette.MUTED,TINY)
 
     def sheet(self,r,values,labels,width):
         columns=len(labels); cw=(width-30)//columns
         for col,label in enumerate(labels): r.text(28+col*cw,49,label,self.calc.accent,TINY)
         for row,values_row in enumerate(values):
             y=70+row*30
-            r.text(8,y+5,str(row+1),theme.MUTED,TINY)
+            r.text(8,y+5,str(row+1),self.calc.palette.MUTED,TINY)
             for col,value in enumerate(values_row):
                 x=24+col*cw
-                if self.selected==row*columns+col: r.fill(x,y-2,cw-2,28,theme.SELECT)
+                if self.selected==row*columns+col: r.fill(x,y-2,cw-2,28,self.calc.palette.SELECT)
                 text=format_value(value)
                 if len(text)>(cw-6)//6: text='%.2g'%value
-                r.text(x+3,y+7,text[:(cw-6)//6],theme.TEXT,TINY)
+                r.text(x+3,y+7,text[:(cw-6)//6],self.calc.palette.TEXT,TINY)
 
 
 class BaseWorkspace(Workspace):
@@ -135,17 +135,17 @@ class BaseWorkspace(Workspace):
             editing=self.editing; self.editing=False
             self.rows(r,rows,self.selected,width,height); self.editing=editing
             if self.calc.show_hints:
-                r.text(12,149,'ENTER/L/R changes; ESC returns',theme.MUTED,TINY)
-                r.text(12,168,'Wraps modulo 2^width; division truncates',theme.MUTED,TINY)
-                r.text(12,187,'Operators: AND OR XOR NOT, << >>',theme.MUTED,TINY)
+                r.text(12,149,'ENTER/L/R changes; ESC returns',self.calc.palette.MUTED,TINY)
+                r.text(12,168,'Wraps modulo 2^width; division truncates',self.calc.palette.MUTED,TINY)
+                r.text(12,187,'Operators: AND OR XOR NOT, << >>',self.calc.palette.MUTED,TINY)
         else:
             for i,base in enumerate(RADICES):
                 y=51+i*29
-                if base==self.base: r.fill(7,y-3,width-14,27,theme.SELECT)
+                if base==self.base: r.fill(7,y-3,width-14,27,self.calc.palette.SELECT)
                 r.text(12,y,LABELS[i],self.calc.accent,TINY)
-                r.text(45,y+3,display(self.value,base,self.bits,self.signed),theme.TEXT,TINY)
+                r.text(45,y+3,display(self.value,base,self.bits,self.signed),self.calc.palette.TEXT,TINY)
             if self.calc.show_hints:
-                r.text(12,170,'0x / 0o / 0b prefixes override input base',theme.MUTED,TINY)
+                r.text(12,170,'0x / 0o / 0b prefixes override input base',self.calc.palette.MUTED,TINY)
             self.input(draw,width,height)
         draw.swap()
 
@@ -258,7 +258,7 @@ class SolverWorkspace(Workspace):
             rows=None
             self.sheet(r,self.system,list('xyzw'[:self.size])+['RHS'],width)
             row,col=divmod(self.selected,self.size+1)
-            r.text(12,191,'Equation %d, %s = %s'%(row+1,'xyzw'[col] if col<self.size else 'RHS',format_value(self.system[row][col])),theme.MUTED,TINY)
+            r.text(12,191,'Equation %d, %s = %s'%(row+1,'xyzw'[col] if col<self.size else 'RHS',format_value(self.system[row][col])),self.calc.palette.MUTED,TINY)
         if rows is not None: self.rows(r,rows,self.selected,width,height)
         if self.editing: self.input(draw,width,height)
         if self.job: r.text(12,height-62,'Solving... %d iterations; ESC cancels'%self.progress,self.calc.accent,TINY)
@@ -426,8 +426,8 @@ class MatrixWorkspace(Workspace):
         elif self.page=='dimensions':
             self.rows(r,(('Rows',self.rows_count),('Columns',self.columns)),self.selected,width,height)
             if self.calc.show_hints:
-                r.text(12,123,'L/R changes (1..4); ENTER applies',theme.MUTED,TINY)
-                r.text(12,147,'Overlap is kept when resizing '+self.name,theme.MUTED,TINY)
+                r.text(12,123,'L/R changes (1..4); ENTER applies',self.calc.palette.MUTED,TINY)
+                r.text(12,147,'Overlap is kept when resizing '+self.name,self.calc.palette.MUTED,TINY)
         elif self.page in ('cells','result'):
             value=self.matrices[self.name] if self.page=='cells' else self.result
             selected=self.selected
@@ -437,11 +437,11 @@ class MatrixWorkspace(Workspace):
             r.text(12,191,'[%d,%d] = %s'%(row+1,col+1,format_value(value[row,col])),self.calc.accent,TINY)
             if self.editing: self.input(draw,width,height)
             elif self.page=='result' and self.calc.show_hints:
-                r.text(12,217,'Saved as MatAns; ENTER returns',theme.MUTED,TINY)
+                r.text(12,217,'Saved as MatAns; ENTER returns',self.calc.palette.MUTED,TINY)
         else:
             r.text(12,53,'Scalar answer: '+format_value(self.calc.answer),self.calc.accent,TINY)
             hints=('F3 defines MatA..MatD, sizes 1..4','MatA+MatB  MatA*MatB  2*MatA','inv(MatA) det(MatA) trn(MatA)','MatA^2  trace(MatA) identity(3)','MatB=inv(MatA)  MatAns*MatA')
             if self.calc.show_hints:
-                for i,text in enumerate(hints): r.text(12,78+i*19,text,theme.MUTED,TINY)
+                for i,text in enumerate(hints): r.text(12,78+i*19,text,self.calc.palette.MUTED,TINY)
             self.input(draw,width,height)
         draw.swap()

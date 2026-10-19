@@ -81,7 +81,7 @@ assert not settings._menu.item_exists("Server Settings")
 assert not settings._menu.item_exists("Use LVGL")
 assert not settings._menu.item_exists("USB Stream")
 assert [settings._menu.get_item(i) for i in range(settings._menu.item_count)] == [
-    "Screen Brightness", "Theme Color", "Time", "Screensaver"]
+    "Screen Brightness", "Appearance", "Time", "Screensaver"]
 from picoware.applications import library
 assert library.SYSTEM_ITEMS == ("Settings", "About", "System Info", "Restart", "Shutdown")
 assert library.COMMS_ITEMS == ("Bluetooth", "USB", "WiFi")

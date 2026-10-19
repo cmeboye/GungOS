@@ -687,7 +687,8 @@ class FileBrowser:
             ind = "A" if self._is_caps else ("^" if self._is_shift else "a")
 
             input_x = box_x + sx(5)
-            draw._text(input_x, box_y + sy(2), "{} [{}]:".format(ts, ind), color_bg)
+            from picoware.gui.status_bar import foreground
+            draw._text(input_x, box_y + sy(2), "{} [{}]:".format(ts, ind), foreground(color_sel))
             draw._text(input_x, box_y + sy(24), self._input_text, color_fg)
 
             self._cursor_frame = (self._cursor_frame + 1) % 16
@@ -807,26 +808,28 @@ class FileBrowser:
                 dn = f"{mk_char}/{fn}" if isd else f"{mk_char}{fn}"
 
                 pl = max(0, c_lim - len(dn[:n_lim]) - len(szs))
-                tc = color_fg
+                from picoware.gui.status_bar import foreground
+                tc = foreground(color_sel) if sel else color_fg
                 draw._text(
                     xb + text_pad_x, yo, dn[:n_lim] + (" " * pl) + szs, tc
                 )
                 yo += row_h
 
+        from picoware.gui.status_bar import foreground
         draw._fill_rectangle(0, sh - bottom_bar_h, sw, bottom_bar_h, color_sel)
         if self._mode == FILE_BROWSER_SELECTOR:
             draw._text(
                 text_pad_x,
                 sh - bottom_bar_h + text_line_y,
                 "ENT:Sel M:DirMode O:Opt",
-                color_fg,
+                foreground(color_sel),
             )
         else:
             draw._text(
                 text_pad_x,
                 sh - bottom_bar_h + text_line_y,
                 "ENT:Menu SPC:Mark N:New M:DirMode O:Opt H:Help",
-                color_fg,
+                foreground(color_sel),
             )
         draw.swap()
         self._needs_redraw = False

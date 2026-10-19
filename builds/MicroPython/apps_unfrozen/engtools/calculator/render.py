@@ -11,16 +11,18 @@ class Box:
 
 
 class Renderer:
-    def __init__(self, draw, clip, accent=theme.ACCENT):
+    def __init__(self, draw, clip, accent=theme.ACCENT, palette=None):
         self.draw, self.clip = draw, clip
         self.accent = accent
+        self.palette = palette or theme.colors(getattr(draw, 'background', theme.BG), getattr(draw, 'foreground', theme.TEXT), accent)
         self.metrics = {}
         for size in (0, 1, 2, 3, 4):
             font = draw.get_font(size)
             self.metrics[size] = (font.width+font.spacing, font.height)
         self.cursor = None
 
-    def text(self, x, y, text, color=theme.TEXT, font=FONT_SMALL):
+    def text(self, x, y, text, color=None, font=FONT_SMALL):
+        if color is None: color = self.palette.TEXT
         cw, ch = self.metrics[font]
         left, top, right, bottom = self.clip
         for char in str(text):
@@ -35,7 +37,8 @@ class Renderer:
         if endx > x and endy > y:
             self.draw._fill_rectangle(int(x), int(y), int(endx-x), int(endy-y), color)
 
-    def line(self, x1, y1, x2, y2, color=theme.TEXT):
+    def line(self, x1, y1, x2, y2, color=None):
+        if color is None: color = self.palette.TEXT
         # Liang-Barsky clipping keeps radicals/fraction bars inside their panel.
         left, top, right, bottom = self.clip
         dx, dy, first, last = x2-x1, y2-y1, 0, 1
@@ -55,7 +58,8 @@ class Renderer:
         self.line(x, y, x, y+h-1, color)
         self.line(x+w-1, y, x+w-1, y+h-1, color)
 
-    def glyph(self, kind, x, y, w, h, color=theme.TEXT):
+    def glyph(self, kind, x, y, w, h, color=None):
+        if color is None: color = self.palette.TEXT
         if kind == 'pi':
             self.line(x, y+2, x+w-1, y+2, color)
             self.line(x+3, y+2, x+2, y+h-1, color)
@@ -121,13 +125,14 @@ class Renderer:
         for child, dx, dy in box.children:
             self.locate(child, x+dx, y+dy, editor)
 
-    def paint(self, box, x, y, color=theme.TEXT, editor=None):
+    def paint(self, box, x, y, color=None, editor=None):
+        if color is None: color = self.palette.TEXT
         kind = box.kind
         cw, ch = self.metrics[box.font]
         if kind == 'char': self.text(x, y, box.value, color, box.font)
         elif kind == 'row' and not box.children:
             selected = editor is not None and box.value is editor.row
-            self.rect(x+1, y+1, box.w-2, box.h-2, self.accent if selected else theme.MUTED)
+            self.rect(x+1, y+1, box.w-2, box.h-2, self.accent if selected else self.palette.MUTED)
         elif kind == 'pi': self.glyph('pi', x, y, box.w-2, box.h-1, color)
         elif kind == 'sqrt':
             mid = y+box.h//2
@@ -138,7 +143,7 @@ class Renderer:
         elif kind == 'frac': self.line(x, y+box.children[0][0].h+3, x+box.w-1, y+box.children[0][0].h+3, color)
         elif kind == 'int':
             self.glyph('int', x+1, y+4, 12, box.h-8, color)
-            self.text(x+box.w-2*cw, y+box.base-ch, 'dx', theme.MUTED, box.font)
+            self.text(x+box.w-2*cw, y+box.base-ch, 'dx', self.palette.MUTED, box.font)
         elif kind == 'logb':
             self.text(x, y+box.base-ch, 'log', color, box.font)
             arg, ax, ay = box.children[1]
@@ -150,7 +155,8 @@ class Renderer:
         for child, dx, dy in box.children:
             self.paint(child, x+dx, y+dy, color, editor)
 
-    def expression(self, row, x, y, font=FONT_MEDIUM, color=theme.TEXT, editor=None, follow=False):
+    def expression(self, row, x, y, font=FONT_MEDIUM, color=None, editor=None, follow=False):
+        if color is None: color = self.palette.TEXT
         box = self.layout(row, font)
         if editor is not None:
             self.locate(box, x, y, editor)

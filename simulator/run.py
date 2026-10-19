@@ -571,7 +571,7 @@ def _run_sim_check(opts):
 def _run_selected_profile_check(opts):
     """Check the retained firmware without expecting excluded native modules."""
     tests = (
-        "test_dashboard.py", "test_dashboard_layout.py", "test_status_bar.py", "test_theme_picker.py",
+        "test_dashboard.py", "test_dashboard_layout.py", "test_status_bar.py", "test_theme_picker.py", "test_appearance.py",
         "test_statistics.py",
         "test_picolab_hierarchy.py", "test_picocad.py", "test_picocad_kernel.py", "test_beamlab.py", "test_beamlab_ui.py", "test_beam_eggcel_csv.py", "test_mohr.py", "test_discs.py", "test_memory_release.py",
         "test_calculator.py",

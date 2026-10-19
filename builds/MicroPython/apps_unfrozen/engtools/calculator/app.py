@@ -41,26 +41,27 @@ class Calculator:
         return 36 if self.show_hints else 12
 
     def renderer(self, draw, clip):
-        return Renderer(draw, clip, self.accent)
+        return Renderer(draw, clip, self.accent, self.palette)
 
     def footer(self, r, width, height, first, second='', message=''):
         from engtools.ui import breadcrumbs
         breadcrumbs.paint(r.draw,theme.system_palette(self.vm),fallback=('tools','Scientific calculator'))
         bottom = height-self.footer_height
-        r.fill(0, bottom, width, self.footer_height, theme.PANEL)
+        r.fill(0, bottom, width, self.footer_height, self.palette.PANEL)
         limit = max(1, (width-12)//6)
         if self.show_hints:
             r.text(6, bottom+4, first[:limit], self.accent, FONT_XTRA_SMALL)
             r.text(6, bottom+20, (self.error or message or second)[:limit],
-                   theme.ERROR if self.error else theme.MUTED, FONT_XTRA_SMALL)
+                   self.palette.ERROR if self.error else self.palette.MUTED, FONT_XTRA_SMALL)
         else:
             r.text(6, bottom+2, 'F9 Help', self.accent, FONT_XTRA_SMALL)
             if self.error or message:
                 r.text(55, bottom+2, (self.error or message)[:max(1,(width-61)//6)],
-                       theme.ERROR if self.error else theme.MUTED, FONT_XTRA_SMALL)
+                       self.palette.ERROR if self.error else self.palette.MUTED, FONT_XTRA_SMALL)
 
     def start(self, vm):
         self.vm = vm
+        self.palette = theme.system_palette(vm)
         vm.input_manager.reset()
         self.draw()
         return True
@@ -285,7 +286,7 @@ class Calculator:
             self.draw_widget(draw,width,height)
             self.dirty=False
             return
-        draw.fill_screen(theme.BG)
+        draw.fill_screen(self.palette.BG)
         if self.page in ('solver','base','matrix'):
             self.workspace().draw(draw,width,height)
             self.dirty=False
@@ -302,8 +303,8 @@ class Calculator:
         # Prompt uses the lower portion of the shared prompt/history panel.
         bottom = height-self.footer_height
         prompt_top = bottom-74
-        r.rect(8, 122, width-16, bottom-122-3, theme.GRID)
-        r.text(16, 129, 'SESSION HISTORY', theme.MUTED, FONT_XTRA_SMALL)
+        r.rect(8, 122, width-16, bottom-122-3, self.palette.GRID)
+        r.text(16, 129, 'SESSION HISTORY', self.palette.MUTED, FONT_XTRA_SMALL)
         if not self.history and self.show_hints:
             instructions = ('Type 2^ then SPACE for a power', '2/ or log_ + SPACE for slots',
                             'Assign a=3; use it in 2a+1') if self.mode in SUPPORTED else (
@@ -311,7 +312,7 @@ class Calculator:
             if self.mode == 1:
                 instructions = ('mean(X), std(X), sum(X), predict(x)',
                                 'F3 opens the Statistics data table', 'std = sample; pstd = population')
-            for i, text in enumerate(instructions): r.text(16, 146+i*16, text, theme.MUTED, FONT_XTRA_SMALL)
+            for i, text in enumerate(instructions): r.text(16, 146+i*16, text, self.palette.MUTED, FONT_XTRA_SMALL)
         elif self.history:
             anchor = self.history_index if self.history_index is not None else len(self.history)-1
             hr = self.renderer(draw, (16, 144, width-16, prompt_top-3))
@@ -330,10 +331,10 @@ class Calculator:
                 # A separate clipped row for each history entry prevents nested
                 # fractions/roots from spilling into the neighbouring entry.
                 line = self.renderer(draw, (30, y, width-16, y+available-10))
-                line.expression(record['row'], 30, y, FONT_XTRA_SMALL, theme.MUTED)
+                line.expression(record['row'], 30, y, FONT_XTRA_SMALL, self.palette.MUTED)
                 hr.text(30, y+available-10, '= '+format_value(record['value']), self.accent, FONT_XTRA_SMALL)
                 y += available
-        r.line(9, prompt_top, width-10, prompt_top, theme.GRID)
+        r.line(9, prompt_top, width-10, prompt_top, self.palette.GRID)
         r.text(16, prompt_top+7, '>>', self.accent, FONT_SMALL)
         editor_bottom = bottom-20 if self.show_hints or self.error else bottom-5
         editor_renderer = self.renderer(draw, (40, prompt_top+5, width-17, editor_bottom))
@@ -342,7 +343,7 @@ class Calculator:
         hint_font = FONT_XTRA_SMALL
         if len(hint) > (width-30)//6: hint = hint[:(width-30)//6-3]+'...'
         if self.show_hints or self.error:
-            r.text(16, bottom-15, hint, theme.ERROR if self.error else theme.MUTED, hint_font)
+            r.text(16, bottom-15, hint, self.palette.ERROR if self.error else self.palette.MUTED, hint_font)
         self.footer(r,width,height,'F2 Mode  F3 '+('Data' if self.mode == 1 else 'Options')+'  F4 Vars',
                     'F5 Clear F6 History F7 Math F9 Hide ESC Lab')
         draw.swap()
@@ -353,8 +354,8 @@ class Calculator:
         draw.fill_screen(bg)
         r=self.renderer(draw,(0,0,width,height))
         r.text(7,5,'CALCULATE  '+self.angle,accent,FONT_XTRA_SMALL)
-        r.line(6,18,width-7,18,theme.GRID)
-        r.text(9,25,'ANSWER'+(' '+self.assignment if self.assignment else ''),theme.MUTED,FONT_XTRA_SMALL)
+        r.line(6,18,width-7,18,self.palette.GRID)
+        r.text(9,25,'ANSWER'+(' '+self.assignment if self.assignment else ''),self.palette.MUTED,FONT_XTRA_SMALL)
         result=format_value(self.answer,self.engineering)
         font=FONT_MEDIUM if draw.len(result,FONT_MEDIUM)<=width-18 else FONT_SMALL
         if draw.len(result,font)>width-18: font=FONT_XTRA_SMALL
@@ -362,33 +363,33 @@ class Calculator:
         footer_height = 24 if self.show_hints else 12
         bottom = height-footer_height
         prompt_bottom = bottom-(14 if self.show_hints or self.error else 4)
-        r.rect(6,75,width-12,prompt_bottom-75,theme.GRID)
+        r.rect(6,75,width-12,prompt_bottom-75,self.palette.GRID)
         r.text(12,82,'>>',accent,FONT_SMALL)
         prompt=self.renderer(draw,(34,80,width-12,prompt_bottom-4))
         prompt.expression(self.editor.root,36,83,FONT_SMALL,fg,editor=self.editor,follow=True)
         hint=self.error or self.editor.hint()
         if self.show_hints or self.error:
-            r.text(7,bottom-11,hint[:max(1,(width-14)//6)],theme.ERROR if self.error else theme.MUTED,FONT_XTRA_SMALL)
+            r.text(7,bottom-11,hint[:max(1,(width-14)//6)],self.palette.ERROR if self.error else self.palette.MUTED,FONT_XTRA_SMALL)
         if self.show_hints:
             r.text(7,bottom+3,'F3 Opt F4 Vars F7 Math',accent,FONT_XTRA_SMALL)
-            r.text(7,bottom+14,'ENTER= F5 Clear F9 Hide ESC',theme.MUTED,FONT_XTRA_SMALL)
+            r.text(7,bottom+14,'ENTER= F5 Clear F9 Hide ESC',self.palette.MUTED,FONT_XTRA_SMALL)
         else:
             r.text(7,bottom+2,'F9 Help',accent,FONT_XTRA_SMALL)
         draw.swap()
 
     def draw_top(self, draw, width, height, label=None, value=None, status=None):
         r = self.renderer(draw,(0,18,width,height))
-        r.fill(0,18,width,20,theme.PANEL)
+        r.fill(0,18,width,20,self.palette.PANEL)
         r.text(8,22,status or MODES[self.mode],self.accent)
         if status is None:
-            r.text(width-144,22,self.angle,theme.TEXT)
-            r.text(width-104,22,'ENG' if self.engineering else 'NORM',theme.MUTED)
+            r.text(width-144,22,self.angle,self.palette.TEXT)
+            r.text(width-104,22,'ENG' if self.engineering else 'NORM',self.palette.MUTED)
             r.text(width-54,22,'M' if len(self.variables)>1 else '',self.accent)
             r.text(width-28,22,'i' if self.mode == 3 else '',self.accent)
-        r.fill(8,43,width-16,73,theme.PANEL)
-        r.rect(8,43,width-16,73,theme.GRID)
+        r.fill(8,43,width-16,73,self.palette.PANEL)
+        r.rect(8,43,width-16,73,self.palette.GRID)
         caption = label if label is not None else 'ANSWER'+('  '+self.assignment if self.assignment else '')
-        r.text(17,50,caption[:46],theme.MUTED,FONT_XTRA_SMALL)
+        r.text(17,50,caption[:46],self.palette.MUTED,FONT_XTRA_SMALL)
         number = self.answer if value is None else value
         text = number if isinstance(number,str) else format_value(number,self.engineering)
         font = FONT_LARGE if draw.len(text,FONT_LARGE) <= width-36 else FONT_MEDIUM
@@ -405,24 +406,24 @@ class Calculator:
     def draw_page(self, draw, width, height):
         if self.page == 'modes':
             r = self.renderer(draw, (0, 18, width, height))
-            r.fill(0, 18, width, 24, theme.PANEL)
+            r.fill(0, 18, width, 24, self.palette.PANEL)
             r.text(9, 24, 'CALCULATOR / MODE', self.accent)
             gap, margin = 6, 8
             tilew = (width-2*margin-2*gap)//3
             for i, label in enumerate(MODES):
                 x, y = margin+(i%3)*(tilew+gap), 68+(i//3)*83
                 chosen = i == self.selected
-                r.fill(x, y, tilew, 75, theme.SELECT if chosen else theme.PANEL)
-                r.rect(x, y, tilew, 75, self.accent if chosen else theme.GRID)
+                r.fill(x, y, tilew, 75, self.palette.SELECT if chosen else self.palette.PANEL)
+                r.rect(x, y, tilew, 75, self.accent if chosen else self.palette.GRID)
                 r.text(x+7, y+7, str(i+1), self.accent, FONT_XTRA_SMALL)
                 # Small mode-specific sketches are drawn, not loaded images.
                 icon = self.renderer(draw, (x+4, y+16, x+tilew-4, y+48))
                 sketches = ('x + y', 'x  s', 'x = ?', 'a + bi', '01 AF', '[a b]')
-                icon.text(x+(tilew-len(sketches[i])*8)//2, y+26, sketches[i], theme.TEXT, FONT_SMALL)
+                icon.text(x+(tilew-len(sketches[i])*8)//2, y+26, sketches[i], self.palette.TEXT, FONT_SMALL)
                 r.text(x+(tilew-draw.len(label, FONT_SMALL))//2, y+55, label,
-                       theme.TEXT if chosen else theme.MUTED, FONT_SMALL)
+                       self.palette.TEXT if chosen else self.palette.MUTED, FONT_SMALL)
             r.text(9, 245, DETAILS[self.selected], self.accent, FONT_SMALL)
-            r.text(9, 264, 'Ready' if self.selected in SUPPORTED else 'UI preview; engine planned', theme.MUTED, FONT_XTRA_SMALL)
+            r.text(9, 264, 'Ready' if self.selected in SUPPORTED else 'UI preview; engine planned', self.palette.MUTED, FONT_XTRA_SMALL)
             self.footer(r,width,height,'ARROWS choose  ENTER open',
                         '1-6 select  F9 Hide  ESC returns')
             draw.swap()
@@ -444,16 +445,16 @@ class Calculator:
             if not rows: rows = [('No calculations yet', 'History is kept only while the calculator is open')]
             hint = 'ENTER recalls | last 24 | saving OFF'
         r = self.renderer(draw, (0, 18, width, height))
-        r.fill(0, 18, width, 24, theme.PANEL)
+        r.fill(0, 18, width, 24, self.palette.PANEL)
         r.text(9, 24, 'CALCULATOR / '+self.page.upper(), self.accent)
         capacity = max(1, (height-self.footer_height-51)//29)
         first = max(0, self.selected-capacity+1)
         for index in range(first, min(len(rows), first+capacity)):
             y = 52+(index-first)*29
-            if index == self.selected: r.fill(8, y-3, width-16, 27, theme.SELECT)
+            if index == self.selected: r.fill(8, y-3, width-16, 27, self.palette.SELECT)
             label, detail = rows[index]
-            r.text(15, y, label[:(width-30)//8], theme.TEXT, FONT_SMALL)
-            r.text(15, y+14, detail[:(width-30)//6], theme.MUTED, FONT_XTRA_SMALL)
+            r.text(15, y, label[:(width-30)//8], self.palette.TEXT, FONT_SMALL)
+            r.text(15, y+14, detail[:(width-30)//6], self.palette.MUTED, FONT_XTRA_SMALL)
         self.footer(r,width,height,hint,'UP/DOWN choose  F9 Hide  ESC returns')
         draw.swap()
 

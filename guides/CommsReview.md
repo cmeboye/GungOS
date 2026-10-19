@@ -10,7 +10,7 @@ No physical peripheral or external SSH server was used during this pass.
 - System now lists Settings, About, System Info, Restart and Shutdown.
   Bootloader and Stop are removed from the dashboard/library and legacy menus.
   Shutdown keeps its confirmation dialog. Low-level control APIs remain.
-- Settings lists Screen Brightness, Theme Color, Time and Screensaver.
+- Settings lists Screen Brightness, Appearance, Time and Screensaver.
   Debug, Onscreen Keyboard and Fast Drawing entries/toggle UI are removed.
   Existing drawing/keyboard preferences and application APIs still work.
 - Infrared is excluded from the release: its menu route, application, facade

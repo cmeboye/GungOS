@@ -23,6 +23,8 @@ class ViewManager:
         "_storage",
         "_background_color",
         "_foreground_color",
+        "_text_on_dark",
+        "_text_on_light",
         "_draw",
         "_gmt_offset",
         "_input_manager",
@@ -73,8 +75,12 @@ class ViewManager:
         self._gmt_offset = settings.gmt_offset
 
         # Set up colors
-        self._background_color = TFT_BLACK
-        self._foreground_color = TFT_WHITE
+        from picoware.gui import appearance
+        colors = appearance.values(settings.settings)
+        self._text_on_dark, self._text_on_light = colors['text_on_dark'], colors['text_on_light']
+        appearance.configure(self._text_on_dark, self._text_on_light)
+        self._background_color = colors['background_color']
+        self._foreground_color = appearance.text_on(self._background_color)
 
         # Initialize drawing system
         self._draw = Draw(self._foreground_color, self._background_color)
@@ -86,7 +92,7 @@ class ViewManager:
         self.__apply_screen_mode(self._fast_drawing)
 
         # theme color
-        self._selected_color = settings.theme_color
+        self._selected_color = colors['theme_color']
         self._draw.theme_color = self._selected_color
 
         # debug mode
@@ -195,6 +201,24 @@ class ViewManager:
     def app_loader(self):
         """Return the shared AppLoader instance."""
         return self._app_loader
+
+    @property
+    def text_on_dark(self):
+        return self._text_on_dark
+
+    @property
+    def text_on_light(self):
+        return self._text_on_light
+
+    def apply_appearance(self, values):
+        """Apply already-persisted appearance roles to drawing and lazy widgets."""
+        from picoware.gui import appearance
+        colors = appearance.values(values)
+        self._text_on_dark, self._text_on_light = colors['text_on_dark'], colors['text_on_light']
+        appearance.configure(self._text_on_dark, self._text_on_light)
+        self.background_color = colors['background_color']
+        self.foreground_color = appearance.text_on(self.background_color)
+        self.selected_color = colors['theme_color']
 
     @property
     def background_color(self):

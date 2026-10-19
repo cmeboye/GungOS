@@ -47,6 +47,9 @@ class Settings:
             "screen_brightness": 100,
             "screensaver": "",
             "theme_color": 0x001F,
+            "background_color": 0,
+            "text_on_dark": 0xFFFF,
+            "text_on_light": 0,
             "wifi_ssid": "",
         }
         if not self._storage.exists(self._path):

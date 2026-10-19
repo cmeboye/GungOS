@@ -79,6 +79,8 @@ key(k.BUTTON_ESCAPE);assert vm.current_view.name=='desktop_view'
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);assert vm.current_view.name=='misc'
 key(k.BUTTON_CENTER);assert vm.current_view.name=='screensavers'
 vm.draw.screenshot('/private/tmp/gungos-nav-screensavers.bmp')
+from picoware.applications.applications import screensavers
+screensavers._screensavers.set_selected(screensavers._screensavers.items.index('Lorenz'))
 key(k.BUTTON_CENTER);assert vm.current_view.name=='screensaver_Lorenz'
 key(k.BUTTON_NONE);key(k.BUTTON_BACK);key(k.BUTTON_DELETE)
 assert vm.current_view.name=='screensaver_Lorenz'
@@ -88,11 +90,11 @@ key(k.BUTTON_ESCAPE);assert vm.current_view.name=='desktop_view'
 key(k.BUTTON_RIGHT);key(k.BUTTON_CENTER);assert vm.current_view.name=='settings'
 labels=config._menu.items
 assert 'Dark Mode' not in labels and 'Exit Button' not in labels
-assert 'Screen Brightness' in labels and 'Theme Color' in labels
+assert 'Screen Brightness' in labels and 'Appearance' in labels
 vm.draw.screenshot('/private/tmp/gungos-nav-settings.bmp')
-config._menu.set_selected(labels.index('Theme Color'));key(k.BUTTON_CENTER)
-assert config._theme_picker.colour==vm.selected_color
-key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
+config._menu.set_selected(labels.index('Appearance'));key(k.BUTTON_CENTER)
+assert config._appearance.values['theme_color']==vm.selected_color
+key(k.BUTTON_CENTER);key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);key(k.BUTTON_F1)
 assert vm.selected_color==Settings(vm.storage).theme_color and vm.draw.theme_color==vm.selected_color
 key(k.BUTTON_ESCAPE);assert vm.current_view.name=='desktop_view'
 print('PASS: hierarchy, legacy preference migration, Esc-only return, Back/Del editing and live system theme')

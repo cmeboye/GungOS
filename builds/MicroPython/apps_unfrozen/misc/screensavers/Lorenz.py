@@ -162,20 +162,17 @@ def _settings_input(vm, button):
 
 
 def _foreground(background):
-    # Keep this SD app compatible with v2.2 firmware, before the new status bar.
-    red = ((background >> 11) & 31) * 255 // 31
-    green = ((background >> 5) & 63) * 255 // 63
-    blue = (background & 31) * 255 // 31
-    return 0 if red * 299 + green * 587 + blue * 114 >= 145000 else 0xFFFF
+    from picoware.gui.status_bar import foreground
+    return foreground(background)
 
 
 def _draw_settings(vm):
     draw = vm.draw
     width, height = int(draw.size.x), int(draw.size.y)
     accent, text, bg = vm.selected_color, vm.foreground_color, vm.background_color
-    ink, muted = _foreground(accent), 0xAD55
-    draw.fill_screen(bg)
     from engtools.ui import theme
+    ink, muted = _foreground(accent), theme.system_palette(vm).MUTED
+    draw.fill_screen(bg)
     theme.header(draw,'Lorenz / Settings',palette=theme.system_palette(vm),height=18)
     detail = next(label for label, stride in DETAILS if stride == _draft['detail'])
     fps = str(_draft['fps']) + (' (cap 8)' if _widget and _draft['fps'] > 8 else '')

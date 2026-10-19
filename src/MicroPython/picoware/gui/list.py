@@ -192,12 +192,13 @@ class List:
                 self.selected_color,
             )
 
+            from picoware.gui.status_bar import foreground
             # Draw text centered
             self.display._text(
                 item_x,
                 text_y,
                 current_item[:item_width // (font.width + font.spacing)],
-                self.text_color,
+                foreground(self.selected_color),
                 font_size,
             )
 
@@ -303,7 +304,8 @@ class List:
 
                 # Center text if circular display, otherwise left-align with padding
                 text_x = self._five.x * 2
-                self.display._text(text_x, text_y, item_text, self.text_color)
+                from picoware.gui.status_bar import foreground
+                self.display._text(text_x, text_y, item_text, foreground(self.selected_color) if i == self._selected_index else self.text_color)
 
         # Swap buffers
         if swap:

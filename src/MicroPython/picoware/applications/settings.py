@@ -7,7 +7,7 @@ from micropython import const
 STATE_SCREEN_BRIGHTNESS = const(0)
 
 # modes
-_MODE_THEME = const(19)
+_MODE_APPEARANCE = const(19)
 _MODE_MENU = const(0)
 _MODE_CHOICE = const(2)
 _MODE_TIME_MENU = const(3)
@@ -18,7 +18,7 @@ _MODE_GMT_KEYBOARD = const(5)
 _settings = None
 _menu = None
 _choice = None
-_theme_picker = None
+_appearance = None
 _time_menu = None
 _date_picker = None
 _view_manager = None
@@ -37,18 +37,19 @@ def __config() -> tuple:
     # (menu label, json key, default value)
     return (
         ("Screen Brightness", "screen_brightness", 100),
-        ("Theme Color", "theme_color", None),
+        ("Appearance", "appearance", None),
         ("Time", "time", None),
     )
 
 
-def __open_theme_picker() -> None:
-    """Preview an accent without changing or saving the active system theme."""
-    global _theme_picker, _mode
-    from picoware.gui.theme_picker import ThemePicker
-    _theme_picker = ThemePicker(_view_manager, _settings.theme_color)
-    _theme_picker.draw()
-    _mode = _MODE_THEME
+def __open_appearance() -> None:
+    """Edit an unsaved appearance draft; commit all roles together."""
+    global _appearance, _mode
+    from picoware.gui.appearance_editor import AppearanceEditor
+    from picoware.gui.appearance import values
+    _appearance = AppearanceEditor(_view_manager, values(_settings.settings))
+    _appearance.draw()
+    _mode = _MODE_APPEARANCE
 
 
 def __open_choice_brightness() -> None:
@@ -163,7 +164,7 @@ def __gmt_save_callback(result: str) -> None:
 
 def __back_to_menu() -> None:
     """Clean up any sub-view and return to the main menu."""
-    global _choice, _theme_picker, _time_menu, _date_picker, _mode
+    global _choice, _appearance, _time_menu, _date_picker, _mode
 
     if _choice is not None:
         del _choice
@@ -175,9 +176,11 @@ def __back_to_menu() -> None:
         del _date_picker
         _date_picker = None
 
-    _theme_picker = None
+    _appearance = None
     _mode = _MODE_MENU
     _menu.selected_color = _view_manager.selected_color
+    _menu.background_color = _view_manager.background_color
+    _menu.text_color = _view_manager.foreground_color
     _menu.draw()
 
 
@@ -212,13 +215,13 @@ def start(view_manager) -> bool:
     from picoware.gui.menu import Menu
     from picoware.system.settings import Settings
 
-    global _theme_picker, _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _gmt_save_requested
+    global _appearance, _settings, _menu, _view_manager, _mode, _time_menu, _date_picker, _gmt_save_requested
     global _resume_menu_label
     _view_manager = view_manager
     _mode = _MODE_MENU
     _gmt_save_requested = False
 
-    _theme_picker = None
+    _appearance = None
     if _settings is not None:
         del _settings
         _settings = None
@@ -299,23 +302,23 @@ def run(view_manager) -> None:
                 if view_manager.get_view(name) is None:
                     view_manager.add(View(name,screensaver_setting.run,screensaver_setting.start,screensaver_setting.stop))
                 view_manager.switch_to(name)
-            elif selected == "Theme Color":
-                __open_theme_picker()
+            elif selected == "Appearance":
+                __open_appearance()
             elif selected == "Time":
                 __open_time_menu()
             elif selected == "Screen Brightness":
                 __open_choice_brightness()
 
-    elif _mode == _MODE_THEME:
-        result = _theme_picker.handle(button)
+    elif _mode == _MODE_APPEARANCE:
+        result = _appearance.handle(button)
         if result == 'cancel':
             __back_to_menu()
         elif result == 'save':
-            if not _settings.update({'theme_color': _theme_picker.colour}):
-                _theme_picker.error = 'Save failed. Check the SD; ENTER retries.'
-                _theme_picker.draw()
+            if not _settings.update(_appearance.values):
+                _appearance.error = 'Save failed. Check SD; F1 retries.'
+                _appearance.draw()
                 return
-            view_manager.selected_color = _theme_picker.colour
+            view_manager.apply_appearance(_appearance.values)
             __back_to_menu()
 
     elif _mode == _MODE_TIME_MENU:
@@ -393,9 +396,9 @@ def stop(view_manager) -> None:
     """
     from gc import collect
 
-    global _settings, _menu, _choice, _theme_picker, _time_menu, _date_picker
+    global _settings, _menu, _choice, _appearance, _time_menu, _date_picker
 
-    _theme_picker = None
+    _appearance = None
     if _settings is not None:
         del _settings
         _settings = None

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Expand Settings → Appearance with accent, background, text on dark and text on
+  light colours; include 32 swatches, custom hex entry, a combined contrast
+  preview, transactional Save/Cancel and a reset to GungOS defaults.
+- Apply appearance roles across the dashboard/status bar, logo canvases, native
+  selections and shipped app chrome, including all calculator modes and widget.
+
 - PicoCAD in PicoLAB → Tools: direct analytic primitive wireframes, perspective
   and parallel projection, camera controls, an XYZ guide and verified `.pcad`
   project files. Supported Boolean cases include containment, box operations,

@@ -33,20 +33,24 @@ LOGOS = {
     )),
 }
 
-def decode(name, background=0, accent=0xF800):
+def decode(name, background=0, accent=0xF800, ink=None):
     width, height, palette, runs = LOGOS[name]
     out = bytearray(width * height * 2)
+    from picoware.gui.appearance import text_on
+    if ink is None: ink = text_on(background)
     position = 0
     for i in range(0, len(runs), 2):
         count, index = runs[i], runs[i+1]
         color = background if index == 0 else accent if index == 1 else palette[index]
+        if color == 0xFFFF and index > 1:
+            color = ink
         run = bytes((color & 255, color >> 8)) * count
         out[position:position+len(run)] = run
         position += len(run)
     return out
 
 
-def paint(draw, name, x, y, background=0, accent=0xF800):
+def paint(draw, name, x, y, background=0, accent=0xF800, ink=None):
     width, height = LOGOS[name][:2]
-    draw._bytearray(x, y, width, height, decode(name, background, accent))
+    draw._bytearray(x, y, width, height, decode(name, background, accent, ink))
     return width

@@ -123,7 +123,8 @@ class DatePicker:
 
             # Value — centered in band
             val_pw = draw.len(val, val_font)
-            draw._text(col_cx - val_pw // 2, center_y - val_h // 2, val, bg if i == active_col else fg, val_font)
+            from picoware.gui.status_bar import foreground
+            draw._text(col_cx - val_pw // 2, center_y - val_h // 2, val, foreground(sel) if i == active_col else fg, val_font)
 
             # Field label at top of band
             lbl_pw = len(label) * lbl_cw

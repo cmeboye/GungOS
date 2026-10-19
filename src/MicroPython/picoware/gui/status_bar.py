@@ -7,11 +7,9 @@ HEIGHT = 16
 
 
 def foreground(background):
-    """Choose readable text on the RGB565 theme colour."""
-    red = ((background >> 11) & 31) * 255 // 31
-    green = ((background >> 5) & 63) * 255 // 63
-    blue = (background & 31) * 255 // 31
-    return 0 if red * 299 + green * 587 + blue * 114 >= 145000 else 0xFFFF
+    """Configured text role for an RGB565 surface."""
+    from picoware.gui.appearance import text_on
+    return text_on(background)
 
 
 def bitmap(name, background):
@@ -23,7 +21,8 @@ def bitmap(name, background):
     width, height, indices = ICONS[name]
     out_width, out_height = width + 2, height + 2
     raw = bytearray(bytes((background & 255, background >> 8)) * (out_width * out_height))
-    if foreground(background) == 0:
+    from picoware.gui.appearance import is_light
+    if is_light(background):
         # Only the shadow is added; the source PNGs remain untouched.
         for y in range(height):
             for x in range(width):
@@ -87,8 +86,8 @@ class StatusBar:
 
     def draw(self, state):
         draw = self.vm.draw
-        background = 0
-        colour = 0xFFFF
+        background = self.vm.background_color
+        colour = foreground(background)
         draw._fill_rectangle(0, 0, 320, HEIGHT, background)
         y = (HEIGHT - draw.get_font(FONT_XTRA_SMALL).height) // 2
         current = state[0]

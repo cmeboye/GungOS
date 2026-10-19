@@ -173,7 +173,7 @@ class WidgetContext:
     def clear(self): self.draw.erase()
     def __getattr__(self,name):
         if name in ('storage','time','battery','wifi','system','foreground_color','background_color',
-                    'selected_color','has_wifi','gmt_offset','log'):
+                    'selected_color','text_on_dark','text_on_light','has_wifi','gmt_offset','log'):
             return getattr(self.master,name)
         raise AttributeError('Widget context API unavailable: '+name)
 
@@ -222,6 +222,8 @@ class WidgetHost:
         if button==-1 and ticks_diff(now,self.next_frame)<0: return False
         self.next_frame=now+125
         try:
+            self.draw.foreground = self.master.foreground_color
+            self.draw.background = self.master.background_color
             self.context.input_manager._last_button=button if self.focused else -1
             if self.context.current_view: self.context.current_view.run(self.context)
             else: self.module.run(self.context)

@@ -643,6 +643,9 @@ class Keyboard:
         self.size_vec.x = width
         self.size_vec.y = height
 
+        from picoware.gui.status_bar import foreground
+        ink = foreground(self.selected_color) if is_selected else self.text_color
+
         # Draw key background
         bg_color = self.selected_color if is_selected else self.background_color
         self.draw._fill_rectangle(
@@ -662,7 +665,7 @@ class Keyboard:
             # Printable fonts have no Shift/Caps Lock glyphs.
             caps = key.normal == "\x01"
             rows = (4, 14, 31, 4, 4, 0, 31) if caps else (4, 14, 31, 4, 4, 4, 4)
-            color = self.text_color
+            color = ink
             # Fit the 5x7 bitmap to the same glyph box as the other key labels.
             font = self.draw.get_font(self._key_font)
             icon_width = self.draw.len(self._key_label(row, col), self._key_font) - font.spacing
@@ -691,7 +694,7 @@ class Keyboard:
         label_width = self.draw.len(key_label, self._key_font) - font.spacing
         key_x = x_pos + (width - label_width) // 2
         key_y = y_pos + (height - font.height) // 2
-        color = self.text_color
+        color = ink
         self.draw._text(key_x, key_y, key_label, color, self._key_font)
 
     def _key_label(self, row: int, col: int) -> str:
@@ -870,7 +873,8 @@ class Keyboard:
                     self.draw._fill_rectangle(
                         x_pos - padding_x, y_pos - padding_y, column_width, line_height, self.selected_color,
                     )
-                self.draw._text(x_pos, y_pos, text, self.text_color)
+                from picoware.gui.status_bar import foreground
+                self.draw._text(x_pos, y_pos, text, foreground(self.selected_color) if i == self.selected_suggestion_index else self.text_color)
 
     def _apply_suggestion(self, suggestion_text: str) -> None:
         """Apply an auto-complete suggestion to the current response.

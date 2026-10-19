@@ -1,29 +1,49 @@
-# Theme colours
+# Appearance
 
-Open **System → Settings → Theme Color**. The dark canvas is fixed; the accent
-colours the category/footer bars, selections and themed application controls.
-The top status bar stays black with white text.
+Open **System → Settings → Appearance** to edit four shared colour roles:
 
-- **Arrow keys:** browse 30 colour swatches. The name and display hex value appear
-  below the grid, with a live preview of text and a selected control.
-- **F2:** enter a custom RGB colour as six hex digits (`RRGGBB`, optional `#`).
-  Typing the first digit replaces the prefilled value. Left/Right move the cursor;
-  Back and Del both erase before it. Enter previews the completed colour; Esc
-  discards the edit and returns to the swatches.
-- **Enter on the swatch screen:** save and return to Settings.
-- **Esc on the swatch screen:** return without saving.
+| Setting | Default | Used for |
+| --- | --- | --- |
+| Accent color | Blue | Selections, highlights, themed controls and plots |
+| Background color | Black | Main canvas, status bar and widget surfaces |
+| Text on dark | White | Text on dark canvases and solid controls |
+| Text on light | Black | Text on bright canvases and solid controls |
 
-Previewing does not change the active system theme or write to the SD card.
-Saving updates the existing integer `theme_color` in
-`picoware/settings/picoware.json`, preserving Wi-Fi credentials and other settings.
-A failed save leaves the picker open with an error; fix the SD issue and press
-Enter to retry, or Esc to cancel. The saved colour is restored at startup.
+The system chooses the text role from the brightness of the surface. Panel,
+grid and muted colours are derived from the canvas and text. Logos composite
+over their surface; white lettering uses its text role. Decorative logo colours,
+radio artwork, document colours, game pieces and error colours retain their
+meaning. Changing the appearance does not recolour a saved painting or document.
 
-The display uses RGB565 (65,536 colours), so custom RGB888 values are rounded to
-the nearest supported colour. The preview's hex value shows the actual display
-colour; for example, `#D48844` becomes `#D68A42`. Text on solid accent backgrounds
-switches between black and white for readability.
+Use Up/Down to choose a role and Enter to edit it. The colour picker offers
+32 swatches, including black and white. **F2** opens a custom `RRGGBB` hex editor
+with an optional `#`. The first typed digit replaces the existing value;
+Left/Right move the caret, and Back/Del both erase before it. Enter accepts a
+complete hex value; Esc discards that hex edit.
 
-The picker is firmware code and needs a new UF2 to install on a physical Pico.
-After that, choosing or saving another colour does not need reflashing. The
-simulator uses the updated source immediately.
+Enter on the swatch screen sets the colour in the appearance draft. Esc returns
+without changing that role. The preview combines the draft canvas, accent and
+both text colours, with contrast ratios for normal text and a selected control.
+A low-contrast label indicates a ratio below 4.5. The controls retain a readable
+palette even when the draft text would be invisible.
+
+**F1 Save** on the Appearance page saves all four roles together and applies them
+immediately. **Esc** cancels the entire draft. **F2 Reset**, or the Reset appearance
+row, loads the defaults into the draft; F1 is still needed to save the reset.
+Browsing and previewing never write settings or alter the active appearance.
+A failed save leaves the draft open; correct the SD issue and press F1 to retry.
+
+Values are stored as RGB565 integers in `picoware/settings/picoware.json` under
+`theme_color`, `background_color`, `text_on_dark` and `text_on_light`. Existing
+cards keep their accent and use the defaults for missing fields. The save keeps
+other preferences and Wi-Fi settings. Colours are restored at startup.
+
+The current framebuffer reduces colours to **RGB332 (256 colours)**. Hex input
+is stored at RGB565 precision, and the preview shows the same quantization as
+the screen. Nearby hex values may look identical. Contrast and surface brightness
+are measured after that reduction.
+
+The settings UI and shared firmware theme code require a new UF2 on the Pico,
+with the accompanying SD app update for the calculator and other app changes.
+Choosing or saving another appearance after installing it requires no reflash.
+The simulator uses the updated source immediately.

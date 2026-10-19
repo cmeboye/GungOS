@@ -47,7 +47,7 @@ try:
     check('brightness','gungOS_small','Screen Brightness',choice.draw)
     from picoware.gui.theme_picker import ThemePicker
     picker=ThemePicker(vm,vm.selected_color)
-    check('theme','gungOS_small','Settings / Theme colour',picker.draw)
+    check('theme','gungOS_small','Appearance / Theme colour',picker.draw)
     picker._begin_edit()
     check('theme-custom','gungOS_small','Custom',picker.draw)
     from picoware.gui.date_picker import DatePicker

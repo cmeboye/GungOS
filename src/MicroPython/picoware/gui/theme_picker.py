@@ -1,7 +1,7 @@
-"""Accent swatches and a bounded hex editor with an unsaved live preview."""
+"""Shared colour swatches, hex editing and a local appearance preview."""
 from picoware.system import buttons as key
 from picoware.system.font import FONT_SMALL, FONT_MEDIUM, FONT_XTRA_SMALL
-from picoware.gui.status_bar import foreground
+from picoware.gui.appearance import is_light
 
 
 def from_hex(value):
@@ -39,15 +39,22 @@ PRESETS = (
     ('Mint', from_hex('98E0BA')), ('Sage', from_hex('9EB89B')),
     ('Olive', from_hex('B0B85D')), ('Sand', from_hex('D9BF8F')),
     ('Copper', from_hex('C88455')), ('Ice', from_hex('CEEAF0')),
+    ('Black', 0), ('White', 0xFFFF),
 )
 
 
 class ThemePicker:
     COLUMNS = 5
 
-    def __init__(self, vm, colour):
+    def __init__(self, vm, colour, field='theme_color', values=None, label='Theme colour'):
         self.vm = vm
         self.colour = colour
+        from picoware.gui import appearance
+        self.values = dict(values) if values is not None else appearance.values({
+            'theme_color': vm.selected_color, 'background_color': vm.background_color,
+            'text_on_dark': getattr(vm, 'text_on_dark', 0xFFFF),
+            'text_on_light': getattr(vm, 'text_on_light', 0)})
+        self.field, self.label = field, label
         self.index = next((i for i, item in enumerate(PRESETS) if item[1] == colour), -1)
         self.editing = False
         self.draft = ''
@@ -136,10 +143,11 @@ class ThemePicker:
     def draw(self):
         draw = self.vm.draw
         bg, text, muted = 0, 0xFFFF, 0xAD55
-        colour, ink = self.colour, foreground(self.colour)
+        colour = self.colour
+        ink = 0 if is_light(colour) else 0xFFFF
         draw.fill_screen(bg)
         from picoware.gui import style
-        label='Settings / Theme colour'+(' / Custom' if self.editing else '')
+        label='Appearance / '+self.label+(' / Custom' if self.editing else '')
         style.header(draw,label,palette=style.colors(bg,text,colour),height=24)
         if self.editing:
             draw._text(16, 43, 'Enter RGB hex: #RRGGBB', text, FONT_SMALL)
@@ -151,31 +159,57 @@ class ThemePicker:
             draw._fill_rectangle(cursor_x, 106, max(2, draw.len('0', FONT_MEDIUM)), 2, text)
             draw._text(16, 130, 'BACK / DEL erase before the cursor', muted, FONT_XTRA_SMALL)
             draw._text(16, 146, 'LEFT / RIGHT move the cursor', muted, FONT_XTRA_SMALL)
-            draw._text(16, 168, 'Matched to the nearest display colour.', muted, FONT_XTRA_SMALL)
+            draw._text(16, 168, 'Screen uses a 256-colour palette.', muted, FONT_XTRA_SMALL)
             label = 'Display colour'
         else:
-            draw._text(8, 32, 'Choose an accent for the dark interface.', muted, FONT_XTRA_SMALL)
+            draw._text(8, 32, 'Choose a colour; F2 enters #RRGGBB.', muted, FONT_XTRA_SMALL)
             for index, (name, swatch) in enumerate(PRESETS):
-                x, y = 8 + (index % self.COLUMNS) * 62, 49 + (index // self.COLUMNS) * 24
+                x, y = 8 + (index % self.COLUMNS) * 62, 47 + (index // self.COLUMNS) * 22
                 draw._fill_rectangle(x, y, 56, 18, swatch)
                 if index == self.index:
-                    draw._rectangle(x - 2, y - 2, 60, 22, text)
+                    draw._rectangle(x - 2, y - 2, 60, 21, text)
                     draw._rectangle(x, y, 56, 18, 0)
-                    draw._text(x + 22, y + 5, '*', foreground(swatch), FONT_SMALL)
+                    draw._text(x + 22, y + 5, '*', (0 if is_light(swatch) else 0xFFFF), FONT_SMALL)
             label = PRESETS[self.index][0] if self.index >= 0 else 'Custom'
-        draw._text(8, 200, label, text, FONT_SMALL)
+        draw._text(8, 208, label, text, FONT_SMALL)
         hex_label = '#' + to_hex(colour)
-        draw._text(312 - draw.len(hex_label, FONT_SMALL), 200, hex_label, text, FONT_SMALL)
-        # Preview both ordinary text and a selected control on the dark surface.
-        draw._rectangle(8, 223, 304, 57, colour if colour else muted)
-        draw._text(18, 233, 'Live preview', text, FONT_SMALL)
-        draw._text(18, 254, 'GungOS / dark', muted, FONT_XTRA_SMALL)
-        draw._fill_rectangle(183, 235, 117, 30, colour)
-        draw._text(194, 245, 'Selected', ink, FONT_SMALL)
+        draw._text(312 - draw.len(hex_label, FONT_SMALL), 208, hex_label, text, FONT_SMALL)
+        values = dict(self.values)
+        values[self.field] = colour
+        preview(draw, values, 229, 67)
         if self.error:
             draw._fill_rectangle(4, 282, 312, 16, 0x5800)
             draw._text(8, 286, self.error, text, FONT_XTRA_SMALL)
         draw._fill_rectangle(0, 300, 320, 20, colour)
-        hint = 'ENTER preview   ESC discard edit' if self.editing else 'Arrows browse  F2 custom  ENTER save  ESC cancel'
+        hint = 'ENTER accepts hex   ESC discards edit' if self.editing else 'Arrows  F2 Custom  ENTER Set  ESC Cancel'
         draw._text(6, 306, hint, ink, FONT_XTRA_SMALL)
         draw.swap()
+
+
+def preview(draw, values, y, height):
+    """Composite all four draft roles without mutating the system palette."""
+    from picoware.gui.appearance import text_on, contrast
+    bg, accent = values['background_color'], values['theme_color']
+    dark, light = values['text_on_dark'], values['text_on_light']
+    fg, ink = text_on(bg, dark, light), text_on(accent, dark, light)
+    draw._fill_rectangle(8, y, 304, height - 14, bg)
+    draw._rectangle(8, y, 304, height - 14, 0x8410)
+    from picoware.assets.logos import paint
+    # Explicit ink keeps this preview independent of the active appearance.
+    paint(draw, 'gungOS_small', 16, y + 7, bg, accent, fg)
+    draw._text(16, y + 27, 'Normal text', fg, FONT_SMALL)
+    draw._fill_rectangle(183, y + 9, 117, 30, accent)
+    draw._text(194, y + 19, 'Selected', ink, FONT_SMALL)
+    # Both text roles remain visible while editing, even when the canvas and
+    # accent currently use the same brightness class.
+    draw._fill_rectangle(16, y + 40, 138, 12, 0)
+    draw._text(20, y + 42, 'Text on dark', dark, FONT_XTRA_SMALL)
+    draw._fill_rectangle(162, y + 40, 138, 12, 0xFFFF)
+    draw._text(166, y + 42, 'Text on light', light, FONT_XTRA_SMALL)
+    normal, selected = contrast(bg, fg), contrast(accent, ink)
+    label = 'Contrast %.1f / %.1f' % (normal, selected)
+    if min(normal, selected) < 4.5:
+        label += '  Low contrast'
+    # The indicator is outside the draft, always on an opaque safe surface.
+    draw._fill_rectangle(8, y + height - 14, 304, 14, 0x1082)
+    draw._text(12, y + height - 11, label, 0xFFE0 if min(normal, selected) < 4.5 else 0xFFFF, FONT_XTRA_SMALL)
