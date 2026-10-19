@@ -58,22 +58,23 @@ def panel(draw, p, rect, title, status='', fill=None):
     if status:right_text(bounded,x+w-8,y+7,status,p.MUTED)
 
 
-def tabs(draw,p,rect,labels,selected,counts):
+def tabs(draw,p,rect,labels,selected,counts,font=SM,height=22):
     """Theme-coloured tabs contained in the property panel's header."""
     from picoware.gui.status_bar import foreground
     x,y,w,h=rect
     panel(draw,p,rect,'')
     width=w-2
+    text_y=y+(height-draw.get_font(font).height)//2
     for i,label in enumerate(labels):
         left=x+1+i*width//len(labels)
         right=x+1+(i+1)*width//len(labels)
         active=i==selected
         color=p.ACCENT if active else p.PANEL
-        draw._fill_rectangle(left,y+1,right-left,20,color)
+        draw._fill_rectangle(left,y+1,right-left,height-2,color)
         title=label+' '+str(counts[i])
-        text(draw,left+(right-left-draw.len(title,SM))//2,y+5,title,
-             foreground(color) if active else p.MUTED,SM)
-    draw._line(x+1,y+21,x+w-2,y+21,p.GRID)
+        text(draw,left+(right-left-draw.len(title,font))//2,text_y,title,
+             foreground(color) if active else p.MUTED,font)
+    draw._line(x+1,y+height-1,x+w-2,y+height-1,p.GRID)
 
 
 def chrome(draw,p,page,message='',error=False,title='BEAM VIEW',fallback=('modules','structural','Beam view'),
@@ -124,39 +125,40 @@ def menu(draw,p,rows,selected,title,bottom,colors=None):
     right_text(draw,int(draw.size.x)-16,50,'%d/%d'%(selected+1,len(rows)),p.MUTED)
 
 
-def form(draw, p, rows, selected, edit, top, bottom):
+def form(draw, p, rows, selected, edit, top, bottom, font=SM, row_height=ROW):
     """Scroll properties inside their panel, retaining inline edit and units."""
+    label_offset=(draw.get_font(font).height-draw.get_font(XS).height)//2
     left,right=12,int(draw.size.x)-12
     draw=Viewport(draw,(left,top-3,right,bottom))
-    capacity=max(1,(bottom-top)//ROW)
+    capacity=max(1,(bottom-top)//row_height)
     first=min(max(0,selected-capacity//2),max(0,len(rows)-capacity))
     for index in range(first,min(len(rows),first+capacity)):
         kind,label,value,editable=rows[index]
-        y=top+(index-first)*ROW;chosen=index==selected
+        y=top+(index-first)*row_height;chosen=index==selected
         if chosen:
-            draw._fill_rectangle(left+2,y-2,right-left-4,ROW,p.SELECT)
-            draw._rectangle(left+2,y-2,right-left-4,ROW,p.ACCENT)
+            draw._fill_rectangle(left+2,y-2,right-left-4,row_height,p.SELECT)
+            draw._rectangle(left+2,y-2,right-left-4,row_height,p.ACCENT)
         if kind=='head':
-            draw._fill_rectangle(left+2,y-2,3,ROW,p.ACCENT)
-            text(draw,left+10,y,label,p.TEXT,SM)
+            draw._fill_rectangle(left+2,y-2,3,row_height,p.ACCENT)
+            text(draw,left+10,y,label,p.TEXT,font)
             continue
         label_end=right-155
         label_draw=Viewport(draw,(left,top-3,label_end,bottom))
-        text(label_draw,left+12,y+2,label,p.MUTED)
+        text(label_draw,left+12,y+label_offset,label,p.MUTED)
         if chosen and edit is not None:
             unit=value.split(' ')[-1] if ' ' in value else ''
             uw=draw.len(unit,XS)+4 if unit else 0
             box=150;x=right-box-5
-            draw._fill_rectangle(x,y-1,box,ROW-2,p.BG)
-            edit.draw(draw,x+3,y,box-8-uw,p.TEXT,p.ACCENT,SM)
-            if unit:right_text(draw,right-6,y+2,unit,p.MUTED)
+            draw._fill_rectangle(x,y-1,box,row_height-2,p.BG)
+            edit.draw(draw,x+3,y,box-8-uw,p.TEXT,p.ACCENT,font)
+            if unit:right_text(draw,right-6,y+label_offset,unit,p.MUTED)
         else:
             value_draw=Viewport(draw,(label_end+2,top-3,right-5,bottom))
-            right_text(value_draw,right-6,y,value,p.TEXT if editable else p.MUTED,SM)
+            right_text(value_draw,right-6,y,value,p.TEXT if editable else p.MUTED,font)
     if first:
         draw._fill_triangle(right-4,top-2,right-7,top+1,right-1,top+1,p.MUTED)
     if first+capacity<len(rows):
-        y=top+capacity*ROW-3
+        y=top+capacity*row_height-3
         draw._fill_triangle(right-4,y+2,right-7,y-1,right-1,y-1,p.MUTED)
 
 

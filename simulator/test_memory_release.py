@@ -73,9 +73,14 @@ sys.modules['engtools.session'].kept.clear()
 menu = used()
 import PicoLAB
 PicoLAB._launch(vm, 'beam'); del PicoLAB
-key(k.BUTTON_CENTER); text('p'); key(k.BUTTON_ESCAPE); key(k.BUTTON_F4); idle(3)
+key(k.BUTTON_CENTER)
+beam=sys.modules['engtools.beamlab.app']._active
+beam.focus(('joint',1));beam.model_tab=3
+key(k.BUTTON_F1);key(k.BUTTON_CENTER);key(k.BUTTON_F6);key(k.BUTTON_F4);idle(3)
+del beam
 in_use = used()
-key(k.BUTTON_ESCAPE); key(k.BUTTON_ESCAPE)
+for _ in range(3):
+    if vm.current_view.name!='app_PicoLAB':key(k.BUTTON_ESCAPE)
 assert vm.current_view.name == 'app_PicoLAB', vm.current_view.name
 back = used()
 assert not [m for m in sys.modules if 'beamlab' in m], 'Beam view stayed loaded'

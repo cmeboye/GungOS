@@ -1,165 +1,155 @@
 # Beam view
 
-Open PicoLAB → Modules → Structural → Beam view (formerly Beam Lab). Choose a template (simply supported, cantilever,
-propped cantilever, fixed–fixed, two or three spans, overhang, portal frame,
-gable frame or blank) or open a saved model. The model is solved again after
-every change, using the built-in `picosolve` solver, so the drawing and the
-results are always up to date.
+Open **PicoLAB → Modules → Structural → Beam view**. Choose a beam/frame
+template, **Triangular bridge**, **Blank structure**, or a saved model.
+Only **F6 Evaluate** runs the built-in `picosolve` solver. Editing redraws
+geometry and clears the old solution; opening a file and undoing also leave
+results unevaluated. F4 Plots, F5 Results and CSV export need a successful F6.
+Navigation preserves an existing solution.
 
-A model is made of **members** joined at **joints**. A straight beam is one
-member (or a few in a row where its section changes); a frame has members at
-any angle.
+## Layout and keys
 
-## Layout
+The preview remains at `(8,43)`, **304 × 184** pixels, above the scrolling
+properties box starting at `(8,230)`. Its centered tab labels use the 5×8
+font in a 14-pixel strip; 12-pixel property rows use the same font, fitting
+a node/member heading and all three fields without scrolling. Node IDs J1… and member IDs L1… are
+shown on the sketch; with several sections, each member ID is followed by
+its section name. Rigid nodes are squares; pinned nodes are open circles.
+Colours follow system appearance. The displacement overlay appears only
+after evaluation. **I** toggles a calculated summary; solve problems always
+appear in red. Preview drawing is clipped without another framebuffer.
 
-Beam view follows the calculator's compact layout: the top 18 pixels hold the
-PicoLAB logo and breadcrumb, followed by a thin mode bar, a bordered preview and a separate scrolling editor.
-The system theme supplies the colours. No additional framebuffer is allocated
-for panel clipping; zoomed members, loads and labels stay inside the preview.
-
-On the 320 x 320 display, the model preview is at `(8, 43)` and measures
-**304 x 184** pixels. The properties box starts at `(8, 230)`, with the same
-width, and shows three rows at a time above a fixed 12-pixel footer; it scrolls
-to keep the active row and inline editor visible. The section editor keeps a
-304 x 142 preview with its properties box from `(8, 191)`.
-
-The result summary (view name, peak moment, normal force, shear and
-deflection) is a box over the bottom of the preview, hidden until you press
-**I**. A model problem, such as a missing support, always shows there in
-red. The lower box has **Beams**, **Supports** and
-**Loads** tabs. Each lists all items of its type, with a count; selecting an
-item highlights its location in the preview. Add and choice menus replace the
-lower box while the preview stays visible. Joints and hinges remain available
-under Beams when relevant.
-
-**F9** opens a bordered, scrollable help box with all keys and sign conventions.
-UP/DOWN scroll one line, LEFT/RIGHT one page, CTRL+UP/DOWN jump to the first/last
-page (END also jumps to the last page). F9, Escape or Enter closes help. **?** also opens it outside text entry.
-The pending edit, choice menu, insertion point and selection remain intact.
-The bottom bar only shows F9 Help and a brief status message.
-
-## Views
-
-| Key | View |
+| Key | Action |
 |---|---|
-| F1 | Add at the cursor, with options belonging to the selected tab |
-| F2 | Rem: remove the selected item (Z undoes) |
-| F3 | Opt: templates, load cases, combinations, self-weight and files |
-| F4 | Plot: diagrams of shear, moment and deflection (slope, normal force or axial displacement) along a straight run, or the whole frame |
-| F5 | Results: reactions, equilibrium, peaks, stress, span/deflection, pinned points |
-| F9 | Open / close the scrollable keybindings box |
+| Left/Right | Node / Member / Support / Load tabs |
+| Up/Down | Select an item or property |
+| Enter | Expand properties, edit a number, or preview a choice |
+| [ / ] | Cycle the highlighted choice; otherwise cycle members |
+| F1 | Add at the selected node, according to the active tab |
+| F2 | Remove selected item |
+| F3 | Options, topology operations, templates and files |
+| F4 | Plots; empty until evaluated |
+| F5 | Results; empty until evaluated |
+| F6 (Shift+F1 on PicoCalc) | Evaluate and validate |
+| Shift+E | Open the selected member's section editor |
+| Z | Undo (12 steps) |
+| Tab | Next member |
+| , / . | Previous/next position on the active member |
+| + / - | Preview zoom |
+| F9 / ? | Scrollable help |
+| Esc | Cancel edit, collapse properties, or return |
 
-`?` is an alias for help outside text entry. Help consumes its own navigation
-keys, so browsing it cannot change the model or a pending value.
-ESC closes the current properties first; from the tab list, it leaves Beam view.
-The model stays in memory until PicoLAB is closed; Beam view's own code is
-unloaded whenever you return to the PicoLAB menu, so it costs no RAM there.
+Back and Del erase before the caret. F2 cannot delete an item while its
+number editor is active. F9 help preserves pending edits and choice menus;
+Up/Down scroll lines, Left/Right pages, Ctrl+Up first page, End last page.
+The model survives returning to PicoLAB, without undo history or a solution;
+the tool's code unloads from RAM. Closing PicoLAB clears its session.
 
-## Model
+## Nodes and members
 
-- LEFT/RIGHT switch between Beams, Supports and Loads, remembering each tab's
-  selection. Each tab lists the whole model, not only items at the cursor.
-- UP/DOWN choose one whole item at a time. ENTER opens its properties; there,
-  UP/DOWN select a value and ENTER edits it. ESC returns to the tab list. The
-  preview follows an explicitly selected beam, joint, hinge, support or load.
-  Switching category tabs alone preserves the insertion point.
-- F1 opens a tab-specific Add menu: Beams offers Member, Section change and
-  Hinge; Supports offers Pin, Roller, Roller x, Fixed, Guide and Spring; Loads
-  offers Point load, Moment and Distributed load. Escape cancels without changes.
-- TAB or `]` moves to the next individual beam; `[` moves to the previous
-  beam, wrapping at either end. This works even for collinear beams in one run.
-  Shift+Tab is reported as plain Tab by the current firmware, so use `[` for
-  backwards navigation without a firmware update.
-- Comma/period move the insertion cursor between points on that beam only:
-  ends, joints, supports, hinges and load positions. The preview identifies
-  the active beam and whether the cursor is at its Start, End or an interior
-  distance. Category changes keep this target; UP/DOWN on items deliberately
-  follows the item selected.
-- While editing, LEFT/RIGHT move the caret; ENTER applies and ESC cancels.
-- Type a number, or ENTER to edit. Arithmetic works (`6/4`, `2*pi`).
-  ENTER on a choice opens a list.
-- `S` support, `P` point load, `M` moment, `W` distributed load, `H` hinge.
-- `B` adds a 3 m member from the cursor (splitting a member there if
-  needed), pointing in a free direction; type its length and angle.
-- `C` splits the member at the cursor and gives the far part its own
-  section: a section change along a beam.
-- F2 removes the selected item, including from its properties; Z undoes.
-  During text entry, F2 leaves the item intact. DEL on an item's heading
-  also removes it; on a numeric value it edits and erases before the caret.
-  Removing a member removes everything on it.
-- `Z` undoes the last change (12 steps, including New and Open). The undo
-  history is cleared when you leave Beam view, to keep RAM free.
-- `+` and `-` zoom the drawing around the cursor (x2, x4).
+**Node** properties are X, Y (metres), and Type (**Rigid/Pinned**). Moving a
+node updates every attached member. Arithmetic uses degrees regardless of
+the calculator's angle mode: for a 6 m member at 30°, enter `6*cos(30)` and
+`6*sin(30)` in the endpoint's X and Y fields, plus any origin offsets.
+Pinned releases each incident member's end rotation; rigid shares rotation.
+A pinned node is a connection, not a ground support.
 
-Problems the solver finds, such as a structure that can move freely, are
-shown in red under the drawing and marked with an X where they occur.
+Nodes can be created before any member. F1 creates a node at the cursor;
+edit its coordinates before evaluating. In **Member**, F1 connects two
+existing nodes and selects Start. Members have **Start, End, Section**.
+Use [ / ] on Start/End to see their geometry change immediately. Enter opens
+a choice list with the same live preview; Enter accepts one undoable change,
+Esc restores the original. Section brackets cycle defined sections; Enter
+also offers **+ New section**, making a copy and opening its editor. Unused
+sections remain available. Shift+E opens the current section directly.
 
-### Building an encastre / cantilever demo
+### First bridge test
 
-F3 → New beam → Cantilever starts with one 3 m beam, a **Fixed** support
-at its left end and a 10 kN downward load at the right tip. No extra member
-is needed. Edit the existing beam's length/section under Beams, the Fixed
-support under Supports, and the tip load under Loads. F4 shows its diagrams;
-F5 shows reactions and calculated peaks. With the unchanged template, the
-fixed reaction is 10 kN upward and its reaction moment is 30 kNm.
-For a beam fixed at both ends, choose the Fixed-fixed template instead.
+Choose **Triangular bridge**: six pinned nodes, nine members, a pin and roller
+at the ends, and two 10 kN downward loads. The initial sketch has no computed
+response. F6 evaluates it; F5 shows 10 kN vertical reaction at each end.
+F4 opens per-member plots; [ / ] chooses another member. Edit a node to
+clear the solution and press F6 when ready to evaluate again.
 
-**F1 → Member adds another connected member.** It starts at the insertion
-cursor, which is marked in the preview; selecting a beam's heading puts that
-cursor at its start. Press period (`.`) to step toward its far end, or comma
-(`,`) to step back, then F1 → Member to attach there. The Add menu's title
-identifies the target beam and its Start, End or local distance. Switching to
-Supports or Loads retains that point. Reselecting an item explicitly can move
-the cursor to it.
+For a cantilever, choose **Cantilever**: its first node has a Fixed support,
+its second node a tip force. Edit the second node's coordinates to change
+the length/direction, or add another node and connect a new member to it.
+Select the new endpoint in Node, switch to Support or Load, then F1.
 
-A new member defaults to 3 m in an unused direction, usually vertical. Its
-length and angle can then be edited. For example, on the cantilever template,
-move the cursor to 3 m, add a member and set its angle to 0° to extend to the
-right. The old tip load stays at the shared joint (3 m); move it in Loads if
-you want it at the new tip. Angles use 0° right and 90° up.
+## Supports and loads
 
-To support the end of Beam 2: TAB to B2, period (`.`) to End, switch to the
-Supports tab, then F1 and choose the support type. At a shared joint, the
-support restrains the connected structure regardless of the chosen member.
+Each item has **From node**. At a branch, **Along member** selects which
+incident member supplies the positive-distance direction, marked by an arrow
+in the preview. The default prefers a member starting at the reference node;
+other incident members can be selected explicitly. Point and moment loads
+have an editable **Offset**, including at terminal nodes: zero is at the node,
+positive values move inward toward the other end of the member, up to its
+length. A new terminal support remains at its node. Position/offset measures
+metres from the reference node toward the chosen member's other end, even
+when that direction opposes the member's stored start/end order.
 
-### Items
-
-| Item | Values |
+| Item | Properties |
 |---|---|
-| Joint (frames) | X, Y; moving it moves every member attached |
-| Member (Beam on a single beam) | Length, angle (frames), section, Edit section |
-| Support | Position, type (pin, roller, roller x, fixed, guide, spring), spring stiffness, settlement and its load case |
-| Hinge | Position; at a joint it frees that member's end |
-| Point load | Position, value, direction preset, global angle, load case |
-| Moment | Position, value (counterclockwise +), load case |
-| Distributed load | Start, end, w at each end, direction, load case; it stays on one member |
+| Support | From node, along member when needed, position, type, Settlement X/Y; case when settlement is nonzero; spring stiffnesses for Spring |
+| Point load | From node, along member, offset, force, direction, global angle, case |
+| Moment | From node, along member, offset, counterclockwise-positive moment, case |
+| Distributed | From node, along member, start/end distances, endpoint intensities, direction, case |
 
-Positions are measured along the straight run from its start. Changing a
-member's length or angle moves its end joint; items at that end move with
-it. Supports are drawn upright: a roller resists vertical movement, a
-roller x horizontal movement, a guide rotation and horizontal movement.
+Support types are Pin, Roller, Roller x, Fixed, Guide and Spring. Supports
+remain oriented to global axes: Roller restrains Y, Roller x restrains X,
+Guide restrains X/rotation. Settlement X/Y is signed global displacement in
+mm (+right/+up); only restrained directions are editable. Old downward
+settlements migrate without a sign change in their physical meaning.
+Distributed start/end and intensities are read from the chosen node's side.
 
-Load directions: **gravity** (down; per metre of member), **normal to the
-member** (toward its right side, which is down on a member drawn left to
-right) and **horizontal** (to the right, for example wind on a column).
+Point forces accept a global angle: 0° right, 90° up, 180° left, 270° down.
+Angles wrap to 0–360°. Editing Angle chooses Custom; preset Gravity, Normal
+to member and Horizontal remain available. A custom angle stays global
+when geometry changes; Normal follows the member. Negative magnitude
+reverses the force. Distributed presets retain the same meaning.
 
-Point forces also have an **Angle (0 right, 90 up)** field, measured globally
-counterclockwise: 0° right, 90° up, 180° left and 270° down. Enter any finite
-angle (negative angles and extra turns are accepted and displayed within
-0–360°). Editing Angle automatically chooses Custom angle; the arrow, reactions,
-axial/shear/bending results and exports all use the same force components.
-A negative force magnitude reverses the specified direction. The angle and
-magnitude persist in saved cases and participate in load combinations.
+Removing a member retains its nodes and node-attached point items, reattaching
+them to another incident member where possible. Orphan point items remain
+editable and are refused on F6 until reconnected. Interior items and distributed
+loads on the removed member are removed; Z restores the complete change.
+A connected node must have its members and attachments removed first.
 
-The Acts menu retains Gravity, Normal to member and Horizontal, plus Custom
-angle for point forces. Choosing Custom angle initially preserves the current
-force direction. In Normal mode the displayed angle follows the member when
-its geometry changes; a custom angle stays relative to the global axes.
-Distributed loads retain their existing direction presets.
+A new node needs a member before adding a support or load. If the node lies
+inside an existing member, **F3 → Split at node** joins it explicitly; placing
+it on the line alone does not connect it. Existing items whose member was
+removed or disconnected remain editable. Evaluation identifies their load/
+support number and node, and selects **From node** for repair. Choosing a
+connected node or adding a member restores the attachment without a solve.
+
+## Solve-side topology checks
+
+Validation runs inside `model.Solution`, so callers bypassing the editor get
+the same checks. An invalid draft remains editable until F6. On refusal the
+red message gives the reason; overlapping members are highlighted.
+
+- Positive-length collinear overlaps are refused: L1 J1→J2 plus L2 J1→J3
+  with J2 inside J1→J3 would otherwise double stiffness on the shared part.
+- Distinct nodes with the same coordinates need an explicit **Merge nodes**.
+- A used node inside an unsplit member needs **Split at node** to connect it.
+- Crossing members remain unconnected without shared endpoint IDs, including
+  when load/sample stations happen to coincide.
+- Zero-length members, bad references, out-of-range positions, non-finite
+  inputs and unstable mechanisms report errors without closing the app.
+
+F3 provides explicit, undoable topology operations:
+
+| Operation | Behavior |
+|---|---|
+| Merge nodes | Choose source and destination; reconnect members and node attachments. Refuse different connection types, zero-length results and duplicate supports. |
+| Split at node | Choose a member and an existing interior node. Preserve the section and split distributed loading with interpolated intensities. |
+| Resolve overlaps | Preview splitting at used nodes and keeping one member per shared interval. Enter applies; Esc cancels. Refuse conflicting sections, loads on both duplicated pieces, or conflicting supports. |
+
+There is no automatic normalization or duplicated stiffness on evaluation.
+Unsupported conflicts remain for the user to resolve explicitly.
 
 ## Section editor
 
-ENTER on a member's **Edit section** opens it (choosing **+ New section**
+**Shift+E** from a selected member opens its section (choosing **+ New section**
 in the Section list makes a copy and opens that). The upper preview shows the
 cross-section to scale, with the size being edited highlighted, the depth
 and width dimensioned, and the neutral axis dashed. Beside it: area A,
@@ -190,14 +180,14 @@ Sections are shared: every member using one changes with it.
   With that panel showing, the readout gives u in place of the last value.
 - `]` or `M` switches to the next individual beam; `[` switches to the
   previous beam, wrapping at either end. TAB retains its peak-stepping role.
-- The top-left indicator identifies the selected beam, for example **B2/3**.
+- The top-left indicator identifies the selected beam, for example **L2/3**.
   `x` is the distance from that beam's start. Plots, vertical scales, peak
   stepping and cursor movement cover only that beam, including when several
   beams share one straight run. F4 from the model starts on the active beam.
 - `F` shows the whole frame with one quantity along every member: moment on
   the tension side, shear, normal force, or the deflected shape; `D` steps
   through them. The same beam switching works here; the active member is
-  highlighted in the theme colour and identified by the B2/3 indicator.
+  highlighted in the theme colour and identified by the L2/3 indicator.
 
 Where shear or moment jumps, the readout shows both sides, for example
 `V 16|-8 kN`.
@@ -221,7 +211,7 @@ single beam also shows the worst span/deflection ratio.
 ## Signs and units
 
 - Loads act in their direction when positive; applied moments are
-  counterclockwise positive; settlement moves a support down.
+  counterclockwise positive. Settlement X/Y moves the support right/up when positive (mm).
 - Reactions are positive up and to the right.
 - Along a member: sagging moment positive, V = dM/dx, tension positive,
   deflection positive toward the member's left (up on a member drawn left
@@ -253,14 +243,18 @@ single beam also shows the worst span/deflection ratio.
 
 ## Limits
 
-Up to 16 members, 48 items in total, 6 load cases and 6 combinations.
+Up to 40 nodes, 16 members, 48 member/support/hinge/load items in total,
+6 load cases and 6 combinations. Unconnected draft nodes do not enter the
+finite-element equations.
 
-Frames need the firmware with `picosolve.Frame`; updating the SD card alone
-is not enough.
+This node-editor revision is an SD update on GungOS v1.32: the installed
+`picosolve.Frame` already supports end releases and XY settlement. It requires
+that native solver; older firmware without it must be updated first.
 
 ## Code
 
 - `engtools/beamlab/model.py`: model, sections, mesh, picosolve calls, results.
+- `engtools/beamlab/structure.py`: node attachments, topology validation and explicit normalization.
 - `engtools/beamlab/items.py`: cursor, items, fields, editing rules.
 - `engtools/beamlab/render.py`: drawing.
 - `engtools/beamlab/app.py`: views and keys.
@@ -268,7 +262,12 @@ is not enough.
   units, saved cases and input fields.
 
 Tests: `simulator/test_beamlab.py` (closed-form results, sections, frames,
-combinations, errors, files and the full key-driven app),
+combinations, errors and files),
 `simulator/test_beamlab_ui.py` (panel clipping and borders, themes, zoom, section
-shapes, inline editing, lower-box menus and help toggling),
+shapes, inline editing, lower-box menus, help toggling, member labels and
+whole-frame colours),
+`simulator/test_beam_nodes.py` (node/member editing, degree expressions,
+no implicit solves, pinned bridge, settlements, overlap refusal, explicit
+merge/split/normalization, load preservation, independent crossings,
+orphaned items and hinges, undo limits and cached results),
 `simulator/test_picosolve.py` and the kernel host tests.

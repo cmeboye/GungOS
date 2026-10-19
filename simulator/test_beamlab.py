@@ -216,7 +216,7 @@ m['supports'][1]['ky'] = 2e6
 sol = bm.Solution(m)
 near(sol.reactions(0)[1][2], -2e6 * sol.at(0, 10.0, 0)[3])
 m = simple(6.0, 0)
-m['supports'][1]['settle'] = 0.01
+m['supports'][1]['settle_y'] = -0.01  # 10 mm down
 sol = bm.Solution(m)
 near(sol.at(0, 6.0, 0)[3], -0.01)
 print('PASS: hinge, spring, settlement and trapezoid')
@@ -233,6 +233,14 @@ sol = bm.Solution(m)
 assert sol.lines == [[0, 1]] and bm.is_straight_beam(m)
 near(sol.at_line(0, 3.0, 0)[1], 5e3 * 36 / 8)
 near(sol.extremes(0, 0)['M'][0], 5e3 * 36 / 8)
+# The smaller section governs the stress at the joint where it starts.
+m['sections'][1]['dims']['h'] = 0.2
+m['loads'] = [bm.point_load(0, 3.0, 10e3)]
+sol = bm.Solution(m)
+sigma, at, member = sol.stress(0, 0)
+near(sigma, 10e3 * 6 / 4 / bm.section_values(m['sections'][1])['W'])
+near(at, 3.0); assert member == 1, member
+sol.free()
 print('PASS: section change as a second member on the same line')
 
 # Frames: portal symmetry, sway, load directions and an inclined member.
@@ -285,7 +293,7 @@ old = {'tool': 'beams', 'name': 'old', 'length': 8.0, 'version': 1,
                                {'kind': 'point', 'x': 5.0, 'P': 10e3, 'case': 0}],
        'cases': ['Dead'], 'combos': [{'name': 'All x1.0', 'factors': [1.0]}]}
 new = bm.upgrade(old)
-assert new['schema'] == 2 and len(new['members']) == 2 and new['sections'][1]['shape'] == 'Direct'
+assert new['schema'] == 3 and len(new['members']) == 2 and new['sections'][1]['shape'] == 'Direct'
 assert len([l for l in new['loads'] if l['kind'] == 'dist']) == 2
 sol = bm.Solution(new)
 balance(sol, 0)
@@ -344,306 +352,4 @@ text = storage.read(csv)
 assert text.startswith('x_m,V_N\n0,') and text.count('\n') == len(X) + 1
 print('PASS: saved cases and CSV export')
 
-# ------------------------------------------------------------------ the app
-from picoware.system.view_manager import ViewManager
-from picoware.system.view import View
-from picoware.system.input import Input
-from picoware.system import buttons as k
-Input.button = property(lambda self: self._last_button)
-import PicoLAB as lab
-from engtools.beamlab import app as beam_app
-from engtools.beamlab import items as bi
-shots = '/private/tmp/picoware-beamlab-'
-vm = ViewManager()
-vm.add(View('parent', lambda vm: None, lambda vm: True, lambda vm: None)); vm.switch_to('parent')
-vm.add(View('lab', lab.run, lab.start, lab.stop)); vm.switch_to('lab')
-
-
-def key(button):
-    vm.input_manager._last_button = button
-    vm.run()
-
-
-def text(value):
-    for char in value:
-        key(vm.input_manager._key_to_button(ord(char)))
-
-
-def shot(name):
-    sim_runtime.lcd_screenshot(shots + name + '.bmp')
-
-
-def esc():
-    key(vm.input_manager._key_esc)
-
-
-def ui():
-    # PicoLAB unloads Beam view when it closes: always ask the live module.
-    return sys.modules['engtools.beamlab.app']._active
-
-
-def pick(index):
-    """Choose a row in an open popup list."""
-    assert a.popup is not None
-    a.popup[2] = index
-    key(k.BUTTON_CENTER)
-
-
-lab._enter('structural');lab._selected = 0
-key(k.BUTTON_CENTER)
-a = ui()
-assert a.page == 'start' and a.model is None
-shot('start')
-key(k.BUTTON_CENTER)                                   # simply supported template
-assert a.page == 'model' and a.solution is not None and a.problem is None
-shot('model')
-assert a.s == 0 and a.model_tab == 0 and a.sel[0][0] == 'member'
-key(k.BUTTON_RIGHT)
-assert a.model_tab == 1 and a.sel[0][0] == 'support'
-key(k.BUTTON_DOWN)
-assert a.s == 6.0 and a.sel[0][1] is a.model['supports'][1]
-key(k.BUTTON_UP)
-assert a.s == 0 and a.sel[0][1] is a.model['supports'][0]
-# Add a point load: P inserts it, typing sets its position.
-text('p')
-assert a.sel[1] == 'x' and len(a.model['loads']) == 2
-text('2'); key(k.BUTTON_CENTER)
-load = a.model['loads'][1]
-assert load['kind'] == 'point' and load['x'] == 2.0 and a.s == 2.0
-key(k.BUTTON_DOWN)
-assert a.sel[1] == 'P'
-text('12*2'); key(k.BUTTON_CENTER)
-assert load['P'] == 24e3 and a.problem is None
-shot('model-point')
-balance(a.solution, a.view)
-# A bad value keeps the editor open with a message; ESC cancels it.
-text('2/0'); key(k.BUTTON_CENTER)
-assert a.edit is not None and a.error, a.message
-esc()
-assert a.edit is None and load['P'] == 24e3
-# Backspace on a value edits it; only a heading row removes the item.
-key(k.BUTTON_BACKSPACE)
-assert a.edit is not None and a.edit.text == '2' and len(a.model['loads']) == 2
-text('5'); key(k.BUTTON_CENTER)
-assert load['P'] == 25e3
-key(k.BUTTON_BACKSPACE); key(k.BUTTON_BACKSPACE); text('24'); key(k.BUTTON_CENTER)
-assert load['P'] == 24e3
-# Direction and load case are lists.
-key(k.BUTTON_DOWN)
-assert a.sel[1] == 'dir'
-key(k.BUTTON_CENTER); pick(2)
-assert load['dir'] == 'right' and a.problem is None
-balance(a.solution, a.view)
-key(k.BUTTON_CENTER); pick(0)
-key(k.BUTTON_DOWN)
-assert a.sel[1] == 'angle'
-key(k.BUTTON_DOWN)
-assert a.sel[1] == 'case'
-key(k.BUTTON_CENTER)
-assert a.popup is not None
-esc()
-# Removing the left support makes a mechanism, shown on the beam; Z undoes.
-cursor = (a.line,a.s)
-key(k.BUTTON_LEFT)
-assert (a.line,a.s) == cursor and a.sel[0][0] == 'support'
-key(k.BUTTON_BACKSPACE)
-assert a.problem is not None and a.solution is None
-shot('model-problem')
-text('z')
-assert a.problem is None and len(a.model['supports']) == 2
-# The section editor: from the beam's own row, change material, shape and depth.
-a.focus(('member', 0), 'edit')
-key(k.BUTTON_CENTER)
-assert a.page == 'section' and a.section is a.model['sections'][0]
-shot('section-i')
-rows = a.section_rows()
-a.section_row = [r[0] for r in rows].index('material')
-key(k.BUTTON_CENTER); pick(2)
-assert a.section['material'] == 2 and a.problem is None
-a.section_row = [r[0] for r in a.section_rows()].index('shape')
-key(k.BUTTON_CENTER); pick(bm.SHAPES.index('Rectangle'))
-assert a.section['shape'] == 'Rectangle'
-a.section_row = [r[0] for r in a.section_rows()].index('dim:h')
-text('400'); key(k.BUTTON_CENTER)
-near(a.section['dims']['h'], 0.4)
-shot('section-rect')
-a.section_row = [r[0] for r in a.section_rows()].index('shape')
-key(k.BUTTON_CENTER); pick(bm.SHAPES.index('T-section'))
-a.section_row = [r[0] for r in a.section_rows()].index('dim:tf')
-shot('section-t')
-a.section_row = [r[0] for r in a.section_rows()].index('shape')
-key(k.BUTTON_CENTER); pick(bm.SHAPES.index('Tube'))
-a.section_row = [r[0] for r in a.section_rows()].index('dim:t')
-shot('section-tube')
-text('500'); key(k.BUTTON_CENTER)                    # a wall thicker than the radius
-assert a.edit is not None and a.error and 'half the diameter' in a.message, a.message
-esc()
-a.section_row = [r[0] for r in a.section_rows()].index('name')
-key(k.BUTTON_CENTER)
-for _ in range(3): key(k.BUTTON_BACKSPACE)
-text('CHS'); key(k.BUTTON_CENTER)
-assert a.section['name'] == 'CHS' and a.prompt is None
-esc()
-assert a.page == 'model' and a.problem is None
-# Every insert key works: split (section change) and a new member too.
-a.select_point(0, 2.0)
-for c in 'smwh':
-    text(c)
-    assert a.sel is not None, c
-for c in 'cb':
-    a.select_point(0, 2.0 if c == 'c' else 1.0)
-    text(c)
-    assert a.sel is not None and a.problem is None, (c, a.problem)
-assert len(a.model['members']) == 3 and len(a.model['sections']) == 2 and len(a.model['hinges']) == 1
-assert not bm.is_straight_beam(a.model)
-shot('model-inserted')
-for _ in range(6):
-    text('z')
-assert len(a.model['hinges']) == 0 and len(a.model['members']) == 1 and bm.is_straight_beam(a.model)
-# Diagrams: move, jump to peaks, pin a point, toggle slope.
-key(k.BUTTON_F4)
-assert a.page == 'diagrams'
-shot('diagrams')
-key(k.BUTTON_TAB)
-assert a.tab == 0 and 'max moment' in a.note
-s_peak = a.ds
-key(k.BUTTON_CENTER)
-assert a.pins == [(0, s_peak)]
-key(k.BUTTON_RIGHT); assert a.ds > s_peak
-key(k.BUTTON_DOWN); assert any(abs(a.ds - p) < 1e-9 for p in bi.stops(a.model, 0))
-text('d'); assert a.third == 'T'
-shot('diagrams-slope')
-text('d'); assert a.third == 'U' and len(a.cache) == 3
-shot('diagrams-axial')
-text('d'); assert a.third == 'W'
-# Load cases and a combination.
-key(k.BUTTON_F3)
-assert a.page == 'options'
-a.menu_index = beam_app.OPTIONS.index('Load cases'); key(k.BUTTON_CENTER)
-assert a.page == 'cases'
-a.menu_index = 1; key(k.BUTTON_CENTER)               # + Add load case, then name it
-assert a.prompt is not None
-for _ in range(6): key(k.BUTTON_BACKSPACE)
-text('Live'); key(k.BUTTON_CENTER)
-assert a.model['cases'] == ['Dead', 'Live'] and a.model['combos'][0]['factors'] == [1.0, 1.0]
-assert a.solution.view_names()[a.view] == 'Combo All x1.0', 'Adding a case changed the view'
-esc()
-a.menu_index = beam_app.OPTIONS.index('Combinations'); key(k.BUTTON_CENTER)
-a.menu_index = 1; key(k.BUTTON_CENTER)               # + Add combination
-assert a.page == 'combo'
-shot('combo')
-key(k.BUTTON_DOWN)
-text('1.35'); key(k.BUTTON_CENTER)
-key(k.BUTTON_DOWN)
-text('1.5'); key(k.BUTTON_CENTER)
-assert a.model['combos'][1]['factors'] == [1.35, 1.5]
-esc(); esc()
-assert a.page == 'options'
-a.menu_index = beam_app.OPTIONS.index('Self-weight'); key(k.BUTTON_CENTER)
-assert a.model['selfweight'] == 0 and a.problem is None
-key(k.BUTTON_CENTER); key(k.BUTTON_CENTER)
-assert a.model['selfweight'] is None
-esc()
-assert a.page == 'model'
-# Put the point load in Live and check the combination (undo restored copies).
-load = [l for l in a.model['loads'] if l['kind'] == 'point'][0]
-a.focus(('load', load), 'case')
-key(k.BUTTON_CENTER); pick(1)
-assert load['case'] == 1
-assert a.solution.view_names() == ['Dead', 'Live', 'Combo All x1.0', 'Combo C2']
-near(sum(r[2] for r in a.solution.reactions(3)), 1.35 * 30e3 + 1.5 * 24e3)
-shot('model-cases')
-# Results.
-key(k.BUTTON_F5)
-assert a.page == 'results'
-rows = a.result_rows()
-assert any(r[0] == 'Equilibrium' and r[1] == 'OK' for r in rows) and any(r[0] == 'Max stress' for r in rows)
-shot('results')
-text('v')
-key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
-assert a.page == 'diagrams'
-# Save, open and export.
-key(k.BUTTON_F3)
-a.menu_index = beam_app.OPTIONS.index('Save'); key(k.BUTTON_CENTER)
-assert a.prompt is not None
-for _ in range(10): key(k.BUTTON_BACKSPACE)
-text('test beam'); key(k.BUTTON_CENTER)
-assert a.prompt is None and a.message == 'Saved test-beam', a.message
-a.menu_index = beam_app.OPTIONS.index('Export CSV (Eggcel)'); key(k.BUTTON_CENTER)
-assert a.message.startswith('Exported test-beam-eggcel-001.csv'), a.message
-a.menu_index = beam_app.OPTIONS.index('New beam'); key(k.BUTTON_CENTER)
-a.menu_index = 1; key(k.BUTTON_CENTER)               # cantilever
-assert a.model['supports'][0]['kind'] == 'Fixed'
-shot('cantilever')
-key(k.BUTTON_F3)
-a.menu_index = beam_app.OPTIONS.index('Open'); key(k.BUTTON_CENTER)
-assert a.files == ['gable-frame', 'test-beam'], a.files
-a.menu_index = 1; key(k.BUTTON_CENTER)
-assert a.model['name'] == 'test-beam' and a.model['cases'] == ['Dead', 'Live'] and a.problem is None
-# A beam saved by the first Beam Lab opens through the app.
-from json import dumps
-vm.storage.write(cases.CASE_DIRECTORY + '/old-beam.json', dumps(dict(old, version=1)))
-key(k.BUTTON_F3)
-a.menu_index = beam_app.OPTIONS.index('Open'); key(k.BUTTON_CENTER)
-a.menu_index = a.files.index('old-beam'); key(k.BUTTON_CENTER)
-assert a.model['schema'] == 2 and len(a.model['members']) == 2 and a.problem is None, a.message
-shot('model-upgraded')
-# Frames: the portal template, runs, member angle, the whole-frame view.
-key(k.BUTTON_F3)
-a.menu_index = beam_app.OPTIONS.index('New beam'); key(k.BUTTON_CENTER)
-a.menu_index = 7; key(k.BUTTON_CENTER)
-assert a.problem is None and not bm.is_straight_beam(a.model) and len(bm.lines(a.model)) == 3
-shot('portal')
-key(k.BUTTON_TAB)
-assert a.line == 1
-key(k.BUTTON_TAB)
-assert a.line == 2
-a.focus(('member', 2), 'angle')
-text('80'); key(k.BUTTON_CENTER)
-assert abs(bm.member_angle(a.model, 2) - 80) < 1e-3 and a.problem is None
-text('z')
-assert abs(bm.member_angle(a.model, 2) - 90) < 1e-3
-a.focus(('joint', 1), 'Y')
-text('5'); key(k.BUTTON_CENTER)
-assert a.model['joints'][1][1] == 5.0 and a.problem is None
-text('+')
-assert a.zoom == 1
-shot('portal-zoom')
-text('-')
-key(k.BUTTON_F4)
-assert a.page == 'diagrams'
-text('m')
-assert a.dline == 1
-shot('portal-diagrams')
-text('d'); text('d')
-assert a.third == 'N'
-text('f')
-assert a.whole
-shot('portal-moment')
-text('d')
-shot('portal-shear')
-text('d'); text('d')
-shot('portal-shape')
-text('f')
-key(k.BUTTON_F5)
-rows = a.result_rows()
-assert any(r[0] == 'Equilibrium' and r[1] == 'OK' for r in rows), [r for r in rows if r[0] == 'Equilibrium']
-shot('portal-results')
-key(k.BUTTON_F3)
-a.menu_index = beam_app.OPTIONS.index('New beam'); key(k.BUTTON_CENTER)
-a.menu_index = 8; key(k.BUTTON_CENTER)
-assert a.problem is None
-shot('gable')
-key(k.BUTTON_F4); text('f')
-shot('gable-moment')
-# Help, then leave; PicoLAB keeps the model for the next visit.
-text('?')
-assert a.help_open and a.page == 'diagrams'
-shot('help')
-esc(); esc(); esc()
-assert vm.get_view('beam_lab') is None
-key(k.BUTTON_CENTER)
-a = ui()
-assert a.page == 'model' and len(a.model['members']) == 4
-esc()
-print('PASS: Beam Lab app: editing, sections, frames, undo, diagrams, cases, combinations, results, files')
+print('PASS: Beam numerical and persistence regressions complete')

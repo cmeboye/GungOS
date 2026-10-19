@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+- Allow point/moment load offsets from terminal nodes without resetting them
+  to zero, including older saved cases. Explain missing member connections
+  when adding a load; identify and select orphaned items on evaluation.
+
+- Beam view uses Node / Member / Support / Load tabs, independent Rigid/Pinned
+  nodes, live endpoint/section choices, degree expressions and Shift+E section
+  editing. Node-relative supports/loads include branch selection, endpoint
+  support locking and signed global X/Y settlement. Add a pinned bridge demo.
+- F6 is now the only Beam evaluation command. Editing/Open/Undo clear results
+  and displacement; navigation retains them. Plots/results/export require F6.
+- Validate overlap, coincidence and unsplit used nodes in the solver API.
+  Add explicit undoable Merge nodes, Split at node and previewed Resolve
+  overlaps, preserving loads and refusing ambiguous conflicts. Keep crossing
+  members separate even when interior load stations share coordinates.
+- Save Beam schema 3 with migration of previous models and settlements.
+  This revision updates SD apps; the v1.32 native solver is sufficient.
+- Fix Beam max stress at a section change (the smaller section now governs
+  at its joint), whole-frame plots drawn in the active member's colour,
+  section names printed over a straight beam, section edits exceeding the
+  12-step undo, removal of a load case still used by a settlement, and
+  orphaned items or hinges moving on split/resolve or crashing a redraw.
+- The evaluated preview, F5 Results and whole-frame plots are built once per
+  view instead of on every key; remove the old editor's unused insert,
+  length/angle and layout code.
+- Remove the Blank beam template (Blank structure remains). Older models'
+  downward settlement becomes Settlement Y when opened and is no longer saved.
+
 ## v1.32 — 2026-10-19
 
 - Add the on-device EngTool render benchmark under Apps → Misc. It measures

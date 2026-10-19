@@ -95,7 +95,8 @@ for label in ('Dynamics','Thermal','Electrical','Fluids'):
 pick('Structural');path('modules','structural');shot('structural')
 pick('Beam view');assert vm.current_view.name=='beam_lab';path('modules','structural','Beam view')
 from engtools.beamlab import app as beam
-key(k.BUTTON_CENTER);assert beam._active.solution is not None
+key(k.BUTTON_CENTER);assert beam._active.solution is None
+key(k.BUTTON_F6);assert beam._active.solution is not None
 shot('beam-view')
 key(k.BUTTON_F9);assert beam._active.help_open;path('modules','structural','Beam view')
 shot('beam-help')

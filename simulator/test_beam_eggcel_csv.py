@@ -24,6 +24,7 @@ lab=beam.BeamLab(vm)
 # frames with multiple runs. Each run retains both endpoint rows and units.
 for index in range(len(bm.TEMPLATES)):
     lab.replace_model(bm.template(index))
+    assert lab.evaluate()
     lab.model['name']='template-%d'%index
     lab.export()
     path=cases.EXPORT_DIRECTORY+'/template-%d-eggcel-001.csv'%index
@@ -42,6 +43,7 @@ for index in range(len(bm.TEMPLATES)):
         for col,expected in ((2,source[0]/1e3),(3,source[1]/1e3),(6,source[3]*1e3)):
             assert abs(sheet.value((rows[0],col))-expected)<1e-4*max(1,abs(expected))
 lab.replace_model(bm.template(0));lab.model['name']='browser-test'
+assert lab.evaluate()
 lab.export();lab.export()
 compact=cases.EXPORT_DIRECTORY+'/browser-test-eggcel-001.csv'
 assert vm.storage.exists(cases.EXPORT_DIRECTORY+'/browser-test-eggcel-002.csv')

@@ -3,18 +3,18 @@ diagrams and dialogs. Functions draw into the back buffer; the app swaps
 once per frame.
 """
 from math import cos, sin, pi, sqrt
+from array import array
 from picoware.system.font import FONT_XTRA_SMALL as XS, FONT_SMALL as SM
 from engtools import units
 from engtools.ui import theme
 from . import model as bm
 from . import items
+from . import structure as st
 from engtools.ui.viewport import Viewport
 from engtools.ui.lab import (mix, text, right_text, centre_text, wrap, panel, chrome, menu, form, popup, prompt,
                               help_capacity, help_box, results, tabs as model_tabs)
 
 LEFT, RIGHT = 20, 300
-BEAM_Y = 136
-ROW = 15
 CASE_COLORS = (None, theme.AMBER, 0xF81F, 0x07E0, 0xFFE0, 0xA51F)
 # Fixed calculator-style preview above a scrolling property panel. The
 # section editor keeps the original split; the model page gives the sketch
@@ -22,14 +22,11 @@ CASE_COLORS = (None, theme.AMBER, 0xF81F, 0x07E0, 0xFFE0, 0xA51F)
 PREVIEW_RECT = (8, 43, 304, 142)
 PROPERTIES_TOP = 191
 MODEL_PREVIEW = (8, 43, 304, 184)
+MODEL_BOX = (35, 104, 285, 186)  # the structure is fitted and centred here
 MODEL_PROPERTIES_TOP = 230
-CURSOR_Y = BEAM_Y + 36  # a straight beam's dimension line
-BEAM_LAYOUT = {'box': (32, BEAM_Y, 288, BEAM_Y), 'bottom': 224, 'list': 255}
-FRAME_LAYOUT = {'box': (42, 98, 278, 194), 'bottom': 224, 'list': 255}
-
-
-def layout(model):
-    return BEAM_LAYOUT if bm.is_straight_beam(model) else FRAME_LAYOUT
+MODEL_TAB_HEIGHT = 14
+MODEL_ROW_HEIGHT = 12
+CURSOR_Y = 172  # a straight beam's dimension line, below its supports
 
 
 def head(draw, tx, ty, ux, uy, color, size=4):
@@ -78,6 +75,9 @@ class View:
 
 def clip(draw, x1, y1, x2, y2, color, top=24, bottom=320):
     """A line clipped to the screen columns and the rows top..bottom."""
+    if 0 <= x1 <= 319 and 0 <= x2 <= 319 and top <= y1 <= bottom and top <= y2 <= bottom:
+        draw._line(int(x1), int(y1), int(x2), int(y2), color)  # inside: most segments
+        return
     dx, dy, t0, t1 = x2 - x1, y2 - y1, 0.0, 1.0
     for pp, qq in ((-dx, x1), (dx, 319 - x1), (-dy, y1 - top), (dy, bottom - y1)):
         if pp == 0:
@@ -188,48 +188,35 @@ def screen_direction(model, load):
 
 def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members, bottom, active_member=None):
     """The structure with its supports, hinges and loads. cursor is
-    ((X, Y), distance along the line), or None."""
+    ((X, Y), distance along the line), or None; shape is deflected()'s
+    polylines, or None."""
     accent = p.ACCENT
-    straight = bm.is_straight_beam(model)
+    runs = bm.lines(model)
+    straight = bm.is_straight_beam(model, runs)
 
     def pick(ref, color):
         return accent if items.same(ref, selected) else color
-    if cursor is not None and straight:
+    if cursor is not None and straight and model['members']:
         cx = view.p(*cursor[0])[0]
         dashed(draw, cx, 64, CURSOR_Y, p.SELECT if p.SELECT != p.BG else p.GRID)
     # Deflected shape of the current view.
     for points in shape or ():
-        previous = None
-        for point in points:
-            if previous is not None and point != previous:
-                clip(draw, previous[0], previous[1], point[0], point[1], p.MUTED, 64, bottom)
-            previous = point
-    # Members, the current line brighter, with section names when there are several.
-    several = len(model['sections']) > 1
+        for i in range(2, len(points), 2):
+            clip(draw, points[i - 2], points[i - 1], points[i], points[i + 1], p.MUTED, 64, bottom)
+    # Members, the current line brighter. Their IDs and section names are
+    # labelled with the node markers.
     for m in range(len(model['members'])):
         member = model['members'][m]
         a, b = view.p(*model['joints'][member['a']]), view.p(*model['joints'][member['b']])
         color = p.TEXT if straight or m in line_members else p.MUTED
         color = (accent if m == active_member else color) if active_member is not None else pick(('member', m), color)
         thick(draw, a, b, color, 64, bottom)
-        if several:
-            X0, Y0, c, s, L = bm.member_axis(model, m)
-            mx, my = (a[0] + b[0]) // 2, (a[1] + b[1]) // 2
-            name = model['sections'][member['section']]['name']
-            if straight:
-                centre_text(draw, mx, BEAM_Y + 5, name, pick(('member', m), p.MUTED))
-            elif 64 < my < bottom - 8:
-                text(draw, mx + int(7 * s) - 4, my + int(7 * c) - 3, name, pick(('member', m), p.MUTED))
-    if straight and several:
-        for m in range(1, len(model['members'])):
-            x = view.p(*model['joints'][model['members'][m]['a']])[0]
-            draw._line(x, BEAM_Y - 6, x, BEAM_Y + 6, p.MUTED)
     # Supports, upright; a fixed free end of a horizontal member is a wall.
     for s in model['supports']:
-        X, Y = bm.point(model, s['m'], s['x'])
+        X, Y = st.item_point(model,s)
         x, y = view.p(X, Y)
         wall = 0
-        if s['kind'] == 'Fixed':
+        if s['kind'] == 'Fixed' and 0<=s['m']<len(model['members']):
             X0, Y0, c, s_, L = bm.member_axis(model, s['m'])
             if abs(s_) < 0.5 and (s['x'] < 1e-9 or s['x'] > L - 1e-9):
                 attached = [o for o in range(len(model['members'])) if o != s['m'] and
@@ -239,12 +226,14 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
                     wall = -1 if outward < 0 else 1
         if 64 < y < bottom:
             support_shape(draw, x, y, s['kind'], pick(('support', s), p.MUTED if s['kind'] == 'Spring' else p.TEXT), wall)
-    # Hinges: open circles, pulled into their member at a joint.
+    # Hinges: open circles, pulled into their member at a joint. One left
+    # without a member (older models) stays at its node.
     for h in model['hinges']:
-        X0, Y0, c, s_, L = bm.member_axis(model, h['m'])
-        inset = 5 if h['x'] < 1e-9 else -5 if h['x'] > L - 1e-9 else 0
-        x, y = view.p(*bm.point(model, h['m'], h['x']))
-        x, y = int(x + inset * c), int(y - inset * s_)
+        x, y = view.p(*st.item_point(model, h))
+        if 0 <= h['m'] < len(model['members']):
+            X0, Y0, c, s_, L = bm.member_axis(model, h['m'])
+            inset = 5 if h['x'] < 1e-9 else -5 if h['x'] > L - 1e-9 else 0
+            x, y = int(x + inset * c), int(y - inset * s_)
         if 64 < y < bottom:
             draw._fill_circle(x, y, 3, p.BG)
             draw._circle(x, y, 3, pick(('hinge', h), p.TEXT))
@@ -255,7 +244,7 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
     levels = dist_levels(model)
     for load in loads:
         color = pick(('load', load), case_color(p, model, load['case']))
-        x, y = view.p(*bm.point(model, load['m'], load['x']))
+        x, y = view.p(*st.item_point(model,load))
         if load['kind'] == 'moment':
             if 64 < y < bottom:
                 moment_shape(draw, x, y, load['M'], color)
@@ -276,7 +265,7 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
             if 64 < ly < bottom - 8:
                 centre_text(draw, lx, ly - 4, units.number(units.from_si(load['P'], 'kN'), 3), color)
             continue
-        x2, y2 = view.p(*bm.point(model, load['m'], load['x2']))
+        x2, y2 = view.p(*st.item_point(model,load,'x2'))
         lift = 3 + 17 * levels[id(load)]
         h1 = 4 + int(9 * abs(load['w1']) / wmax)
         h2 = 4 + int(9 * abs(load['w2']) / wmax)
@@ -310,13 +299,15 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
         if straight:
             y = CURSOR_Y
             draw._line(LEFT, y, RIGHT, y, p.GRID)
-            for s in items.stops(model, 0):
-                x = view.p(*items.cursor_point(model, 0, s))[0]
+            # The run is horizontal, left to right: s is X past its start.
+            X0, Y0 = model['joints'][model['members'][runs[0][0]]['a']]
+            for s in items.stops(model, 0, runs):
+                x = view.p(X0 + s, Y0)[0]
                 draw._line(x, y - 2, x, y + 2, p.MUTED)
             draw._fill_triangle(cx, y + 1, cx - 3, y + 5, cx + 3, y + 5, accent)
             label = 'x = ' + units.show(cursor[1], 'm')
             centre_text(draw, cx, y + 6, label, accent)
-            total = bm.line_offsets(model, bm.lines(model)[0])[1]
+            total = bm.line_offsets(model, runs[0])[1]
             length = 'L ' + units.show(total, 'm')
             lw = draw.len(length, XS)
             if abs(cx - (RIGHT - lw // 2)) > (draw.len(label, XS) + lw) // 2 + 6:
@@ -332,7 +323,8 @@ def sketch(draw, p, model, view, selected, cursor, problem, shape, line_members,
 
 
 def deflected(model, sol, view, case_view, target_px=10.0):
-    """Screen polylines of the deflected shape, one per line, or None."""
+    """Screen polylines of the deflected shape, or None: for each line an
+    array('h') of x, y pairs, without repeating a pixel."""
     data = [sol.samples(line, case_view) for line in range(len(sol.lines))]
     peak = 0.0
     for d in data:
@@ -345,19 +337,18 @@ def deflected(model, sol, view, case_view, target_px=10.0):
     out = []
     for line, d in enumerate(data):
         S, W, U = d[0], d[4], d[6]
-        points = []
-        for i in range(len(S)):
-            m, x = sol.locate(line, S[i])
+        xy, last = [], None
+        for m, o, first, end in sol.spans(line, d):
             X0, Y0, c, s, L = bm.member_axis(model, m)
-            dx, dy = U[i] * c - W[i] * s, U[i] * s + W[i] * c
-            points.append(view.p(X0 + c * x + dx * k, Y0 + s * x + dy * k))
-        out.append(points)
+            for i in range(first, end):
+                x = S[i] - o
+                dx, dy = U[i] * c - W[i] * s, U[i] * s + W[i] * c
+                point = view.p(X0 + c * x + dx * k, Y0 + s * x + dy * k)
+                if point != last:
+                    xy += point
+                    last = point
+        out.append(array('h', xy))
     return out
-
-
-def status(draw, p, lines, colors, top):
-    for i, (line, color) in enumerate(zip(lines[:3], colors)):
-        text(draw, 16, top + 9 * i, line[:48], color)
 
 
 def summary_box(draw, p, lines, bad, rect):
@@ -470,15 +461,13 @@ def section_panel(draw, p, model, section, x, top):
         text(draw, x, top + 12 * len(rows) + 4, ('Members ' + ', '.join(users))[:23], p.MUTED)
 
 
-# ---------------------------------------------------------------- lists
-
 # ---------------------------------------------------------------- diagrams
 
 # title, unit, index in the at() results (samples() arrays are offset by one)
 QUANTITIES = {'V': ('Shear', 'kN', 0), 'M': ('Moment', 'kNm', 1), 'T': ('Slope', 'mrad', 2),
               'W': ('Deflection', 'mm', 3), 'N': ('Normal force', 'kN', 4),
               'U': ('Axial displacement', 'mm', 5)}
-PANEL_TOP, PANEL_H, PANEL_GAP = 78, 72, 4
+PANEL_TOP, PANEL_GAP = 78, 4
 
 
 def panel_bounds(index,bottom=302):
@@ -534,7 +523,6 @@ def diagram_header(draw,p,title,view_name,readout):
 
 
 def diagrams(draw, p, solution, line, view, panels, cache, cursor_s, readout, note, marks, title, bottom=302, member=None):
-    width = int(draw.size.x)
     start,total = diagram_range(solution,line,member)
     cx = int(LEFT + (RIGHT - LEFT) * (cursor_s-start) / total + 0.5)
     diagram_header(draw,p,title,solution.view_names()[view],readout)
@@ -574,23 +562,16 @@ def diagrams(draw, p, solution, line, view, panels, cache, cursor_s, readout, no
 
 
 OVERVIEW = ('M', 'V', 'N', 'W')
+OVERVIEW_BOX = (40, 96, 280, 262)
 
 
-def overview(draw, p, model, solution, view, quantity, cursor, current_line, box, active_member=None):
-    """The whole structure with one quantity drawn along every member:
-    moment on the tension side, shear and normal force on the member's left
-    when positive, the deflected shape exaggerated."""
+def overview_shapes(model, solution, view, quantity, box):
+    """Screen geometry of one quantity along every member, or None where it
+    is zero throughout: for each line (outline, shading, peak label), the
+    outline an array('h') of x, y pairs without repeated pixels, the
+    shading one of x1, y1, x2, y2 lines, the label (text, x, y) or None."""
     v = View(model, box)
     title, unit, q = QUANTITIES[quantity]
-    color = COLORS[quantity] or p.ACCENT
-    shade = mix(p.BG, color, 1, 3)
-    for m, member in enumerate(model['members']):
-        a, b = v.p(*model['joints'][member['a']]), v.p(*model['joints'][member['b']])
-        color = p.ACCENT if m == active_member else p.TEXT if active_member is None and m in solution.lines[current_line] else p.MUTED
-        thick(draw, a, b, color, 24, 284)
-    for s in model['supports']:
-        x, y = v.p(*bm.point(model, s['m'], s['x']))
-        support_shape(draw, x, y, s['kind'], p.MUTED)
     data = [solution.samples(line, view) for line in range(len(solution.lines))]
     peak = 0.0
     for d in data:
@@ -599,36 +580,69 @@ def overview(draw, p, model, solution, view, quantity, cursor, current_line, box
             peak = max(peak, abs(values[i]))
             if quantity == 'W':
                 peak = max(peak, abs(d[6][i]))
-    caption = title + ' ' + unit + (', tension side' if quantity == 'M' else '')
-    text(draw, 16, 78, caption, color)
     if peak <= 1e-12:
-        centre_text(draw, 160, 270, 'No %s in this view' % title.lower(), p.MUTED, SM)
-        return
+        return None
     k = 22.0 / peak
+    out = []
     for line, d in enumerate(data):
         S, values = d[0], d[1 + q]
-        previous, best = None, (0.0, None)
-        for i in range(len(S)):
-            m, x = solution.locate(line, S[i])
+        outline, shading, last, last_shade, best = [], [], None, None, (0.0, None)
+        for m, o, first, end in solution.spans(line, d):
             X0, Y0, c, s, L = bm.member_axis(model, m)
-            base = v.p(X0 + c * x, Y0 + s * x)
-            if quantity == 'W':
-                dx, dy = d[6][i] * c - values[i] * s, d[6][i] * s + values[i] * c
-                tip = (base[0] + dx * k, base[1] - dy * k)
-            else:
-                # Local y on screen is (-s, -c); moment goes to the tension side.
-                size = -values[i] * k if quantity == 'M' else values[i] * k
-                tip = (base[0] - s * size, base[1] - c * size)
-                if i % 3 == 0:
-                    clip(draw, base[0], base[1], tip[0], tip[1], shade, 24, 284)
-            if previous is not None:
-                clip(draw, previous[0], previous[1], tip[0], tip[1], color, 24, 284)
-            previous = tip
-            if abs(values[i]) > abs(best[0]):
-                best = (values[i], tip)
+            for i in range(first, end):
+                x = S[i] - o
+                base = v.p(X0 + c * x, Y0 + s * x)
+                if quantity == 'W':
+                    dx, dy = d[6][i] * c - values[i] * s, d[6][i] * s + values[i] * c
+                    tip = (int(base[0] + dx * k), int(base[1] - dy * k))
+                else:
+                    # Local y on screen is (-s, -c); moment goes to the tension side.
+                    size = -values[i] * k if quantity == 'M' else values[i] * k
+                    tip = (int(base[0] - s * size), int(base[1] - c * size))
+                    if i % 3 == 0 and base + tip != last_shade:
+                        last_shade = base + tip
+                        shading += last_shade
+                if tip != last:
+                    outline += tip
+                    last = tip
+                if abs(values[i]) > abs(best[0]):
+                    best = (values[i], tip)
+        label = None
         if best[1] is not None:
-            label = units.number(units.from_si(best[0], unit), 3)
-            centre_text(draw, best[1][0], best[1][1] + (-10 if best[1][1] < 170 else 3), label, color)
+            label = (units.number(units.from_si(best[0], unit), 3), best[1][0],
+                     best[1][1] + (-10 if best[1][1] < 170 else 3))
+        out.append((array('h', outline), array('h', shading), label))
+    return out
+
+
+def overview(draw, p, model, solution, quantity, shapes, cursor, current_line, box, active_member=None):
+    """The whole structure with one quantity drawn along every member:
+    moment on the tension side, shear and normal force on the member's left
+    when positive, the deflected shape exaggerated. shapes come from
+    overview_shapes() for the same quantity and box."""
+    v = View(model, box)
+    title, unit, q = QUANTITIES[quantity]
+    color = COLORS[quantity] or p.ACCENT
+    shade = mix(p.BG, color, 1, 3)
+    for m, member in enumerate(model['members']):
+        a, b = v.p(*model['joints'][member['a']]), v.p(*model['joints'][member['b']])
+        line_color = p.ACCENT if m == active_member else p.TEXT if active_member is None and m in solution.lines[current_line] else p.MUTED
+        thick(draw, a, b, line_color, 24, 284)
+    for s in model['supports']:
+        x, y = v.p(*st.item_point(model,s))
+        support_shape(draw, x, y, s['kind'], p.MUTED)
+    caption = title + ' ' + unit + (', tension side' if quantity == 'M' else '')
+    text(draw, 16, 78, caption, color)
+    if shapes is None:
+        centre_text(draw, 160, 270, 'No %s in this view' % title.lower(), p.MUTED, SM)
+        return
+    for outline, shading, label in shapes:
+        for i in range(0, len(shading), 4):
+            clip(draw, shading[i], shading[i + 1], shading[i + 2], shading[i + 3], shade, 24, 284)
+        for i in range(2, len(outline), 2):
+            clip(draw, outline[i - 2], outline[i - 1], outline[i], outline[i + 1], color, 24, 284)
+        if label is not None:
+            centre_text(draw, label[1], label[2], label[0], color)
     if cursor is not None:
         cx, cy = v.p(*cursor)
         draw._circle(cx, cy, 3, p.TEXT)

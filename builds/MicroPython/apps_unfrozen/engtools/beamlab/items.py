@@ -7,9 +7,9 @@ it. An item reference is (kind, obj): ('joint', j), ('member', m),
 model (or an index for joints and members). Values move between display
 units and SI here; no drawing.
 """
-from math import cos, sin, radians
 from engtools import units
 from . import model as bm
+from . import structure as st
 
 LOAD_TITLES = {'point': 'Point load', 'moment': 'Moment', 'dist': 'Distributed'}
 NEW_SECTION = '+ New section'
@@ -59,9 +59,9 @@ def stops(model, line, runs=None):
                         s = at[item['m']] + item[field]
                         points[bm.key(s)] = s
     # Points where another member meets this line.
-    for j, (X, Y) in enumerate(model['joints']):
-        for m, o in zip(run, offsets):
-            X0, Y0, c, s_, L = bm.member_axis(model, m)
+    axes = [(o, bm.member_axis(model, m)) for m, o in zip(run, offsets)]
+    for X, Y in model['joints']:
+        for o, (X0, Y0, c, s_, L) in axes:
             t = (X - X0) * c + (Y - Y0) * s_
             if -1e-9 <= t <= L + 1e-9 and abs(-(X - X0) * s_ + (Y - Y0) * c) < 1e-6:
                 points[bm.key(o + t)] = o + t
@@ -99,9 +99,9 @@ def items_at(model, line, s, runs=None):
             out.append(('member', m))
     for group, kind in (('supports', 'support'), ('hinges', 'hinge'), ('loads', 'load')):
         for item in model[group]:
-            points = [bm.point(model, item['m'], item['x'])]
+            points = [st.item_point(model, item)]
             if item.get('kind') == 'dist':
-                points.append(bm.point(model, item['m'], item['x2']))
+                points.append(st.item_point(model, item, 'x2'))
             if any(same_point(p, here) for p in points):
                 out.append((kind, item))
     return out
@@ -113,125 +113,102 @@ def same(a, b):
     return a[1] == b[1] if a[0] in ('joint', 'member') else a[1] is b[1]
 
 
-def case_name(model, index):
-    cases = model['cases']
-    return cases[index] if 0 <= index < len(cases) else '?'
+def joint_label(model, j):
+    X, Y = model['joints'][j]
+    return 'J%d (%s,%s)' % (j + 1, units.number(X), units.number(Y))
 
 
-def title(model, ref):
-    kind, obj = ref
-    if kind == 'joint':
-        X, Y = model['joints'][obj]
-        return 'Joint  (%s, %s) m' % (units.number(X), units.number(Y))
-    if kind == 'member':
-        L = bm.member_length(model, obj)
-        section = model['sections'][model['members'][obj]['section']]['name']
-        if bm.is_straight_beam(model) and len(model['members']) == 1:
-            return 'Beam  L = %s  %s' % (units.show(L, 'm'), section)
-        return 'Member %d  %s  %s' % (obj + 1, units.show(L, 'm'), section)
-    if kind == 'support':
-        return 'Support  ' + obj['kind']
-    if kind == 'hinge':
-        return 'Hinge'
-    text = LOAD_TITLES[obj['kind']]
-    if obj['kind'] == 'point':
-        text += '  ' + units.show(obj['P'], 'kN')
-    elif obj['kind'] == 'moment':
-        text += '  ' + units.show(obj['M'], 'kNm')
-    else:
-        text += '  ' + units.show(obj['w1'], 'kN/m')
-        if obj['w2'] != obj['w1']:
-            text += ' to ' + units.number(units.from_si(obj['w2'], 'kN/m'))
-    if obj['kind'] != 'moment' and obj.get('dir', 'down') != 'down':
-        text += (' @ ' + units.number(bm.load_angle(model, obj)) + ' deg') if obj['dir'] == 'angle' else ' ' + obj['dir']
-    if len(model['cases']) > 1:
-        text += '  ' + case_name(model, obj['case'])
-    return text
+def title(model,ref):
+    kind,obj=ref
+    if kind=='joint':
+        return joint_label(model,obj)+' '+st.TYPE_NAMES[st.TYPES.index(model['joint_types'][obj])]
+    if kind=='member':
+        m=model['members'][obj]
+        return 'L%d  J%d > J%d  %s'%(obj+1,m['a']+1,m['b']+1,model['sections'][m['section']]['name'])
+    if kind=='hinge':return 'Member hinge'
+    name='Support '+obj['kind'] if kind=='support' else LOAD_TITLES[obj['kind']]
+    return name+(' / J%d'%(obj['node']+1) if 'node' in obj else '')
 
 
-# A field is (id, label, kind, unit, editable); kind 'num', 'choice' or 'action'.
+# A field is (id, label, kind, unit, editable); kind 'num' or 'choice'.
 def fields(model, ref):
-    kind, obj = ref
-    straight = bm.is_straight_beam(model)
-    if kind == 'joint':
-        return [('X', 'X', 'num', 'm', True), ('Y', 'Y', 'num', 'm', True)]
-    if kind == 'member':
-        rows = [('length', 'Length', 'num', 'm', True)]
-        if not straight:
-            rows.append(('angle', 'Angle (ccw from right)', 'num', 'deg', True))
-        rows += [('section', 'Section', 'choice', '', True), ('edit', 'Edit section', 'action', '', True)]
+    kind,obj=ref
+    if kind=='joint':
+        return [('X','X','num','m',True),('Y','Y','num','m',True),('type','Type','choice','',True)]
+    if kind=='member':
+        return [('a','Start','choice','',True),('b','End','choice','',True),('section','Section','choice','',True)]
+    if kind=='hinge':return [('x','Position','num','m',True)]
+    rows=[]
+    if 'node' in obj:
+        rows.append(('node','From node','choice','',True))
+        connected=st.attached(model,obj['node'])
+        if len(connected)!=1:rows.append(('along','Along member','choice','',bool(connected)))
+    locked=obj.get('at_node') and len(st.attached(model,obj['node']))==1 if 'node' in obj else False
+    if kind=='support':
+        rows += [('x','Position','num','m',not locked),('kind','Type','choice','',True)]
+        flags=bm.SUPPORT_FLAGS.get(obj['kind'],'')
+        rows += [('settle_x','Settlement X','num','mm','x' in flags),('settle_y','Settlement Y','num','mm','y' in flags)]
+        if obj['settle_x'] or obj['settle_y']:
+            rows.append(('case','Settle case','choice','',True))
+        if obj['kind']=='Spring':rows += [(key,label,'num',unit,True) for key,label,unit in
+                (('kx','Horizontal k','kN/m'),('ky','Vertical k','kN/m'),('kr','Rotation k','kNm/rad'))]
         return rows
-    if kind == 'support':
-        rows = [('x', 'Position', 'num', 'm', True), ('kind', 'Type', 'choice', '', True)]
-        if obj['kind'] == 'Spring':
-            if not straight:
-                rows.append(('kx', 'Horizontal k', 'num', 'kN/m', True))
-            rows += [('ky', 'Vertical k', 'num', 'kN/m', True), ('kr', 'Rotation k', 'num', 'kNm/rad', True)]
-        elif 'y' in bm.SUPPORT_FLAGS[obj['kind']]:
-            rows.append(('settle', 'Settlement', 'num', 'mm', True))
-            if obj['settle']:
-                rows.append(('case', 'Settle case', 'choice', '', True))
-        return rows
-    if kind == 'hinge':
-        return [('x', 'Position', 'num', 'm', True)]
-    if obj['kind'] == 'point':
-        rows = [('x', 'Position', 'num', 'm', True), ('P', 'Force', 'num', 'kN', True)]
-    elif obj['kind'] == 'moment':
-        rows = [('x', 'Position', 'num', 'm', True), ('M', 'Moment (ccw +)', 'num', 'kNm', True)]
+    if obj['kind']=='dist':
+        rows += [('x','Start','num','m',True),('x2','End','num','m',True),
+                 ('w1','w start','num','kN/m',True),('w2','w end','num','kN/m',True)]
     else:
-        rows = [('x', 'Start', 'num', 'm', True), ('x2', 'End', 'num', 'm', True),
-                ('w1', 'w start', 'num', 'kN/m', True), ('w2', 'w end', 'num', 'kN/m', True)]
-    if obj['kind'] != 'moment':
-        rows.append(('dir', 'Acts', 'choice', '', True))
-        if obj['kind'] == 'point':
-            rows.append(('angle', 'Angle (0 right, 90 up)', 'num', 'deg', True))
-    rows.append(('case', 'Load case', 'choice', '', True))
+        rows.append(('x','Offset','num','m',True))
+        rows.append(('P','Force','num','kN',True) if obj['kind']=='point' else ('M','Moment (ccw +)','num','kNm',True))
+    if obj['kind']!='moment':
+        rows.append(('dir','Acts','choice','',True))
+        if obj['kind']=='point':rows.append(('angle','Angle (0 right, 90 up)','num','deg',True))
+    rows.append(('case','Load case','choice','',True))
     return rows
 
 
 def get(model, ref, field):
-    """The SI value of a numeric field (degrees for angles)."""
-    kind, obj = ref
-    if kind == 'joint':
-        return model['joints'][obj][0 if field == 'X' else 1]
-    if kind == 'member':
-        return bm.member_length(model, obj) if field == 'length' else bm.member_angle(model, obj)
-    if kind == 'load' and obj['kind'] == 'point' and field == 'angle':
-        return bm.load_angle(model, obj)
-    if field in ('x', 'x2'):
-        return along(model, obj, field)
+    kind,obj=ref
+    if kind=='joint':return model['joints'][obj][0 if field=='X' else 1]
+    if field in ('x','x2'):
+        return obj.get('offset' if field=='x' else 'offset2',obj[field]) if 'node' in obj else along(model,obj,field)
+    if kind=='load' and obj['kind']=='point' and field=='angle':return bm.load_angle(model,obj)
+    if field in ('w1','w2') and 'node' in obj and obj['m']>=0 and model['members'][obj['m']]['b']==obj['node']:
+        return obj['w2' if field=='w1' else 'w1']
     return obj[field]
 
 
 def choices(model, ref, field):
-    kind, obj = ref
-    if field == 'section':
-        return [s['name'] for s in model['sections']] + [NEW_SECTION]
-    if field == 'kind':
-        return list(bm.SUPPORTS)
-    if field == 'dir':
-        return list(bm.POINT_DIRECTION_TITLES if obj['kind'] == 'point' else bm.DIRECTION_TITLES)
+    kind,obj=ref
+    if field in ('a','b','node'):
+        return [joint_label(model,j) for j in range(len(model['joints']))]
+    if field=='type':return st.TYPE_NAMES
+    if field=='along':return ['L%d'%(i+1) for i in st.attached(model,obj['node'])] or ['None - connect node']
+    if field=='section':return [s['name'] for s in model['sections']]+[NEW_SECTION]
+    if field=='kind':return list(bm.SUPPORTS)
+    if field=='dir':return list(bm.POINT_DIRECTION_TITLES if obj['kind']=='point' else bm.DIRECTION_TITLES)
     return list(model['cases'])
 
 
-def choice_index(model, ref, field):
-    kind, obj = ref
-    if field == 'section':
-        return model['members'][obj]['section']
-    if field == 'kind':
-        return bm.SUPPORTS.index(obj['kind'])
-    if field == 'dir':
-        directions = bm.POINT_DIRECTIONS if obj['kind'] == 'point' else bm.DIRECTIONS
-        return directions.index(obj.get('dir', 'down'))
+def choice_index(model,ref,field):
+    kind,obj=ref
+    if field in ('a','b','section'):return model['members'][obj][field]
+    if field=='type':return st.TYPES.index(model['joint_types'][obj])
+    if field=='node':return obj['node']
+    if field=='along':
+        connected=st.attached(model,obj['node'])
+        return connected.index(obj['m']) if obj['m'] in connected else 0
+    if field=='kind':return bm.SUPPORTS.index(obj['kind'])
+    if field=='dir':return (bm.POINT_DIRECTIONS if obj['kind']=='point' else bm.DIRECTIONS).index(obj.get('dir','down'))
     return obj[field]
 
 
 def text(model, ref, field_row):
     field, label, kind, unit, editable = field_row
-    if kind == 'action':
-        return 'ENTER'
     if kind == 'choice':
-        return choices(model, ref, field)[choice_index(model, ref, field)]
+        index = choice_index(model, ref, field)
+        if field in ('a', 'b', 'node'):  # one label, not the whole node list
+            return joint_label(model, index)
+        return choices(model, ref, field)[index]
     try:
         value = get(model, ref, field)
         if unit == 'deg':
@@ -241,136 +218,60 @@ def text(model, ref, field_row):
         return '--'
 
 
-def set_choice(model, ref, field, index):
-    kind, obj = ref
-    if field == 'section':
-        if index == len(model['sections']):
-            current = model['sections'][model['members'][obj]['section']]
-            model['sections'].append(bm.new_section(bm.section_name(model), current))
-        model['members'][obj]['section'] = index
-        prune_sections(model)
-    elif field == 'kind':
-        obj['kind'] = bm.SUPPORTS[index]
-    elif field == 'dir':
-        directions = bm.POINT_DIRECTIONS if obj['kind'] == 'point' else bm.DIRECTIONS
-        direction = directions[index]
-        if direction == 'angle':
-            obj['angle'] = bm.load_angle(model, obj)
-        obj['dir'] = direction
-    else:
-        obj['case'] = index
+def set_choice(model,ref,field,index):
+    kind,obj=ref
+    if field in ('a','b'):
+        model['members'][obj][field]=index
+    elif field=='type':model['joint_types'][obj]=st.TYPES[index]
+    elif field=='node':
+        node=index;choices=st.attached(model,node)
+        member=next((m for m in choices if model['members'][m]['a']==node),choices[0] if choices else -1)
+        obj['node'],obj['m'],obj['offset'],obj['at_node']=node,member,0.0,kind!='load'
+        if 'offset2' in obj:obj['offset2']=st.axis(model,member,node)[2] if member>=0 else 0.0
+    elif field=='along':
+        obj['m']=st.attached(model,obj['node'])[index];obj['offset']=0.0
+        if 'offset2' in obj:obj['offset2']=st.axis(model,obj['m'],obj['node'])[2]
+    elif field=='section':
+        if index==len(model['sections']):model['sections'].append(bm.new_section(bm.section_name(model),model['sections'][model['members'][obj]['section']]))
+        model['members'][obj]['section']=index
+    elif field=='kind':
+        obj['kind']=bm.SUPPORTS[index]
+        flags=bm.SUPPORT_FLAGS[obj['kind']]
+        if 'x' not in flags:obj['settle_x']=0.0
+        if 'y' not in flags:obj['settle_y']=0.0
+    elif field=='dir':
+        direction=(bm.POINT_DIRECTIONS if obj['kind']=='point' else bm.DIRECTIONS)[index]
+        if direction=='angle':obj['angle']=bm.load_angle(model,obj)
+        obj['dir']=direction
+    else:obj['case']=index
+    st.sync(model)
 
 
-def prune_sections(model):
-    """Drop sections no member uses, keeping indices consistent."""
-    used = sorted(set(member['section'] for member in model['members']))
-    if len(used) == len(model['sections']):
-        return
-    remap = dict((old, new) for new, old in enumerate(used))
-    model['sections'] = [model['sections'][i] for i in used]
-    for member in model['members']:
-        member['section'] = remap[member['section']]
+def set_number(model,ref,field,unit,shown):
+    kind,obj=ref;value=shown if unit=='deg' else units.to_si(shown,unit)
+    if not bm.isfinite(value):raise ValueError('Enter a finite number')
+    if kind=='joint':
+        if abs(value)>1000:raise ValueError('Nodes stay within 1000 m of the origin')
+        model['joints'][obj][0 if field=='X' else 1]=value
+    elif field in ('x','x2') and 'node' in obj:
+        obj['offset' if field=='x' else 'offset2']=value
+        if kind=='load':obj['at_node']=False
+    elif field=='angle':obj['angle'],obj['dir']=value%360,'angle'
+    elif field in ('kx','ky','kr'):
+        if value<0:raise ValueError('Stiffness cannot be negative')
+        obj[field]=value
+    elif field in ('w1','w2'):
+        target=field
+        if 'node' in obj and obj['m']>=0 and model['members'][obj['m']]['b']==obj['node']:target='w2' if field=='w1' else 'w1'
+        if field=='w1' and obj['w1']==obj['w2']:obj['w1']=obj['w2']=value
+        else:obj[target]=value
+    else:obj[field]=value
+    st.sync(model)
 
 
-def _geometry_change(model, change):
-    """Apply a change to the joints; items keep their place at member ends
-    and must still fit their members, or nothing changes."""
-    before = [list(j) for j in model['joints']]
-    lengths = [bm.member_length(model, m) for m in range(len(model['members']))]
-    change()
-    for m in range(len(model['members'])):
-        if bm.member_length(model, m) < 1e-6:
-            model['joints'] = before
-            raise ValueError('Member %d would have no length' % (m + 1))
-    moved = []
-    for group in ('supports', 'hinges', 'loads'):
-        for item in model[group]:
-            old, new = lengths[item['m']], bm.member_length(model, item['m'])
-            for field in ('x', 'x2'):
-                if field not in item:
-                    continue
-                if abs(item[field] - old) < 1e-9:
-                    moved.append((item, field, item[field]))
-                    item[field] = new
-                elif item[field] > new + 1e-9:
-                    model['joints'] = before
-                    for i, f, v in moved:
-                        i[f] = v
-                    raise ValueError('Items lie beyond the new end of member %d: move them first' % (item['m'] + 1))
+# ---------------------------------------------------------------- splitting
 
-
-def set_number(model, ref, field, unit, shown):
-    """Apply a typed value (display units); raise ValueError without changing anything."""
-    kind, obj = ref
-    value = shown if unit == 'deg' else units.to_si(shown, unit)
-    if kind == 'joint':
-        if not abs(value) <= 1000:
-            raise ValueError('Joints stay within 1000 m of the origin')
-        index = 0 if field == 'X' else 1
-
-        def move():
-            model['joints'][obj][index] = value
-        _geometry_change(model, move)
-        return
-    if kind == 'member':
-        length, angle = bm.member_length(model, obj), bm.member_angle(model, obj)
-        if field == 'length':
-            if not 0 < value <= 1000:
-                raise ValueError('Length must be above 0 and at most 1000 m')
-            length = value
-        else:
-            angle = value
-        _geometry_change(model, lambda: bm.set_member(model, obj, length, angle))
-        return
-    if kind == 'load' and obj['kind'] == 'point' and field == 'angle':
-        if not bm.isfinite(value):
-            raise ValueError('Angle must be a finite number')
-        obj['angle'], obj['dir'] = value % 360, 'angle'
-        return
-    if field in ('x', 'x2'):
-        runs = bm.lines(model)
-        line, offset = line_of(model, obj['m'], runs)
-        total = bm.line_offsets(model, runs[line])[1]
-        if not -1e-9 <= value <= total + 1e-9:
-            raise ValueError('Position must be from 0 to %s m' % units.number(total))
-        value = min(max(value, 0.0), total)
-        if kind == 'load' and obj['kind'] == 'dist':
-            m, x = obj['m'], value - offset
-            L = bm.member_length(model, m)
-            if not -1e-9 <= x <= L + 1e-9:
-                raise ValueError('A distributed load stays on one member: add another for the next one')
-            x = min(max(x, 0.0), L)
-            start, end = (x, obj['x2']) if field == 'x' else (obj['x'], x)
-            if not start < end - 1e-9:
-                raise ValueError('Start must be before the end')
-            obj[field] = x
-            return
-        m, x = locate(model, line, value, runs)
-        where = bm.point(model, m, x)
-        if kind == 'support' and any(s is not obj and same_point(bm.point(model, s['m'], s['x']), where)
-                                     for s in model['supports']):
-            raise ValueError('A support is already there')
-        if kind == 'hinge' and any(h is not obj and h['m'] == m and bm.key(h['x']) == bm.key(x) for h in model['hinges']):
-            raise ValueError('A hinge is already there')
-        obj['m'], obj['x'] = m, x
-        return
-    if field in ('kx', 'ky', 'kr'):
-        if value < 0:
-            raise ValueError('Stiffness cannot be negative')
-        obj[field] = value
-        return
-    if field == 'w1' and obj['w1'] == obj['w2']:
-        obj['w2'] = value  # a uniform load stays uniform
-    obj[field] = value
-
-
-# ---------------------------------------------------------------- inserting
-
-INSERT_KEYS = {'s': 'support', 'p': 'point', 'm': 'moment', 'w': 'dist', 'h': 'hinge',
-               'c': 'split', 'b': 'member'}
-
-
-def split(model, m, x):
+def _split(model, m, x, node=None):
     """Split member m at x; returns the new member's index (the far part)."""
     L = bm.member_length(model, m)
     if not 1e-6 < x < L - 1e-6:
@@ -378,8 +279,11 @@ def split(model, m, x):
     if len(model['members']) >= bm.MAX_MEMBERS:
         raise ValueError('Up to %d members' % bm.MAX_MEMBERS)
     X, Y = bm.point(model, m, x)
-    model['joints'].append([bm.snap(X), bm.snap(Y)])
-    joint = len(model['joints']) - 1
+    if node is None:
+        model['joints'].append([bm.snap(X), bm.snap(Y)])
+        model.setdefault('joint_types',['rigid']*(len(model['joints'])-1)).append('rigid')
+        joint=len(model['joints'])-1
+    else:joint=node
     member = model['members'][m]
     new = {'a': joint, 'b': member['b'], 'section': member['section']}
     member['b'] = joint
@@ -409,130 +313,50 @@ def split(model, m, x):
     return n
 
 
-def _free_angle(model, joint):
-    """A direction for a new member from a joint that no member uses yet."""
-    used = []
-    for m, member in enumerate(model['members']):
-        a = bm.member_angle(model, m)
-        if member['a'] == joint:
-            used.append(a)
-        elif member['b'] == joint:
-            used.append(a + 180)
-    for angle in (90, 0, -90, 180, 45, 135, -45, -135):
-        if all(abs(((angle - u) + 180) % 360 - 180) > 1 for u in used):
-            return angle
-    return 30
+def split(model,m,x,node=None):
+    result=_split(model,m,x,node)
+    for group in ('supports','hinges','loads'):
+        for obj in model[group]:
+            # An orphan stays at its own node until the user reconnects it.
+            if 'node' not in obj or not 0<=obj['m']<len(model['members']):continue
+            edge=model['members'][obj['m']];j=obj['node']
+            if j not in (edge['a'],edge['b']):j=edge['a']
+            lock=obj.get('at_node',False)
+            st.bind(model,obj,j,obj['m'],lock)
+    return result
 
 
-def add_member(model, m, x):
-    """A new 3 m member from the point at x on member m; returns its index."""
-    if len(model['members']) >= bm.MAX_MEMBERS:
-        raise ValueError('Up to %d members' % bm.MAX_MEMBERS)
-    L = bm.member_length(model, m)
-    # Compare the remaining distance, not x > L - epsilon: with the
-    # Pico's float32 arithmetic L - 1e-9 can round straight back to L.
-    if x <= 1e-6:
-        joint = model['members'][m]['a']
-    elif L - x <= 1e-6:
-        joint = model['members'][m]['b']
-    else:
-        split(model, m, x)
-        joint = model['members'][m]['b']
-    X, Y = model['joints'][joint]
-    angle = _free_angle(model, joint)
-    model['joints'].append([bm.snap(X + 3.0 * cos(radians(angle))), bm.snap(Y + 3.0 * sin(radians(angle)))])
-    model['members'].append({'a': joint, 'b': len(model['joints']) - 1, 'section': model['members'][m]['section']})
-    return len(model['members']) - 1
-
-
-def insert(model, what, line, s, member=None):
-    """Add an item at or near the cursor and return (reference, field to edit)."""
-    if bm.item_count(model) >= bm.MAX_ITEMS:
-        raise ValueError('Item limit reached (%d)' % bm.MAX_ITEMS)
-    runs = bm.lines(model)
-    if member is None:
-        m, x = locate(model, line, s, runs)
-    else:
-        m = member
-        member_line, offset = line_of(model, m, runs)
-        if member_line != line:
-            raise ValueError('Selected beam is not on the cursor run')
-        x = min(max(s-offset, 0.0), bm.member_length(model, m))
-    L = bm.member_length(model, m)
-    if what == 'split':
-        n = split(model, m, x)
-        current = model['sections'][model['members'][n]['section']]
-        model['sections'].append(bm.new_section(bm.section_name(model), current))
-        model['members'][n]['section'] = len(model['sections']) - 1
-        return ('member', n), 'section'
-    if what == 'member':
-        return ('member', add_member(model, m, x)), 'length'
-    if what == 'support':
-        here = bm.point(model, m, x)
-        if any(same_point(bm.point(model, t['m'], t['x']), here) for t in model['supports']):
-            raise ValueError('A support is already here: move the cursor first')
-        obj = bm.support(m, x, 'Roller' if model['supports'] else 'Pin')
-        model['supports'].append(obj)
-        return ('support', obj), 'x'
-    if what == 'hinge':
-        if any(h['m'] == m and bm.key(h['x']) == bm.key(x) for h in model['hinges']):
-            raise ValueError('A hinge is already here')
-        if (x <= 1e-6 or L - x <= 1e-6) and len(runs[line]) == 1 and not any(
-                same_point(bm.point(model, m, x), model['joints'][o['a']]) or
-                same_point(bm.point(model, m, x), model['joints'][o['b']])
-                for i, o in enumerate(model['members']) if i != m):
-            raise ValueError('A hinge at a free end does nothing: move the cursor inside')
-        obj = {'m': m, 'x': x}
-        model['hinges'].append(obj)
-        return ('hinge', obj), 'x'
-    if what == 'dist':
-        if x < L - 1e-9:
-            later = [p - (s - x) for p in stops(model, line, runs) if p > s + 1e-9]
-            end = min([p for p in later if p <= L + 1e-9] or [L])
-            obj = bm.dist_load(m, x, end)
-        else:
-            earlier = [p - (s - x) for p in stops(model, line, runs) if p < s - 1e-9]
-            obj = bm.dist_load(m, max([p for p in earlier if p >= -1e-9] or [0.0]), x)
-        model['loads'].append(obj)
-        return ('load', obj), 'x'
-    obj = bm.point_load(m, x) if what == 'point' else bm.moment_load(m, x)
-    model['loads'].append(obj)
-    return ('load', obj), 'x'
-
-
-def delete(model, ref):
-    kind, obj = ref
-    if kind == 'joint':
-        raise ValueError('Joints go with their members: remove a member instead')
-    if kind == 'member':
-        if len(model['members']) == 1:
-            raise ValueError('The last member stays; try F3 New beam')
-        for group in ('supports', 'hinges', 'loads'):
-            model[group] = [i for i in model[group] if i['m'] != obj]
-            for item in model[group]:
-                if item['m'] > obj:
-                    item['m'] -= 1
-        del model['members'][obj]
-        used = sorted(set(j for member in model['members'] for j in (member['a'], member['b'])))
-        remap = dict((old, new) for new, old in enumerate(used))
-        model['joints'] = [model['joints'][j] for j in used]
-        for member in model['members']:
-            member['a'], member['b'] = remap[member['a']], remap[member['b']]
-        prune_sections(model)
+def delete(model,ref):
+    kind,obj=ref
+    if kind=='joint':
+        if st.attached(model,obj):raise ValueError('Remove connected members before deleting this node')
+        if any(t.get('node')==obj for group in ('supports','hinges','loads') for t in model[group]):raise ValueError("Remove this node's supports/loads first")
+        del model['joints'][obj];del model['joint_types'][obj]
+        for m in model['members']:
+            for k in ('a','b'):m[k]-=m[k]>obj
+        for group in ('supports','hinges','loads'):
+            for t in model[group]:
+                if 'node' in t:t['node']-=t['node']>obj
         return
-    group = {'support': 'supports', 'hinge': 'hinges', 'load': 'loads'}[kind]
-    items = model[group]
-    for i, item in enumerate(items):
-        if item is obj:
-            del items[i]
-            return
+    if kind=='member':
+        del model['members'][obj]
+        for group in ('supports','hinges','loads'):
+            kept=[]
+            for t in model[group]:
+                if t['m']==obj:
+                    if 'node' not in t or abs(t.get('offset',0))>st.EPS or t.get('kind')=='dist':continue
+                    t['m']=-1
+                elif t['m']>obj:t['m']-=1
+                kept.append(t)
+            model[group]=kept
+        st.sync(model);return
+    group={'support':'supports','hinge':'hinges','load':'loads'}[kind]
+    for i,t in enumerate(model[group]):
+        if t is obj:del model[group][i];return
     raise ValueError('Item already removed')
 
 
 # ---------------------------------------------------------------- sections
-
-SECTION_FIELDS = {'h': 'mm', 'b': 'mm', 'tw': 'mm', 'tf': 'mm', 'd': 'mm', 't': 'mm'}
-
 
 def section_fields(section):
     """Rows for the section editor: (id, label, kind, unit, editable)."""
@@ -620,7 +444,7 @@ def remove_case(model, index):
     if len(model['cases']) == 1:
         raise ValueError('Keep at least one load case')
     used = sum(1 for load in model['loads'] if load['case'] == index)
-    used += sum(1 for s in model['supports'] if s['settle'] and s['case'] == index)
+    used += sum(1 for s in model['supports'] if s['case'] == index and (s['settle_x'] or s['settle_y']))
     used += 1 if model.get('selfweight') == index else 0
     if used:
         raise ValueError('%d item(s) use this case: move or delete them first' % used)

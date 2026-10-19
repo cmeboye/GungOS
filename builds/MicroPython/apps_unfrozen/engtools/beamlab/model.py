@@ -1,21 +1,25 @@
 """Beam Lab model: members in the plane, picosolve calls and combined results.
 
-A model is a plain dict that saves as JSON (schema 2):
-  joints   [[X, Y], ...]                    member ends, m
+A model is a plain dict that saves as JSON (schema 3):
+  joints   [[X, Y], ...]                    explicit nodes, m
+  joint_types ['rigid' | 'pin', ...]        incident-end rotation sharing
   members  [{'a', 'b', 'section'}]          joint indices, section index
   sections [{'name', 'material', 'E', 'rho', 'shape', 'dims', 'I', 'A', 'W'}]
-  supports [{'m', 'x', 'kind', 'kx', 'ky', 'kr', 'settle', 'case'}]
+  supports [{'m', 'x', 'kind', 'kx', 'ky', 'kr', 'settle_x', 'settle_y', 'case'}]
   hinges   [{'m', 'x'}]
   loads    [{'kind', 'm', 'x', ('x2'), 'P' | 'M' | 'w1', ('w2'), 'dir', ('angle'), 'case'}]
   cases, combos, selfweight (None or a load case)
-Items sit on a member at x metres from its start joint. A straight beam is
+Items sit on a member at x metres from its start joint. They also carry
+'node', 'offset', ('offset2') and 'at_node': the node they are measured
+from, kept in step with 'm' and 'x' by structure.py. A straight beam is
 one member (or several in a row, where its section changes).
 
 Loads use the usual hand-calculation signs: forces and distributed loads
 act in their direction ('down', 'normal' or 'right') when positive. Point
 forces also accept a global angle in degrees, counterclockwise from right. Applied
-moments turn counterclockwise when positive and settlements move a support
-down. Results: reactions up / right positive; along a member, sagging
+moments turn counterclockwise when positive. Settlement X/Y is global right/up
+(structure.ensure converts older models' downward 'settle' once, on loading).
+Results: reactions up / right positive; along a member, sagging
 moment, shear (V = dM/dx), tension and deflection to the member's left
 (up for a member drawn left to right) are positive.
 
@@ -27,7 +31,7 @@ from array import array
 TOOL = {'id': 'beams', 'title': 'Beam view', 'description': 'Beams and plane frames: supports, loads, sections and load cases.',
         'status': 'ready', 'planned_outputs': ('Support reactions', 'Shear, moment and normal force', 'Deflections')}
 
-SCHEMA = 2
+SCHEMA = 3
 # name, E (Pa), density (kg/m3)
 MATERIALS = (('Steel', 210e9, 7850.0), ('Concrete', 33e9, 2500.0), ('Timber', 11e9, 420.0),
              ('Aluminium', 70e9, 2700.0), ('Custom', None, None))
@@ -190,11 +194,6 @@ def member_length(model, m):
     return member_axis(model, m)[4]
 
 
-def member_angle(model, m):
-    X0, Y0, c, s, L = member_axis(model, m)
-    return degrees(atan2(s, c))
-
-
 def point(model, m, x):
     X0, Y0, c, s, L = member_axis(model, m)
     return X0 + c * x, Y0 + s * x
@@ -247,9 +246,9 @@ def line_offsets(model, line):
     return offsets, total
 
 
-def is_straight_beam(model):
+def is_straight_beam(model, runs=None):
     """One horizontal line drawn left to right: the classic beam view."""
-    runs = lines(model)
+    runs = runs or lines(model)
     if len(runs) != 1:
         return False
     X0, Y0, c, s, L = member_axis(model, runs[0][0])
@@ -257,6 +256,7 @@ def is_straight_beam(model):
 
 
 def bounds(model):
+    if not model['joints']:return (0.0,0.0,1.0,1.0)
     xs = [j[0] for j in model['joints']]
     ys = [j[1] for j in model['joints']]
     return min(xs), min(ys), max(xs), max(ys)
@@ -274,12 +274,12 @@ TEMPLATES = (
     ('Overhang', 'Two supports and a free end'),
     ('Portal frame', 'Fixed feet, gravity and wind'),
     ('Gable frame', 'Pinned feet, pitched rafters'),
-    ('Blank', 'Pin and roller, no loads'),
 )
 
 
 def support(m, x, kind='Pin'):
-    return {'m': m, 'x': x, 'kind': kind, 'kx': 0.0, 'ky': 1e7, 'kr': 0.0, 'settle': 0.0, 'case': 0}
+    return {'m': m, 'x': x, 'kind': kind, 'kx': 0.0, 'ky': 1e7, 'kr': 0.0, 'settle_x': 0.0, 'settle_y': 0.0,
+            'case': 0}
 
 
 def point_load(m, x, P=10e3, case=0, direction='down', angle=None):
@@ -299,7 +299,7 @@ def dist_load(m, x, x2, w1=5e3, w2=None, case=0, direction='down'):
 
 
 def empty_model(joints, members):
-    return {'tool': 'beams', 'schema': SCHEMA, 'name': '', 'joints': [list(j) for j in joints],
+    return {'tool': 'beams', 'schema': SCHEMA, 'name': '', 'joints': [list(j) for j in joints], 'joint_types': ['rigid']*len(joints),
             'members': [{'a': a, 'b': b, 'section': 0} for a, b in members], 'sections': [new_section()],
             'supports': [], 'hinges': [], 'loads': [], 'cases': ['Dead'],
             'combos': [{'name': 'All x1.0', 'factors': [1.0]}], 'selfweight': None}
@@ -329,21 +329,22 @@ def template(index):
         'Two spans': ((0, 'Pin'), (5.0, 'Roller'), (L, 'Roller')),
         'Three spans': ((0, 'Pin'), (5.0, 'Roller'), (10.0, 'Roller'), (L, 'Roller')),
         'Overhang': ((0, 'Pin'), (6.0, 'Roller')),
-        'Blank': ((0, 'Pin'), (L, 'Roller')),
     }[name]
     m['supports'] = [support(0, x, kind) for x, kind in supports]
     if name == 'Cantilever':
         m['loads'] = [point_load(0, L)]
-    elif name != 'Blank':
+    else:
         m['loads'] = [dist_load(0, 0.0, L)]
     return m
 
 
 def upgrade(model):
-    """Bring a saved model to the current schema (schema 1: one straight
-    beam with section changes at x positions)."""
-    if model.get('schema') == SCHEMA:
-        return model
+    """Bring a saved model to the current schema, with its node metadata
+    (schema 1: one straight beam with section changes at x positions).
+    Raises ValueError for a damaged model before anything uses it."""
+    from .structure import ensure
+    if 'members' in model and model.get('schema',2) in (2,SCHEMA):
+        return ensure(model)
     if 'members' in model:
         raise ModelError('Saved by a newer Beam Lab')
     L = model['length']
@@ -371,7 +372,7 @@ def upgrade(model):
     for s in model['supports']:
         m, x = place(s['x'])
         item = support(m, x, s['kind'] if s['kind'] in SUPPORTS else 'Pin')
-        for k in ('ky', 'kr', 'settle', 'case'):
+        for k in ('ky', 'kr', 'settle', 'case'):  # ensure() converts 'settle'
             item[k] = s[k]
         out['supports'].append(item)
     for h in model['hinges']:
@@ -393,7 +394,7 @@ def upgrade(model):
     out['name'] = model.get('name', '')
     out['cases'] = list(model['cases'])
     out['combos'] = [{'name': c['name'], 'factors': list(c['factors'])} for c in model['combos']]
-    return out
+    return ensure(out)
 
 
 # ---------------------------------------------------------------- checks
@@ -403,7 +404,14 @@ def item_count(model):
 
 
 def check(model):
-    """Raise ModelError for inputs the solver cannot use."""
+    """Raise ModelError for inputs the solver cannot use. structure.validate
+    covers node references, lengths, overlaps, item members, support types
+    and settlements; the rest is checked here."""
+    from . import structure
+    try:structure.validate(model)
+    except structure.Problem as exc:
+        error=ModelError(str(exc),exc.where);error.pair=exc.pair;error.item=exc.item
+        raise error
     members, joints = model['members'], model['joints']
     if not members:
         raise ModelError('Add a member')
@@ -411,36 +419,27 @@ def check(model):
         if not (abs(X) <= 1000 and abs(Y) <= 1000):
             raise ModelError('Joints must lie within 1000 m of the origin')
     for i, member in enumerate(members):
-        if member['a'] == member['b'] or member_length(model, i) < 1e-6:
-            raise ModelError('Member %d has no length' % (i + 1), point(model, i, 0.0))
         if not 0 <= member['section'] < len(model['sections']):
             raise ModelError('Member %d uses a missing section' % (i + 1))
 
     def on_member(item, field='x'):
-        m = item['m']
-        if not 0 <= m < len(members):
-            raise ModelError('An item lies on a missing member')
-        x = item[field]
+        m, x = item['m'], item[field]
         if not -1e-9 <= x <= member_length(model, m) + 1e-9:
             raise ModelError('Item lies off member %d' % (m + 1), point(model, m, min(max(x, 0.0), member_length(model, m))))
         return point(model, m, x)
     if not model['supports']:
-        raise ModelError('Add a support (S)')
+        raise ModelError('Add a support')
     seen = set()
     for s in model['supports']:
         where = on_member(s)
         if pkey(*where) in seen:
             raise ModelError('Two supports at the same point', where)
         seen.add(pkey(*where))
-        if s['kind'] not in SUPPORTS:
-            raise ModelError('Unknown support type', where)
         if s['kind'] == 'Spring':
             if s['kx'] < 0 or s['ky'] < 0 or s['kr'] < 0:
                 raise ModelError('Spring stiffness cannot be negative', where)
             if not (s['kx'] > 0 or s['ky'] > 0 or s['kr'] > 0):
                 raise ModelError('Spring needs a stiffness above zero', where)
-        if s['settle'] and 'y' in SUPPORT_FLAGS[s['kind']] and s['case'] >= len(model['cases']):
-            raise ModelError('Settlement uses a missing load case', where)
     hinges = set()
     for h in model['hinges']:
         where = on_member(h)
@@ -479,6 +478,7 @@ def direction_vector(model, m, name):
         return 0.0, -1.0
     if name == 'right':
         return 1.0, 0.0
+    if not 0<=m<len(model['members']):return 0.0,-1.0
     X0, Y0, c, s, L = member_axis(model, m)
     return s, -c  # toward the member's right: down for a member drawn left to right
 
@@ -562,20 +562,28 @@ class Solution:
                     stations[item['m']][key(item['x2'])] = item['x2']
         nodes, node_at = [], {}
 
-        def node(X, Y):
-            k = pkey(X, Y)
+        def node(m, x):
+            edge=members[m];L=member_length(model,m)
+            # Only shared endpoint IDs connect members. Interior sampling/load
+            # stations at a geometric crossing belong to their own member.
+            k=('j',edge['a']) if key(x)==0 else ('j',edge['b']) if key(x)==key(L) else ('m',m,key(x))
+            X,Y=point(model,m,x)
             if k not in node_at:
                 node_at[k] = len(nodes)
                 nodes.append((X, Y))
             return node_at[k]
         hinges = set((h['m'], key(h['x'])) for h in model['hinges'])
+        node_types=model.get('joint_types',[])
+        for m,edge in enumerate(members):
+            if edge['a']<len(node_types) and node_types[edge['a']]=='pin':hinges.add((m,0))
+            if edge['b']<len(node_types) and node_types[edge['b']]=='pin':hinges.add((m,key(member_length(model,m))))
         elements = []  # (node a, node b, member, x start, x end, releases)
         self.member_elements = []
         for m in range(len(members)):
             xs = [stations[m][k] for k in sorted(stations[m])]
             first = len(elements)
             for i in range(len(xs) - 1):
-                a, b = node(*point(model, m, xs[i])), node(*point(model, m, xs[i + 1]))
+                a, b = node(m,xs[i]), node(m,xs[i+1])
                 release = 0
                 if (m, key(xs[i + 1])) in hinges:
                     release |= ps.RELEASE_END
@@ -603,12 +611,12 @@ class Solution:
             where = point(model, m, load['x'])
             if load['kind'] == 'point':
                 dx, dy = load_vector(model, load)
-                n = node(*where)
+                n = node(m,load['x'])
                 loads.append(('node_load', (c, n, ps.UX, load['P'] * dx)))
                 loads.append(('node_load', (c, n, ps.UY, load['P'] * dy)))
                 load_where += [where, where]
             elif load['kind'] == 'moment':
-                loads.append(('node_load', (c, node(*where), ps.RZ, load['M'])))
+                loads.append(('node_load', (c, node(m,load['x']), ps.RZ, load['M'])))
                 load_where.append(where)
         for load in dist:
             c, m = load['case'], load['m']
@@ -629,11 +637,13 @@ class Solution:
         flags = {'x': ps.UX, 'y': ps.UY, 'r': ps.RZ}
         self.support_nodes = []
         for s in model['supports']:
-            n = node(*point(model, s['m'], s['x']))
+            n = node(s['m'],s['x'])
             self.support_nodes.append(n)
-            if s['settle'] and 'y' in SUPPORT_FLAGS[s['kind']]:
-                loads.append(('settle', (s['case'], n, ps.UY, -s['settle'])))
-                load_where.append(nodes[n])
+            for flag,field in ((ps.UX,'settle_x'),(ps.UY,'settle_y')):
+                value=s.get(field,0.0)
+                if value:
+                    loads.append(('settle',(s['case'],n,flag,value)))
+                    load_where.append(nodes[n])
         f = ps.Frame(nodes=len(nodes), elements=len(elements), sections=len(model['sections']),
                      loads=len(loads), cases=cases)
         self.values = []
@@ -707,15 +717,17 @@ class Solution:
                 total[q] += f * values[q]
         return total
 
-    def locate(self, line, s):
-        """(member, x) at distance s along a line."""
+    def spans(self, line, data):
+        """(member, offset, first, end) for each element in data, the
+        samples(line, view) of a whole run: samples first..end-1 lie on that
+        member at x = S[i] - offset. Walking these needs no per-sample search,
+        and a sample at a joint stays on its own member's side."""
         run = self.lines[line]
-        offsets, total = line_offsets(self.model, run)
-        s = min(max(s, 0.0), total)
-        for m, o in zip(run, offsets):
-            if s <= o + member_length(self.model, m) + 1e-9:
-                return m, s - o
-        return run[-1], member_length(self.model, run[-1])
+        offsets = line_offsets(self.model, run)[0]
+        starts = data[7]
+        ends = starts[1:] + [len(data[0])]
+        members = [(m, o) for m, o in zip(run, offsets) for _ in range(*self.member_elements[m])]
+        return [(m, o, first, end) for (m, o), first, end in zip(members, starts, ends)]
 
     def at_line(self, line, s, view, side=1):
         run = self.lines[line]
@@ -858,14 +870,16 @@ class Solution:
 
     def stress(self, line, view):
         """(largest |N/A| + |M/W| in Pa, s, member) along a line."""
-        S, V, M, T, W, N, U, starts = self.samples(line, view)
+        data = self.samples(line, view)
+        S, M, N = data[0], data[2], data[5]
         best = (0.0, 0.0, self.lines[line][0])
-        for i in range(len(S)):
-            m, x = self.locate(line, S[i])
+        for m, o, first, end in self.spans(line, data):
             values = self.values[self.model['members'][m]['section']]
-            sigma = abs(N[i]) / values['A'] + abs(M[i]) / values['W']
-            if sigma > best[0]:
-                best = (sigma, S[i], m)
+            A, W = values['A'], values['W']
+            for i in range(first, end):
+                sigma = abs(N[i]) / A + abs(M[i]) / W
+                if sigma > best[0]:
+                    best = (sigma, S[i], m)
         return best
 
     def deflection_ratio(self, view):

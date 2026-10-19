@@ -1,109 +1,111 @@
 """Beam Lab: model editor, section editor, diagrams, results and options in PicoLAB.
 
-F1 Add, F2 Remove, F3 Options, F4 Plot and F5 Results are the main keys. The model
-is solved again after every committed change. It stays in RAM while
+F1 Add, F2 Remove, F3 Options, F4 Plot, F5 Results and F6 Evaluate.
+Editing changes only geometry; only F6 invokes the solver. It stays in RAM while
 PicoLAB runs; saving to the SD card is explicit.
 """
 from picoware.system import buttons as keys
 from engtools.ui import theme
-from engtools.ui.forms import LineEdit, parse_number, erase_key
+from engtools.ui.forms import LineEdit, erase_key
 from engtools import units, cases
 from . import model as bm
 from . import items
 from . import render
+from . import structure as st
 
-OPTIONS = ('New beam', 'Load cases', 'Combinations', 'Self-weight', 'Save', 'Open', 'Export CSV (Eggcel)', 'Export full CSV',
+OPTIONS = ('New beam', 'New blank structure', 'Merge nodes', 'Split at node', 'Resolve overlaps', 'Load cases', 'Combinations', 'Self-weight', 'Save', 'Open', 'Export CSV (Eggcel)', 'Export full CSV',
            'Conventions and keys')
 UNDO_LIMIT = 12
 MENU_PAGES = ('start', 'options', 'cases', 'combos', 'open')
 ZOOMS = (1.0, 2.0, 4.0)
-MODEL_TABS = ('Beams', 'Supports', 'Loads')
+MODEL_TABS = ('Node', 'Member', 'Support', 'Load')
 ADD_OPTIONS = (
-    (('Member', 'member'), ('Section change', 'split'), ('Hinge', 'hinge')),
-    tuple((name, 'support') for name in bm.SUPPORTS),
-    (('Point load', 'point'), ('Moment', 'moment'), ('Distributed load', 'dist')),
+    (('Node','node'),), (('Member','member'),),
+    tuple((name,'support') for name in bm.SUPPORTS),
+    (('Point load','point'),('Moment','moment'),('Distributed load','dist')),
 )
+
 HELP = (
-    'Help:',
-    'UP/DOWN scroll  LEFT/RIGHT page',
-    'CTRL+UP/DOWN first/last; F9/ESC close',
-    'Main keys:',
-    'F1 Add at cursor  F2 Remove selected item',
-    'F3 Options  F4 Plot  F5 Results',
-    'F9 or ? opens help; edits stay intact',
-    'ESC returns; from model items leaves Lab',
-    'Model navigation:',
-    'LEFT/RIGHT Beams / Supports / Loads tabs',
-    'Changing tabs keeps the insertion point',
-    'UP/DOWN browse items; ENTER properties',
-    'TAB or ] next beam  [ previous beam',
-    ', / . previous/next point on that beam',
-    '< / > also step points (shifted , / .)',
-    'Points: ends, joints, supports and loads',
-    'B1/B2... Start/End shows the Add target',
-    'ENTER opens a property; ESC returns',
-    '+ or = zoom in  - zoom out (1x/2x/4x)',
-    'I shows/hides the result summary box',
-    'Model problems always show in red',
-    'Model shortcuts:',
-    'B add member  C split / section change',
-    'S support  H hinge',
-    'P point load  M moment  W distributed load',
-    'F2 remove selected item  Z undo (12 steps)',
-    'BACK/DEL on heading also removes item',
-    'Adding reuses the joint at the cursor',
-    'A new member starts in a free direction',
-    'Edit its length and angle (0 right, 90 up)',
-    'Point forces: edit Angle in degrees',
-    '0 right 90 up 180 left 270 down',
-    'Force Angle is global; negative P reverses',
-    'Text / numeric entry:',
-    'ENTER apply  ESC cancel  TAB apply',
-    'UP/DOWN apply and move to another value',
-    'LEFT/RIGHT caret  END last character',
+    'BEAM VIEW / NODE EDITOR',
+    'UP/DOWN scroll; LEFT/RIGHT page',
+    'F9 / ESC close help; edits stay intact',
+    'F1 Add at cursor  F2 Remove item',
+    'F3 Options  F4 Plots  F5 Results',
+    'F6 Evaluate: the ONLY solve command',
+    'ESC returns; Z undoes (12 steps)',
+    '', 'Node / Member / Support / Load:',
+    'LEFT/RIGHT changes the tab',
+    'UP/DOWN items; ENTER opens properties',
+    'ENTER edits; ESC collapses properties',
+    '[ / ] cycles the selected choice',
+    'ENTER on choice: live preview list',
+    '[ / ] or UP/DOWN previews choices',
+    'ENTER accepts; ESC restores the choice',
+    'TAB next member; , / . steps points',
+    '+ / - preview zoom; I result summary',
+    '', 'Nodes:',
+    'X,Y in metres; Type Rigid / Pinned',
+    'Expressions: 6*cos(30), 6*sin(30)',
+    'All Beam expression angles use DEGREES',
+    'Trig mode is independent of Calculator',
+    'Nodes can exist before their members',
+    'Pinned: member ends rotate independently',
+    'Rigid: attached members share rotation',
+    '', 'Members:',
+    'Start J#, End J#, Section',
+    'F1 needs at least two existing nodes',
+    '[ / ] changes the highlighted property',
+    'Shift+E opens the member section editor',
+    'Section choices retain unused sections',
+    'Preview updates without evaluation',
+    '', 'Supports and loads:',
+    'From node selects the reference J#',
+    'Along member appears at branches',
+    'Arrow shows positive distance from J#',
+    'Load offset is editable at endpoints too',
+    'Positive offset points into the member',
+    'Connect new nodes before adding loads',
+    'Interior node? F3 Split at node joins it',
+    'Distributed loads use Start/End distances',
+    'Settlement X/Y in mm, right/up positive',
+    'Only restrained directions allow movement',
+    'Point force angle: 0 right, 90 up',
+    '', 'Evaluation:',
+    'Edits clear results and displacement',
+    'F4/F5 stay empty until a successful F6',
+    'Navigation does not invalidate results',
+    'No background solves, including on Open',
+    'F6 checks overlap and connectivity first',
+    'Coincident nodes: F3 Merge nodes',
+    'Node inside a member: F3 Split at node',
+    'Crossing lines need an explicit node/join',
+    'Overlapping lengths cannot be evaluated',
+    'F3 Resolve overlaps previews normalization',
+    'Conflicting sections/loads need editing',
+    '', 'Plots:',
+    '[ / ] next/previous member; indicator L#',
+    'LEFT/RIGHT cursor; UP/DOWN stops',
+    'TAB peaks; ENTER pins (up to 8)',
+    'V / SPACE next case or combination',
+    'D changes quantity; F whole-frame view',
+    '', 'Text and files:',
+    'ENTER apply; ESC cancel; TAB apply',
+    'UP/DOWN apply and move to next value',
     'BACK and DEL erase before the caret',
-    'Type a number to replace a numeric value',
-    'Arithmetic works: 6/4, 2*pi',
-    'Choice / Add menus:',
-    'UP/DOWN choose  ENTER apply  ESC cancel',
-    'Section editor:',
-    'ENTER on Edit section opens its preview',
-    'UP/DOWN select value; ENTER edit/choose',
-    'ESC returns to model; F9 preserves edits',
-    'Plots (F4):',
-    'LEFT/RIGHT move  , / . move ten steps',
-    'UP/DOWN previous/next point',
-    'TAB next peak  ENTER pin (up to 8)',
-    'V or SPACE next case / combination',
-    'D third diagram: deflection, slope,',
-    '  normal force (frames), axial displ.',
-    'D in whole-frame view: next quantity',
-    'M or ] next beam  [ previous beam',
-    'B2/3 identifies the inspected beam',
-    'x measures distance from that beam start',
-    'Plots/peaks cover only the chosen beam',
-    'F whole-frame view; active beam highlighted',
-    'ESC returns to model',
-    'Results (F5):',
-    'UP/DOWN browse  ENTER open peak/pin',
-    'V next view  F2 or BACK/DEL unpins a pin',
-    'ESC returns to model',
-    'Options and files (F3):',
-    'UP/DOWN choose  ENTER open  ESC return',
-    'Cases: ENTER rename or add; F2 removes',
-    'Combinations: ENTER edit/add; F2 removes',
-    'Factors: type or ENTER edit; ESC return',
-    'Export CSV (Eggcel): sampled, <=511 cells',
-    'Export full CSV: every diagram sample',
-    'Signs and units:',
-    'Loads positive along their direction',
-    'Moments ccw +; settlement down +',
-    'Reactions up and right +; tension +',
-    'Sagging M +; V = dM/dx',
-    'Axial displ. u + toward the member end',
-    'm, kN, kNm, kN/m, GPa, cm4, mm, mrad',
-    'Euler-Bernoulli; small deflections',
+    'F3 Save/Open; models use schema 3',
+    'Older cases migrate; settlement signs kept',
+    'Export needs a successful F6 first',
+    'Eggcel CSV <=511 cells; full CSV optional',
+    'Euler-Bernoulli, small displacements',
 )
+
+
+def beam_number(text):
+    from engtools.calculator.evaluate import calculate
+    value,assignment=calculate(text,{'Ans':0},'DEG')
+    if assignment is not None or isinstance(value,complex) or not bm.isfinite(value):
+        raise ValueError('Enter a finite real number')
+    return float(value)
 
 _active = None
 
@@ -114,10 +116,9 @@ class BeamLab:
         from engtools import session
         kept = session.kept.get('beam') or {}
         self.model = kept.get('model')
-        self.undo = kept.get('undo', [])
+        self.undo = []
         self.view = kept.get('view', 0)
-        self.pins = kept.get('pins', [])
-        self.pin_beams = kept.get('pin_beams', {})
+        self.pins, self.pin_beams = [], {}
         self.page = 'model' if self.model else 'start'
         self.line, self.s = 0, 0.0
         self.member = 0
@@ -138,22 +139,169 @@ class BeamLab:
         self.info = False  # result summary box over the preview (I)
         self.solution, self.problem = None, None
         self.peaks = {}
+        self.shape = self.result_cache = None  # (key, value) per solution; see picture()
+        self.normalization = None
         self.dline, self.ds, self.third, self.cache = 0, 0.0, 'W', None
         self.dmember = 0
         self.tab, self.note, self.whole, self.quantity = -1, '', False, 0
         self.confirm = None
+        self.node_cursor=0
+        self.choice_edit=None
+        self.node_pick=None
+        self.preview_nodes=()
         if self.model:
-            self.resolve()
+            self.resolve()  # also completes node metadata
             self.select_point(0, 0.0)
+
+
+    def remember(self,before):
+        """Push a copy of the model taken before a change; keep the last 12."""
+        self.undo.append(before)
+        if len(self.undo)>UNDO_LIMIT:del self.undo[0]
+
+    def drop_solution(self):
+        if self.solution is not None:self.solution.free()
+        self.solution,self.problem,self.cache,self.peaks=None,None,None,{}
+        self.shape=self.result_cache=None
+
+    def evaluate(self):
+        if self.model is None:raise ValueError('Create a model first')
+        self.drop_solution()
+        try:self.solution=bm.Solution(self.model)
+        except (bm.ModelError,ValueError,MemoryError,RuntimeError,ZeroDivisionError) as exc:
+            self.problem=exc if isinstance(exc,bm.ModelError) else bm.ModelError(str(exc) or 'Not enough memory')
+            item=getattr(self.problem,'item',None)
+            if item is not None:
+                group,index=item
+                kind={'supports':'support','hinges':'hinge','loads':'load'}[group]
+                obj=self.model[group][index]
+                self.focus((kind,obj),'node' if 'node' in obj else None)
+            self.say(str(self.problem),True);return False
+        if self.model['members']:self.inspect_member(min(self.dmember,len(self.model['members'])-1),self.ds)
+        self.say('Evaluated / F4 plots / F5 results')
+        return True
+
+    def cursor_position(self):
+        if self.node_cursor is not None and self.model['joints']:return tuple(self.model['joints'][self.node_cursor])
+        if self.model['members']:return items.cursor_point(self.model,self.line,self.s)
+        return (0.0,0.0)
+
+    def add_node(self):
+        if len(self.model['joints'])>=st.MAX_NODES:raise ValueError('Up to %d nodes'%st.MAX_NODES)
+        self.snapshot();self.model['joints'].append(list(self.cursor_position()));self.model['joint_types'].append('rigid')
+        self.resolve();self.focus(('joint',len(self.model['joints'])-1),'X')
+        self.say('New node / type X,Y / angles in degrees')
+
+    def add_member(self):
+        if len(self.model['joints'])<2:raise ValueError('Define at least two nodes first')
+        if len(self.model['members'])>=bm.MAX_MEMBERS or bm.item_count(self.model)>=bm.MAX_ITEMS:raise ValueError('Member/item limit reached')
+        self.snapshot();a=self.node_cursor or 0;b=(a+1)%len(self.model['joints'])
+        section=self.model['members'][self.member]['section'] if self.model['members'] else 0
+        self.model['members'].append({'a':a,'b':b,'section':section})
+        self.resolve();self.focus(('member',len(self.model['members'])-1),'a')
+        self.say('[ ] chooses Start / End / Section')
+
+    def add_attachment(self,kind,support_type=None):
+        node=self.node_cursor
+        if node is None or not self.model['joints']:raise ValueError('Select a reference node first')
+        if bm.item_count(self.model)>=bm.MAX_ITEMS:raise ValueError('Item limit reached')
+        connected=st.attached(self.model,node)
+        if not connected:raise ValueError('J%d has no member: connect it in Member, or F3 Split at node'%(node+1))
+        m=next((i for i in connected if self.model['members'][i]['a']==node),self.member if self.member in connected else connected[0] if connected else -1)
+        x=0.0 if m<0 or self.model['members'][m]['a']==node else bm.member_length(self.model,m)
+        before=items.copy(self.model)
+        if kind=='support':obj=bm.support(m,x,bm.SUPPORTS[support_type] if support_type is not None else 'Pin');group='supports'
+        elif kind=='dist':
+            if m<0:raise ValueError('A distributed load needs a member')
+            obj=bm.dist_load(m,0.0,bm.member_length(self.model,m));group='loads'
+        else:obj=bm.point_load(m,x) if kind=='point' else bm.moment_load(m,x);group='loads'
+        st.bind(self.model,obj,node,m,True)
+        self.model[group].append(obj);self.remember(before);self.resolve()
+        self.focus(('support' if kind=='support' else 'load',obj),'kind' if kind=='support' else 'P' if kind=='point' else 'M' if kind=='moment' else 'x')
+        self.say('At J%d / F6 evaluates'%(node+1))
+
+    def cycle_choice(self,step):
+        row=self.current()
+        if not row[3]:raise ValueError('No member: connect this node or change From node')
+        ref,field=row[4],row[5][0]
+        options=items.choices(self.model,ref,field)
+        if not options:raise ValueError('No choices defined')
+        index=(items.choice_index(self.model,ref,field)+step)%len(options)
+        # The explicit section editor shortcut creates a new section; bracket
+        # browsing cycles defined sections only.
+        if field=='section':index=(items.choice_index(self.model,ref,field)+step)%len(self.model['sections'])
+        before=items.copy(self.model);items.set_choice(self.model,ref,field,index);self.remember(before)
+        self.changed(ref,field);self.say('Geometry updated / F6 evaluates')
+
+    def preview_choice(self,button,esc):
+        q=self.choice_edit
+        if esc:
+            self.model=q['before'];self.choice_edit=None;self.resolve()
+            ref=q['ref']
+            if ref[0] not in ('joint','member'):
+                group='supports' if ref[0]=='support' else 'loads' if ref[0]=='load' else 'hinges'
+                old=q['object_index'];ref=(ref[0],self.model[group][old])
+            self.focus(ref,q['field']);return
+        c=self.char(button)
+        if button in (keys.BUTTON_UP,keys.BUTTON_DOWN) or c in ('[',']'):
+            q['index']=(q['index']+(-1 if button==keys.BUTTON_UP or c=='[' else 1))%len(q['options'])
+            if not (q['field']=='section' and q['index']==len(self.model['sections'])):
+                items.set_choice(self.model,q['ref'],q['field'],q['index']);self.resolve();self.focus(q['ref'],q['field'])
+        elif button==keys.BUTTON_CENTER:
+            if q['field']=='section' and q['index']==len(self.model['sections']):items.set_choice(self.model,q['ref'],q['field'],q['index'])
+            self.remember(q['before']);self.choice_edit=None;self.resolve();self.focus(q['ref'],q['field'])
+            if q['field']=='section' and q['index']==len(q['options'])-1:self.open_section(self.model['sections'][q['index']])
+
+    def accept_structure(self,model,node=None):
+        before=items.copy(self.model);self.model=model;self.remember(before)
+        self.sel=None;self.tab_selections=[None]*4;self.resolve()
+        if self.model['joints']:self.focus(('joint',min(node or 0,len(self.model['joints'])-1)))
+        self.page='model';self.preview_nodes=();self.node_pick=None
+
+    def pick_node(self,title,nodes,apply):
+        if not nodes:raise ValueError('No eligible nodes')
+        self.page='model';self.node_pick=nodes
+        labels=[items.joint_label(self.model,j) for j in nodes]
+        def chosen(index):
+            self.preview_nodes=();self.node_pick=None;apply(nodes[index])
+        self.popup=[title,labels,0,chosen]
+
+    def merge_menu(self):
+        if len(self.model['joints'])<2:raise ValueError('Define two nodes first')
+        def source(j):
+            self.pick_node('Merge J%d into:'%(j+1),[k for k in range(len(self.model['joints'])) if k!=j],lambda k:self.commit_merge(j,k))
+        self.pick_node('Merge: source node',list(range(len(self.model['joints']))),source)
+
+    def commit_merge(self,j,k):
+        model,node=st.merge(self.model,j,k)
+        self.accept_structure(model,node);self.say('Nodes merged / Z undo / F6 evaluate')
+
+    def split_menu(self):
+        if not self.model['members']:raise ValueError('Define a member first')
+        self.page='model'
+        def member(i):
+            candidates=[j for j in range(len(self.model['joints'])) if st.point_on(self.model,j,i) is not None]
+            def node(j):
+                model=items.copy(self.model);st.split_at(model,i,j);self.accept_structure(model,j)
+                self.say('Member split and joined / F6 evaluate')
+            self.pick_node('Split L%d at node:'%(i+1),candidates,node)
+        self.popup=['Split member', ['L%d'%(i+1) for i in range(len(self.model['members']))],0,member]
+
+    def normalize_menu(self):
+        model=st.normalize(self.model)
+        # A complete geometry copy is shown before any changes are accepted.
+        self.normalization={'before':self.model,'candidate':model}
+        self.model=model;self.page='model';self.sel=None;self.preview_nodes=();self.resolve()
+        self.say('Preview resolved overlaps / ENTER apply / ESC cancel')
 
     # ------------------------------------------------------------ state
 
     def keep(self):
         """What survives closing Beam view while PicoLAB stays open. The undo
-        history is left behind: each step is a copy of the whole model."""
+        history is left behind: each step is a copy of the whole model. So is
+        the solution, and with it the pinned points."""
         from engtools import session
-        session.kept['beam'] = {'model': self.model, 'view': self.view, 'pins': self.pins,
-                                'pin_beams': self.pin_beams}
+        session.kept['beam'] = {'model': self.model, 'view': self.view}
 
     def close(self):
         self.keep()
@@ -168,9 +316,7 @@ class BeamLab:
         self.message, self.error = message, error
 
     def snapshot(self):
-        self.undo.append(items.copy(self.model))
-        if len(self.undo) > UNDO_LIMIT:
-            del self.undo[0]
+        self.remember(items.copy(self.model))
 
     def undo_last(self):
         if not self.undo:
@@ -183,23 +329,22 @@ class BeamLab:
         self.say('Undone')
 
     def resolve(self):
-        if self.solution is not None:
-            self.solution.free()
-        self.solution, self.problem, self.cache, self.peaks = None, None, None, {}
-        try:
-            self.solution = bm.Solution(self.model)
-        except bm.ModelError as exc:
-            self.problem = exc
-        except MemoryError:
-            self.problem = bm.ModelError('Not enough memory for this model')
-        views = len(self.model['cases']) + len(self.model['combos'])
-        self.view = min(self.view, views - 1)
-        runs = bm.lines(self.model)
-        self.line = min(self.line, len(runs) - 1)
-        self.dline = min(self.dline, len(runs) - 1)
-        self.s = min(self.s, self.line_length(self.line))
-        self.dmember = min(self.dmember, len(self.model['members'])-1)
-        self.inspect_member(self.dmember, self.ds)
+        """Invalidate computed response after editing; NEVER call the solver."""
+        self.drop_solution()
+        self.pins=[];self.pin_beams={}
+        if self.model is None:return
+        st.ensure(self.model)
+        self.view=min(max(0,self.view),max(0,len(self.model['cases'])+len(self.model['combos'])-1))
+        runs=bm.lines(self.model)
+        self.node_cursor=min(max(0,self.node_cursor),max(0,len(self.model['joints'])-1)) if self.node_cursor is not None else None
+        if not runs:
+            self.line,self.dline,self.member,self.dmember,self.s,self.ds=0,0,0,0,0.0,0.0
+            return
+        self.line=min(max(0,self.line),len(runs)-1);self.dline=min(max(0,self.dline),len(runs)-1)
+        self.member=min(max(0,self.member),len(self.model['members'])-1)
+        self.dmember=min(max(0,self.dmember),len(self.model['members'])-1)
+        self.s=min(max(0,self.s),self.line_length(self.line))
+        self.inspect_member(self.dmember,self.ds)
 
     def line_length(self, line):
         return bm.line_offsets(self.model, bm.lines(self.model)[line])[1]
@@ -226,21 +371,13 @@ class BeamLab:
 
     @staticmethod
     def ref_tab(ref):
-        return 1 if ref[0] == 'support' else 2 if ref[0] == 'load' else 0
+        return {'joint':0,'member':1,'hinge':1,'support':2,'load':3}[ref[0]]
 
-    def tab_refs(self, tab=None):
-        """All model items in one tab, independent of cursor position."""
-        tab = self.model_tab if tab is None else tab
-        if tab == 1:
-            return [('support', obj) for obj in self.model['supports']]
-        if tab == 2:
-            return [('load', obj) for obj in self.model['loads']]
-        refs = [('member', i) for i in range(len(self.model['members']))]
-        if not bm.is_straight_beam(self.model):
-            used = sorted(set(j for m in self.model['members'] for j in (m['a'], m['b'])))
-            refs += [('joint', i) for i in used]
-        refs += [('hinge', obj) for obj in self.model['hinges']]
-        return refs
+    def tab_refs(self,tab=None):
+        tab=self.model_tab if tab is None else tab
+        if tab==0:return [('joint',i) for i in range(len(self.model['joints']))]
+        if tab==1:return [('member',i) for i in range(len(self.model['members']))]+[('hinge',h) for h in self.model['hinges']]
+        return [('support' if tab==2 else 'load',v) for v in self.model['supports' if tab==2 else 'loads']]
 
     def switch_model_tab(self, step):
         self.tab_selections[self.model_tab] = self.sel
@@ -252,55 +389,34 @@ class BeamLab:
         # A category change restores its row, but never moves the Add target.
         self.sel = selected
 
-    def cursor_member(self, runs=None):
-        """Keep the chosen member at a shared joint, including collinear ones."""
-        runs = runs or bm.lines(self.model)
-        if 0 <= self.member < len(self.model['members']):
-            line, offset = items.line_of(self.model, self.member, runs)
-            length = bm.member_length(self.model, self.member)
-            if line == self.line and offset - 1e-6 <= self.s <= offset + length + 1e-6:
-                return self.member
-        return items.locate(self.model, self.line, self.s, runs)[0]
+    def cursor_member(self):
+        if not self.model['members']:return None
+        if self.node_cursor is not None:
+            connected=st.attached(self.model,self.node_cursor)
+            if self.member in connected:return self.member
+            if connected:return connected[0]
+        return min(max(0,self.member),len(self.model['members'])-1)
 
     def cursor_label(self):
-        member = self.cursor_member()
-        line, offset = items.line_of(self.model, member)
-        x = self.s - offset
-        length = bm.member_length(self.model, member)
-        point = 'Start' if x <= 1e-6 else 'End' if length - x <= 1e-6 else units.show(x, 'm')
-        return 'B%d %s' % (member + 1, point)
+        if self.node_cursor is not None and self.model['joints']:
+            return 'J%d'%(self.node_cursor+1)
+        m=self.cursor_member()
+        return 'L%d x=%s'%(m+1,units.number(self.s-items.line_of(self.model,m)[1],4)) if m is not None else 'No nodes'
 
-    def cycle_member(self, step):
-        runs = bm.lines(self.model)
-        member = (self.cursor_member(runs) + step) % len(self.model['members'])
-        line, offset = items.line_of(self.model, member, runs)
-        self.member = member
-        self.select_point(line, offset)
-        if self.model_tab == 0:
-            self.sel = (('member', member), None)
-            self.tab_selections[0] = self.sel
+    def cycle_member(self,step):
+        if not self.model['members']:return
+        member=((self.cursor_member() or 0)+step)%len(self.model['members'])
+        line,offset=items.line_of(self.model,member)
+        self.member=member;self.select_point(line,offset)
+        if self.model_tab==1:self.focus(('member',member))
 
-    def move_point(self, step):
-        runs = bm.lines(self.model)
-        member = self.cursor_member(runs)
-        line, offset = items.line_of(self.model, member, runs)
-        end = offset + bm.member_length(self.model, member)
-        points = [s for s in items.stops(self.model, line, runs) if offset <= s <= end]
-        i = min(range(len(points)), key=lambda j: abs(points[j] - self.s))
-        self.member = member
-        self.select_point(line, points[min(max(i + step, 0), len(points) - 1)])
-
-    def row_title(self, ref):
-        kind, obj = ref
-        title = items.title(self.model, ref)
-        if kind in ('support', 'load', 'hinge'):
-            group = {'support': 'supports', 'load': 'loads', 'hinge': 'hinges'}[kind]
-            index = next(i for i, value in enumerate(self.model[group]) if value is obj) + 1
-            if kind == 'support':
-                title = '%d. %s at %s' % (index, obj['kind'], units.show(items.along(self.model, obj), 'm'))
-            else:
-                title = '%d. %s' % (index, title)
-        return title
+    def move_point(self,step):
+        if not self.model['members']:return
+        runs=bm.lines(self.model);member=self.cursor_member()
+        line,offset=items.line_of(self.model,member,runs);end=offset+bm.member_length(self.model,member)
+        points=[s for s in items.stops(self.model,line,runs) if offset-st.EPS<=s<=end+st.EPS]
+        i=min(range(len(points)),key=lambda j:abs(points[j]-self.s))
+        self.member=member;self.select_point(line,points[min(max(i+step,0),len(points)-1)])
 
     def rows(self):
         """(kind, label, value, editable, ref, field) in the selected tab."""
@@ -310,7 +426,7 @@ class BeamLab:
         if expanded is not None:
             refs = [ref for ref in refs if items.same(ref, expanded)]
         for ref in refs:
-            out.append(('head', self.row_title(ref), '', True, ref, None))
+            out.append(('head', items.title(self.model, ref), '', True, ref, None))
             if items.same(ref, expanded):
                 for f in items.fields(self.model, ref):
                     out.append(('field', f[1], items.text(self.model, ref, f), f[4], ref, f))
@@ -328,55 +444,39 @@ class BeamLab:
                 return i
         return 0 if rows else -1
 
-    def select_point(self, line, s):
-        runs = bm.lines(self.model)
-        line = min(max(line, 0), len(runs) - 1)
-        points = items.stops(self.model, line, runs)
-        self.line = line
-        self.s = min(points, key=lambda p: abs(p - s))
-        self.member = self.cursor_member(runs)
-        refs = self.tab_refs()
-        here = items.items_at(self.model, line, self.s, runs)
-        if self.sel and any(items.same(ref, self.sel[0]) for ref in refs) and \
-                any(items.same(ref, self.sel[0]) for ref in here):
+    def select_point(self,line,s):
+        runs=bm.lines(self.model)
+        if not runs:
+            refs=self.tab_refs();self.sel=(refs[0],None) if refs else None
             return
-        chosen = next((ref for ref in refs if any(items.same(ref, local) for local in here)), None)
-        if chosen is None and self.sel and any(items.same(ref, self.sel[0]) for ref in refs):
-            self.tab_selections[self.model_tab] = self.sel
-            return
-        if chosen is None and refs:
-            chosen = refs[0]
-        self.sel = (chosen, None) if chosen else None
-        self.tab_selections[self.model_tab] = self.sel
+        line=min(max(line,0),len(runs)-1);points=items.stops(self.model,line,runs)
+        self.line=line;self.s=min(points,key=lambda p:abs(p-s))
+        m,x=items.locate(self.model,line,self.s,runs);self.member=m
+        here=bm.point(self.model,m,x)
+        self.node_cursor=next((j for j,p in enumerate(self.model['joints']) if items.same_point(p,here)),None)
+        refs=self.tab_refs();local=items.items_at(self.model,line,self.s,runs)
+        if self.model_tab==0 and self.node_cursor is not None:self.sel=(('joint',self.node_cursor),None)
+        elif not self.sel or not any(items.same(self.sel[0],r) for r in refs):
+            chosen=next((r for r in refs if any(items.same(r,q) for q in local)),refs[0] if refs else None)
+            self.sel=(chosen,None) if chosen else None
+        self.tab_selections[self.model_tab]=self.sel
 
-    def focus(self, ref, field=None):
-        """Put the cursor where an item is and select it (or one of its fields)."""
-        kind, obj = ref
-        target_tab = self.ref_tab(ref)
-        if target_tab != self.model_tab:
-            self.tab_selections[self.model_tab] = self.sel
-            self.model_tab = target_tab
-        runs = bm.lines(self.model)
-        if kind == 'joint':
-            for m, member in enumerate(self.model['members']):
-                if obj in (member['a'], member['b']):
-                    line, offset = items.line_of(self.model, m, runs)
-                    s = offset + (0.0 if member['a'] == obj else bm.member_length(self.model, m))
-                    break
-        elif kind == 'member':
-            m = obj
-            line, offset = items.line_of(self.model, obj, runs)
-            s = offset + (bm.member_length(self.model, obj) if field in ('length', 'angle') and
-                          len(self.model['members']) > 1 else 0.0)
+    def focus(self,ref,field=None):
+        kind,obj=ref;tab=self.ref_tab(ref)
+        if tab!=self.model_tab:self.tab_selections[self.model_tab]=self.sel;self.model_tab=tab
+        self.sel=(ref,field);self.tab_selections[self.model_tab]=self.sel
+        if kind=='joint':
+            self.node_cursor=obj;connected=st.attached(self.model,obj)
+            if not connected:return
+            m=self.member if self.member in connected else connected[0]
+            edge=self.model['members'][m];x=0.0 if edge['a']==obj else bm.member_length(self.model,m)
+        elif kind=='member':
+            m=obj;edge=self.model['members'][m];self.node_cursor=edge['b'] if field=='b' else edge['a']
+            x=bm.member_length(self.model,m) if field=='b' else 0.0
         else:
-            m = obj['m']
-            line, offset = items.line_of(self.model, m, runs)
-            s = offset + (obj['x2'] if field == 'x2' else obj['x'])
-        self.sel = (ref, field)
-        self.tab_selections[self.model_tab] = self.sel
-        self.line, self.member = line, m
-        points = items.stops(self.model, line, runs)
-        self.s = min(points, key=lambda p: abs(p - s))
+            self.node_cursor=obj.get('node');m=obj['m'];x=obj['x2'] if field=='x2' else obj['x']
+            if not 0<=m<len(self.model['members']):return
+        self.member=m;self.line,offset=items.line_of(self.model,m);self.s=offset+x
 
     def move_row(self, step):
         rows = self.rows()
@@ -391,43 +491,29 @@ class BeamLab:
         index = self.row_index(rows)
         return rows[index] if index >= 0 else None
 
-    def begin_edit(self, first=None):
-        row = self.current()
-        if row is None or row[0] != 'field' or not row[3]:
-            raise ValueError('This value is worked out for you' if row and row[0] == 'field' else 'Choose a value first')
-        ref, f = row[4], row[5]
-        if f[2] == 'action':
-            self.open_section(self.model['sections'][self.model['members'][ref[1]]['section']])
-            return
-        if f[2] == 'choice':
-            options = items.choices(self.model, ref, f[0])
-
-            def apply(index, ref=ref, field=f[0]):
-                self.snapshot()
-                items.set_choice(self.model, ref, field, index)
-                self.changed(ref, field)
-                if field == 'section' and index == len(options) - 1:
-                    self.open_section(self.model['sections'][self.model['members'][ref[1]]['section']])
-                    self.say('New section: edit it here')
-            self.popup = [f[1], options, items.choice_index(self.model, ref, f[0]), apply]
-            return
+    def begin_edit(self,first=None):
+        row=self.current()
+        if row is None or row[0]!='field' or not row[3]:raise ValueError('Choose an editable property')
+        ref,field=row[4],row[5]
+        if field[2]=='choice':
+            group='supports' if ref[0]=='support' else 'loads' if ref[0]=='load' else 'hinges'
+            object_index=next((i for i,o in enumerate(self.model.get(group,())) if o is ref[1]),0)
+            self.choice_edit={'ref':ref,'object_index':object_index,'field':field[0],'before':items.copy(self.model),
+                              'index':items.choice_index(self.model,ref,field[0]),'options':items.choices(self.model,ref,field[0])}
+            self.say('[ ] preview / ENTER apply / ESC cancel');return
         if first is None:
-            value = items.get(self.model, ref, f[0])
-            shown = value if f[3] == 'deg' else units.from_si(value, f[3])
-            self.edit = LineEdit(units.number(shown, 7), 24)
+            value=items.get(self.model,ref,field[0]);shown=value if field[3]=='deg' else units.from_si(value,field[3])
+            self.edit=LineEdit(units.number(shown,7),64)
         else:
-            self.edit = LineEdit('', 24)
-            self.edit.key(self.vm, first)
+            self.edit=LineEdit('',64);self.edit.key(self.vm,first)
 
     def commit_edit(self):
         row = self.current()
         ref, f = row[4], row[5]
-        value = parse_number(self.edit.text)
+        value = beam_number(self.edit.text)
         before = items.copy(self.model)
         items.set_number(self.model, ref, f[0], f[3], value)
-        self.undo.append(before)
-        if len(self.undo) > UNDO_LIMIT:
-            del self.undo[0]
+        self.remember(before)
         self.edit = None
         self.changed(ref, f[0])
 
@@ -445,7 +531,7 @@ class BeamLab:
             return False
         try:
             self.handle(button)
-        except (ValueError, TypeError, ZeroDivisionError, OverflowError, RuntimeError, OSError, MemoryError) as exc:
+        except (ValueError, TypeError, KeyError, IndexError, ZeroDivisionError, OverflowError, RuntimeError, OSError, MemoryError) as exc:
             self.say(str(exc) or 'Not possible here', True)
         return True
 
@@ -460,21 +546,6 @@ class BeamLab:
     def menu_rect(self):
         """Add/choice menus and prompts replace the lower box; the preview stays visible."""
         return self.properties_rect() if self.page in ('model','section') else None
-
-    def insert_item(self,kind,support_type=None):
-        undo_before = self.undo[:]
-        self.snapshot()
-        try:
-            ref,field=items.insert(self.model,kind,self.line,self.s,self.cursor_member())
-            if support_type is not None:
-                items.set_choice(self.model,ref,'kind',support_type)
-        except ValueError:
-            self.undo = undo_before
-            raise
-        self.tab_selections = [None] * len(MODEL_TABS)
-        self.resolve();self.focus(ref,field)
-        self.say({'split':'Split here with its own section: ENTER changes it',
-                  'member':'New member: length, then angle'}.get(kind,'Added: type its position, or move on'))
 
     def handle(self, button):
         if button==keys.BUTTON_F9:
@@ -496,12 +567,21 @@ class BeamLab:
                 except ValueError as exc:
                     self.prompt['message'] = str(exc)
             return
+        if self.normalization is not None:
+            q=self.normalization
+            if esc:self.model=q['before'];self.normalization=None;self.resolve();self.say('Resolution cancelled')
+            elif button==keys.BUTTON_CENTER:
+                self.model=q['before'];self.normalization=None;self.accept_structure(q['candidate']);self.say('Overlap resolved / F6 evaluates')
+            return
+        if self.choice_edit is not None:
+            self.preview_choice(button,esc);return
         if self.popup is not None:
             title, options, index, apply = self.popup
             if esc:
                 self.popup = None
-            elif button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
-                self.popup[2] = (index + (1 if button == keys.BUTTON_DOWN else -1)) % len(options)
+                self.node_pick=None;self.preview_nodes=()
+            elif button in (keys.BUTTON_UP, keys.BUTTON_DOWN) or self.char(button) in ('[',']'):
+                self.popup[2]=(index+(1 if button==keys.BUTTON_DOWN or self.char(button)==']' else -1))%len(options)
             elif button == keys.BUTTON_CENTER:
                 self.popup = None
                 apply(index)
@@ -522,12 +602,14 @@ class BeamLab:
                         self.move_row(-1 if result == 'up' else 1)
             return
         self.message, self.error = '', False
+        if button==keys.BUTTON_F6:
+            self.evaluate();return
         page = {keys.BUTTON_F3: 'options', keys.BUTTON_F4: 'diagrams',
                 keys.BUTTON_F5: 'results'}.get(button)
         if page and self.model is not None:
             if page in ('options', 'results'):
                 self.menu_index = 0
-            if page == 'diagrams' and self.page == 'model':
+            if page == 'diagrams' and self.page == 'model' and self.model['members']:
                 self.inspect_member(self.cursor_member(), self.s)
             self.page = page
             return
@@ -535,12 +617,12 @@ class BeamLab:
             self.open_help()
             return
         if button==keys.BUTTON_F1 and self.page=='model':
-            tab=self.model_tab
-            choices=ADD_OPTIONS[tab]
-            def add(index,tab=tab,choices=choices):
-                self.insert_item(choices[index][1],index if tab==1 else None)
-            title=('Add beam','Add support','Add load')[tab]
-            self.popup=[title+' / '+self.cursor_label(),tuple(label for label,kind in choices),0,add]
+            if self.model_tab==0:self.add_node()
+            elif self.model_tab==1:self.add_member()
+            else:
+                choices=ADD_OPTIONS[self.model_tab]
+                def add(index):self.add_attachment(choices[index][1],index if self.model_tab==2 else None)
+                self.popup=['Add '+MODEL_TABS[self.model_tab]+' / '+self.cursor_label(),[v[0] for v in choices],0,add]
             return
         getattr(self, 'key_' + self.page)(button, esc)
 
@@ -549,70 +631,47 @@ class BeamLab:
         return c.lower() if c else ''
 
     def remove_selected(self):
-        if self.sel is None:
-            raise ValueError('Nothing to remove here')
-        undo_before = self.undo[:]
-        self.snapshot()
-        try:
-            items.delete(self.model, self.sel[0])
-        except ValueError:
-            self.undo = undo_before
-            raise
-        self.tab_selections = [None] * len(MODEL_TABS)
+        if self.sel is None:raise ValueError('Nothing selected')
+        before=items.copy(self.model)
+        items.delete(self.model,self.sel[0]);self.remember(before)
+        self.tab_selections=[None]*len(MODEL_TABS);self.sel=None
         self.resolve()
-        self.sel = None
-        self.select_point(self.line, self.s)
-        self.say('Removed: Z undoes')
+        refs=self.tab_refs()
+        if refs:self.focus(refs[0])
+        self.say('Removed / Z undo / F6 evaluate')
 
-    def key_model(self, button, esc):
+    def key_model(self,button,esc):
         if esc:
-            if self.sel and self.sel[1] is not None:
-                self.focus(self.sel[0])
-                return
-            self.vm.back()
+            if self.sel and self.sel[1] is not None:self.focus(self.sel[0])
+            else:self.vm.back()
             return
-        c = self.char(button)
-        if button == keys.BUTTON_F2:
-            self.remove_selected()
-        elif button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT):
-            self.switch_model_tab(-1 if button == keys.BUTTON_LEFT else 1)
-        elif c in (',', '.', '<', '>'):
-            self.move_point(1 if c in ('.', '>') else -1)
-        elif button == keys.BUTTON_TAB or c in ('[', ']'):
-            self.cycle_member(-1 if c == '[' else 1)
-        elif button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
-            self.move_row(-1 if button == keys.BUTTON_UP else 1)
-        elif button == keys.BUTTON_CENTER:
-            row = self.current()
-            if row is not None and row[0] == 'head':
-                fields = items.fields(self.model, row[4])
-                editable = [f for f in fields if f[4]]
-                self.focus(row[4], (editable or fields)[0][0])
-            else:
-                self.begin_edit()
-        elif erase_key(self.vm, button):
-            row = self.current()
-            if row is None:
-                raise ValueError('Nothing to remove here')
-            if row[0] == 'field':
-                if row[5][2] != 'num':
-                    raise ValueError('Select the item heading to remove it')
-                self.begin_edit()
-                self.edit.key(self.vm, button)
-                return
-            self.remove_selected()
-        elif c == 'z':
-            self.undo_last()
-        elif c == 'i':
-            self.info = not self.info
-        elif c in ('+', '='):
-            self.zoom = min(self.zoom + 1, len(ZOOMS) - 1)
-        elif c == '-':
-            self.zoom = max(self.zoom - 1, 0)
-        elif c in items.INSERT_KEYS:
-            self.insert_item(items.INSERT_KEYS[c])
-        elif c and (c.isdigit() or c in '-.('):
-            self.begin_edit(button)
+        c=self.char(button)
+        if button==keys.BUTTON_F2:self.remove_selected()
+        elif button in (keys.BUTTON_LEFT,keys.BUTTON_RIGHT):self.switch_model_tab(-1 if button==keys.BUTTON_LEFT else 1)
+        elif button in (keys.BUTTON_UP,keys.BUTTON_DOWN):self.move_row(-1 if button==keys.BUTTON_UP else 1)
+        elif c in ('[',']'):
+            row=self.current()
+            if row and row[0]=='field' and row[5][2]=='choice':self.cycle_choice(-1 if c=='[' else 1)
+            else:self.cycle_member(-1 if c=='[' else 1)
+        elif button==keys.BUTTON_TAB:self.cycle_member(1)
+        elif c in (',','.','<','>'):self.move_point(1 if c in ('.','>') else -1)
+        elif button==keys.BUTTON_CENTER:
+            row=self.current()
+            if row is not None and row[0]=='head':
+                fields=items.fields(self.model,row[4]);self.focus(row[4],fields[0][0])
+            else:self.begin_edit()
+        elif c=='e' and self.vm.input_manager.was_capitalized:
+            m=self.sel[0][1] if self.sel and self.sel[0][0]=='member' else self.cursor_member()
+            if m is None:raise ValueError('Select a member first')
+            self.open_section(self.model['sections'][self.model['members'][m]['section']])
+        elif c=='z':self.undo_last()
+        elif c=='i':self.info=not self.info
+        elif c in ('+','='):self.zoom=min(self.zoom+1,len(ZOOMS)-1)
+        elif c=='-':self.zoom=max(0,self.zoom-1)
+        elif erase_key(self.vm,button):
+            row=self.current()
+            if row and row[0]=='field' and row[5][2]=='num':self.begin_edit();self.edit.key(self.vm,button)
+        elif c and (c.isdigit() or c in '-.('):self.begin_edit(button)
 
     # ------------------------------------------------------------ section editor
 
@@ -625,10 +684,10 @@ class BeamLab:
 
     def commit_section(self):
         row = self.section_rows()[self.section_row]
-        value = parse_number(self.edit.text)
+        value = beam_number(self.edit.text)
         before = items.copy(self.model)
         items.section_number(self.section, row[0], row[3], value)
-        self.undo.append(before)
+        self.remember(before)
         self.edit = None
         self.resolve()
 
@@ -690,14 +749,14 @@ class BeamLab:
 
     def plot_title(self):
         start, end = self.plot_bounds()
-        return 'B%d/%d  x=%s' % (self.dmember+1, len(self.model['members']), units.show(self.ds-start,'m'))
+        return 'L%d/%d  x=%s' % (self.dmember+1, len(self.model['members']), units.show(self.ds-start,'m'))
 
     def key_diagrams(self, button, esc):
         if esc:
             self.page = 'model'
             return
         if self.solution is None:
-            raise ValueError('Fix the model first (ESC)')
+            self.say('F6 Evaluate computes plots',True);return
         start, end = self.plot_bounds()
         c = self.char(button)
         step = (end-start) / (render.RIGHT - render.LEFT)
@@ -804,14 +863,23 @@ class BeamLab:
         return '(%s, %s) m' % (units.number(X), units.number(Y))
 
     def result_rows(self):
-        """(label, value, detail, color, action) rows for F5."""
+        """(label, value, detail, color, action) rows for F5. Both the keys
+        and the frame read them, so they are built once per solution, view
+        and set of pinned points."""
         sol = self.solution
         if sol is None:
-            return [('Model problem', None, str(self.problem), None, None)]
+            return [('Not evaluated',None,'F6 Evaluate computes results' if self.problem is None else str(self.problem),None,None)]
+        key = (self.view, sol.view_names()[self.view], tuple(self.pins), tuple(self.pin_beams.get(p) for p in self.pins))
+        if self.result_cache is None or self.result_cache[0] != key:
+            self.result_cache = (key, self.build_result_rows(sol))
+        return self.result_cache[1]
+
+    def build_result_rows(self, sol):
         straight = bm.is_straight_beam(self.model)
         rows = [('View', sol.view_names()[self.view][:16], 'ENTER or V: next case or combination', None, ('view',)),
                 ('Reactions', None, '', None, None)]
-        for n, (support, fx, fy, mz) in enumerate(sol.reactions(self.view)):
+        reactions = sol.reactions(self.view)
+        for n, (support, fx, fy, mz) in enumerate(reactions):
             X, Y = bm.point(self.model, support['m'], support['x'])
             detail = support['kind'] + ' at ' + self.where(X, Y)
             flags = bm.SUPPORT_FLAGS[support['kind']]
@@ -824,8 +892,8 @@ class BeamLab:
             line, offset = items.line_of(self.model, support['m'])
             rows.append(('R%d' % (n + 1), value, detail, None, ('goto', line, offset + support['x'])))
         ax, ay = sol.applied(self.view)
-        tx = sum(r[1] for r in sol.reactions(self.view))
-        ty = sum(r[2] for r in sol.reactions(self.view))
+        tx = sum(r[1] for r in reactions)
+        ty = sum(r[2] for r in reactions)
         size = max(1.0, abs(ax), abs(ay))
         ok = abs(tx + ax) <= 1e-4 * size and abs(ty + ay) <= 1e-4 * size
         detail = 'Sum R %s, loads %s' % (units.show(ty, 'kN'), units.show(-ay, 'kN'))
@@ -877,36 +945,23 @@ class BeamLab:
 
     # ------------------------------------------------------------ menus
 
-    def key_options(self, button, esc):
-        if esc:
-            self.page = 'model'
-            return
-        if self.menu(button, len(OPTIONS)):
-            return
-        if button != keys.BUTTON_CENTER:
-            return
-        option = OPTIONS[self.menu_index]
-        if option == 'New beam':
-            self.page, self.menu_index = 'start', 0
-        elif option == 'Load cases':
-            self.page, self.menu_index = 'cases', 0
-        elif option == 'Combinations':
-            self.page, self.menu_index = 'combos', 0
-        elif option == 'Self-weight':
-            self.snapshot()
-            current = self.model.get('selfweight')
-            nxt = 0 if current is None else current + 1
-            self.model['selfweight'] = nxt if nxt < len(self.model['cases']) else None
-            self.resolve()
-        elif option == 'Save':
-            self.ask_save()
-        elif option == 'Open':
-            self.files = cases.list_cases(self.vm.storage)
-            self.page, self.menu_index = 'open', 0
-        elif option in ('Export CSV (Eggcel)', 'Export full CSV'):
-            self.export(compact=option == 'Export CSV (Eggcel)')
-        else:
-            self.open_help()
+    def key_options(self,button,esc):
+        if esc:self.page='model';return
+        if self.menu(button,len(OPTIONS)) or button!=keys.BUTTON_CENTER:return
+        option=OPTIONS[self.menu_index]
+        if option=='New beam':self.page,self.menu_index='start',0
+        elif option=='New blank structure':self.replace_model(bm.empty_model([],[]))
+        elif option=='Merge nodes':self.merge_menu()
+        elif option=='Split at node':self.split_menu()
+        elif option=='Resolve overlaps':self.normalize_menu()
+        elif option in ('Load cases','Combinations'):self.page,self.menu_index=('cases' if option=='Load cases' else 'combos'),0
+        elif option=='Self-weight':
+            self.snapshot();current=self.model.get('selfweight');n=0 if current is None else current+1
+            self.model['selfweight']=n if n<len(self.model['cases']) else None;self.resolve()
+        elif option=='Save':self.ask_save()
+        elif option=='Open':self.files=cases.list_cases(self.vm.storage);self.page,self.menu_index='open',0
+        elif option in ('Export CSV (Eggcel)','Export full CSV'):self.export(compact=option=='Export CSV (Eggcel)')
+        else:self.open_help()
 
     def menu(self, button, count):
         if button in (keys.BUTTON_UP, keys.BUTTON_DOWN) and count:
@@ -914,24 +969,19 @@ class BeamLab:
             return True
         return False
 
-    def key_start(self, button, esc):
-        count = len(bm.TEMPLATES) + 1
+    def key_start(self,button,esc):
+        count=len(bm.TEMPLATES)+3
         if esc:
-            if self.model is None:
-                self.vm.back()
-            else:
-                self.page = 'options'
+            if self.model is None:self.vm.back()
+            else:self.page='options'
             return
-        if self.menu(button, count) or button != keys.BUTTON_CENTER:
-            return
-        if self.menu_index == len(bm.TEMPLATES):
-            self.files = cases.list_cases(self.vm.storage)
-            self.page, self.menu_index = 'open', 0
-            return
-        had = self.model is not None
-        self.replace_model(bm.template(self.menu_index))
-        if had:
-            self.say('New beam: Z brings the last one back')
+        if self.menu(button,count) or button!=keys.BUTTON_CENTER:return
+        if self.menu_index==len(bm.TEMPLATES)+2:
+            self.files=cases.list_cases(self.vm.storage);self.page='open';self.menu_index=0
+        else:
+            m=bm.template(self.menu_index) if self.menu_index<len(bm.TEMPLATES) else st.bridge() if self.menu_index==len(bm.TEMPLATES) else bm.empty_model([],[])
+            self.replace_model(m)
+            self.say('Geometry only / F6 evaluates')
 
     def key_open(self, button, esc):
         if esc:
@@ -944,8 +994,7 @@ class BeamLab:
         loaded = bm.upgrade(cases.load_case(self.vm.storage, name, 'beams'))
         loaded['name'] = name
         loaded.setdefault('selfweight', None)
-        bm.check(loaded)
-        self.replace_model(loaded)
+        self.replace_model(loaded)  # resolve() completes node metadata
         self.say('Opened ' + name)
 
     def key_cases(self, button, esc):
@@ -1046,7 +1095,7 @@ class BeamLab:
                 edit.key(self.vm, button)
 
             def apply(value, combo=self.combo, i=i):
-                factor = parse_number(value)
+                factor = beam_number(value)
                 self.snapshot()
                 combo['factors'][i] = factor
                 self.resolve()
@@ -1089,7 +1138,7 @@ class BeamLab:
 
     def export(self, compact=True):
         if self.solution is None:
-            raise ValueError('Fix the model before exporting')
+            raise ValueError('Press F6 Evaluate before exporting')
         sol = self.solution
 
         def rows():
@@ -1141,6 +1190,9 @@ class BeamLab:
         if self.popup is not None:
             title,options,index,apply=self.popup
             render.popup(draw,p,title,options,index,box)
+        if self.choice_edit is not None:
+            q=self.choice_edit
+            render.popup(draw,p,q['field'].upper()+' / [ ] preview',q['options'],q['index'],box)
         if self.prompt is not None:self.draw_prompt(draw,p)
         draw.swap()
 
@@ -1151,37 +1203,29 @@ class BeamLab:
                       bool(q['message']),box)
 
     def menu_rows(self):
-        if self.page == 'start':
-            rows = [(name, detail) for name, detail in bm.TEMPLATES] + [('Open saved beam', 'From ' + cases.CASE_DIRECTORY)]
-            return rows, 'Beam / new'
-        if self.page == 'options':
-            weight = self.model.get('selfweight')
-            details = ('Start again from a template', ', '.join(self.model['cases']),
-                       '%d combination(s)' % len(self.model['combos']),
-                       'Off  (ENTER: add it to a load case)' if weight is None else
-                       'In ' + self.model['cases'][weight] + '  (ENTER: next case or off)',
-                       'Write this model to the SD card', 'Replace this model with a saved one',
-                       'Diagram values of the current view', 'Signs, units and keys')
-            return list(zip(OPTIONS, details)), 'Beam / options'
-        if self.page == 'cases':
-            rows = []
-            for i, name in enumerate(self.model['cases']):
-                used = sum(1 for load in self.model['loads'] if load['case'] == i)
-                rows.append((name, '%d load(s)  ENTER renames  F2 removes' % used))
-            rows.append(('+ Add load case', 'Up to %d cases' % bm.MAX_CASES))
-            return rows, 'Beam / load cases'
-        if self.page == 'combos':
-            rows = [(c['name'], items.combo_text(self.model, c)) for c in self.model['combos']]
-            rows.append(('+ Add combination', 'Factored sum of load cases'))
-            return rows, 'Beam / combinations'
-        rows = [(name, 'ENTER opens; this model stays in undo') for name in self.files]
-        return rows or [('No saved models', 'Save one from Options first')], 'Beam / open'
+        if self.page=='start':
+            return [(n,d) for n,d in bm.TEMPLATES]+[('Triangular bridge','Six pinned nodes / nine members'),('Blank structure','Define nodes, then connect members'),('Open saved beam','Saved models on SD')],'Beam / new'
+        if self.page=='options':
+            details={'New beam':'Templates / bridge / blank / Open','New blank structure':'Keep current setup in undo',
+                     'Merge nodes':'Reconnect members to a chosen destination node','Split at node':'Connect an existing node inside a member',
+                     'Resolve overlaps':'Preview one member per interval; reject conflicts',
+                     'Load cases':', '.join(self.model['cases']),'Combinations':'Factored sums of load cases',
+                     'Self-weight':'Off' if self.model.get('selfweight') is None else self.model['cases'][self.model['selfweight']],
+                     'Save':'Write setup to SD; solving is optional','Open':'Load geometry without evaluating',
+                     'Export CSV (Eggcel)':'Evaluated results / <=511 cells','Export full CSV':'Every evaluated diagram sample',
+                     'Conventions and keys':'F9 help'}
+            return [(name,details.get(name,'')) for name in OPTIONS],'Beam / options'
+        if self.page=='cases':
+            return [(n,'%d loads / ENTER rename / F2 remove'%sum(l['case']==i for l in self.model['loads'])) for i,n in enumerate(self.model['cases'])]+[('+ Add load case','Up to %d'%bm.MAX_CASES)],'Beam / load cases'
+        if self.page=='combos':return [(c['name'],items.combo_text(self.model,c)) for c in self.model['combos']]+[('+ Add combination','Factored sum')],'Beam / combinations'
+        return [(n,'ENTER opens without evaluating') for n in self.files] or [('No saved models','F3 Save creates one')],'Beam / open'
 
     def summary(self):
         """Two short lines about the current view, or the problem."""
         if self.problem is not None:
             return render.wrap(str(self.problem), 52), True
         sol = self.solution
+        if sol is None:return ['Not evaluated / F6 Evaluate'],False
         name = sol.view_names()[self.view][:18]
         if bm.is_straight_beam(self.model):
             ext = self.extremes(0)
@@ -1197,30 +1241,66 @@ class BeamLab:
         return ['%s: |M| %s' % (name[:18],units.show(peak['M'],'kNm',3)),
                 '|N| %s   |w| %s' % (units.show(peak['N'],'kN',3),units.show(peak['W'],'mm',3))],False
 
+    def picture(self,key,build):
+        """The deflected preview or the whole-frame overview for key, built
+        once rather than on every key press. One is kept, while the solution
+        stands; drop_solution() clears it."""
+        if self.shape is None or self.shape[0]!=key:
+            self.shape=None  # release the previous picture first
+            self.shape=(key,build())
+        return self.shape[1]
+
     def draw_model(self,draw,p):
-        frame=render.layout(self.model);runs=bm.lines(self.model)
-        here=items.cursor_point(self.model,self.line,self.s,runs)
         x,y,w,h=render.MODEL_PREVIEW
-        title='BEAM PREVIEW' if bm.is_straight_beam(self.model) else 'FRAME PREVIEW'
-        render.panel(draw,p,render.MODEL_PREVIEW,title,self.cursor_label()+'  %dx'%ZOOMS[self.zoom],p.PANEL)
-        preview=render.Viewport(draw,(x+5,y+17,x+w-5,frame['bottom']))
+        here=self.cursor_position();member=self.cursor_member();runs=bm.lines(self.model)
+        evaluated=self.solution is not None
+        render.panel(draw,p,render.MODEL_PREVIEW,'FRAME PREVIEW',self.cursor_label()+' / '+('evaluated' if evaluated else 'geometry'),p.PANEL)
+        preview=render.Viewport(draw,(x+5,y+17,x+w-5,y+h-15))
         pp=theme.colors(p.PANEL,p.TEXT,p.ACCENT)
-        view=render.View(self.model,frame['box'],ZOOMS[self.zoom],here)
-        shape=render.deflected(self.model,self.solution,view,self.view) if self.solution is not None else None
+        view=render.View(self.model,render.MODEL_BOX,ZOOMS[self.zoom],here)
+        shape=self.picture(('deflected',self.view,view.scale,view.ox,view.oy),
+                           lambda:render.deflected(self.model,self.solution,view,self.view)) if evaluated else None
+        run=runs[self.line] if runs else []
         render.sketch(preview,pp,self.model,view,self.sel[0] if self.sel else None,(here,self.s),
-                      self.problem,shape,runs[self.line],frame['bottom'],self.cursor_member(runs))
-        lines,bad=self.summary()
-        if self.info or bad:
-            render.summary_box(draw,p,lines,bad,render.MODEL_PREVIEW)
-        else:
-            render.right_text(draw,x+w-8,y+h-12,'I results',p.MUTED)
+                      self.problem,shape,run,y+h-16,member)
+        # Real node and member IDs make closing triangles and selecting ends
+        # visible. Crossing lines without a node get no connection marker.
+        # Once there are several sections, each member ID names its section.
+        highlighted=set(self.preview_nodes)
+        if self.node_cursor is not None:highlighted.add(self.node_cursor)
+        if self.node_pick is not None and self.popup is not None:highlighted.add(self.node_pick[self.popup[2]])
+        for i,point in enumerate(self.model['joints']):
+            px,py=view.p(*point);color=p.ACCENT if i in highlighted else p.TEXT
+            if self.model['joint_types'][i]=='pin':
+                preview._fill_circle(px,py,3,pp.BG);preview._circle(px,py,3,color)
+            else:preview._fill_rectangle(px-2,py-2,5,5,color)
+            render.text(preview,px+5,py-10,'J%d'%(i+1),color)
+        sections=self.model['sections'] if len(self.model['sections'])>1 else None
+        for i,edge in enumerate(self.model['members']):
+            a,b=view.p(*self.model['joints'][edge['a']]),view.p(*self.model['joints'][edge['b']])
+            label='L%d'%(i+1)+(' '+sections[edge['section']]['name'] if sections else '')
+            render.text(preview,(a[0]+b[0])//2+3,(a[1]+b[1])//2+5,label,p.ACCENT if member==i else p.MUTED)
+        if self.sel and self.sel[0][0] in ('support','load'):
+            obj=self.sel[0][1];m=obj.get('m',-1);node=obj.get('node')
+            if node is not None and m in st.attached(self.model,node):
+                ux,uy,length=st.axis(self.model,m,node);px,py=view.p(*self.model['joints'][node])
+                render.clip(preview,px,py,px+ux*20,py-uy*20,p.ACCENT,64,y+h-16)
+                render.head(preview,px+ux*20,py-uy*20,ux,-uy,p.ACCENT,3)
+        if self.problem is not None and getattr(self.problem,'pair',None):
+            for i in self.problem.pair:
+                edge=self.model['members'][i]
+                render.thick(preview,view.p(*self.model['joints'][edge['a']]),view.p(*self.model['joints'][edge['b']]),p.ERROR,64,y+h-16)
+        if self.problem is not None:
+            render.summary_box(draw,p,render.wrap(str(self.problem),47),True,render.MODEL_PREVIEW)
+        elif self.info and evaluated:
+            lines,bad=self.summary();render.summary_box(draw,p,lines,bad,render.MODEL_PREVIEW)
+        else:render.right_text(draw,x+w-8,y+h-12,'I displacement results' if evaluated else 'F6 Evaluate / no response computed',p.MUTED)
         rect=self.properties_rect();rows=self.rows();index=self.row_index(rows)
-        render.model_tabs(draw,p,rect,MODEL_TABS,self.model_tab,[len(self.model['members']),len(self.model['supports']),len(self.model['loads'])])
-        if rows:
-            render.form(draw,p,[r[:4] for r in rows],index,self.edit,frame['list'],rect[1]+rect[3]-5)
+        render.model_tabs(draw,p,rect,MODEL_TABS,self.model_tab,[len(self.model['joints']),len(self.model['members']),len(self.model['supports']),len(self.model['loads'])],font=render.XS,height=render.MODEL_TAB_HEIGHT)
+        if rows:render.form(draw,p,[r[:4] for r in rows],index,self.edit,rect[1]+render.MODEL_TAB_HEIGHT+4,rect[1]+rect[3]-5,font=render.XS,row_height=render.MODEL_ROW_HEIGHT)
         else:
-            render.text(draw,rect[0]+10,rect[1]+30,'No '+MODEL_TABS[self.model_tab].lower()+' yet',p.MUTED)
-            render.text(draw,rect[0]+10,rect[1]+44,'F1 adds an item; arrows change tabs',p.MUTED)
+            render.text(draw,rect[0]+10,rect[1]+render.MODEL_TAB_HEIGHT+8,'No '+MODEL_TABS[self.model_tab].lower()+' yet',p.MUTED)
+            render.text(draw,rect[0]+10,rect[1]+render.MODEL_TAB_HEIGHT+22,'F1 adds / LEFT-RIGHT changes tab',p.MUTED)
         return 'Beam / model'
 
     def draw_section(self,draw,p):
@@ -1244,9 +1324,9 @@ class BeamLab:
     def draw_diagrams(self, draw, p):
         subtitle = 'Beam / diagrams'
         if self.solution is None:
-            for i, line in enumerate(render.wrap(str(self.problem), 48)):
+            for i, line in enumerate(render.wrap(str(self.problem) if self.problem is not None else 'Not evaluated / press F6 Evaluate', 48)):
                 render.text(draw, 10, 70 + 11 * i, line, p.ERROR)
-            render.text(draw, 10, 110, 'ESC opens the model to fix it.', p.MUTED)
+            render.text(draw, 10, 110, 'F6 evaluates / ESC opens the model.', p.MUTED)
             return subtitle
         sol = self.solution
         straight = bm.is_straight_beam(self.model)
@@ -1268,8 +1348,11 @@ class BeamLab:
         title = self.plot_title()
         if self.whole:
             render.diagram_header(draw,p,title,sol.view_names()[self.view],readout)
-            render.overview(draw, p, self.model, sol, self.view, render.OVERVIEW[self.quantity],
-                            bm.point(self.model, self.dmember, self.ds-start), self.dline, (40, 96, 280, 262),self.dmember)
+            quantity=render.OVERVIEW[self.quantity]
+            shapes=self.picture(('overview',self.view,quantity),
+                                lambda:render.overview_shapes(self.model,sol,self.view,quantity,render.OVERVIEW_BOX))
+            render.overview(draw, p, self.model, sol, quantity, shapes,
+                            bm.point(self.model, self.dmember, self.ds-start), self.dline, render.OVERVIEW_BOX, self.dmember)
             return subtitle
         panels = ('V', 'M', self.third)
         if self.cache is None:

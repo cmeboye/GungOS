@@ -125,7 +125,7 @@ def _case_job(vm, case, measure):
                     if kept is not None: session.kept['beam'] = kept
                 tool.model = model
                 yield 'solve + diagram preparation'
-                start=ticks_us(); tool.resolve()
+                start=ticks_us(); tool.evaluate()
                 times.append(ticks_diff(ticks_us(),start))
                 if tool.problem is not None:
                     if 'memory' in str(tool.problem).lower(): raise MemoryError(str(tool.problem))
