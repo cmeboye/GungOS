@@ -63,14 +63,21 @@ def matrix(f):
             (sz*cy,sz*sy*sx+cz*cx,sz*sy*cx-cz*sx),(-sy,cy*sx,cy*cx))
 
 
+def axes(f):
+    """Local unit axes (matrix columns). Build caches them as _cad_axes."""
+    cached=f.get('_cad_axes')
+    if cached is not None:return cached
+    m=matrix(f);return tuple(tuple(m[j][i] for j in range(3)) for i in range(3))
+
+
 def world(f,point):
-    m=matrix(f)
-    return tuple(sum(m[j][i]*point[i] for i in range(3))+f[k] for j,k in enumerate(('x','y','z')))
+    u,v,w=axes(f);x,y,z=point
+    return (u[0]*x+v[0]*y+w[0]*z+f['x'],u[1]*x+v[1]*y+w[1]*z+f['y'],u[2]*x+v[2]*y+w[2]*z+f['z'])
 
 
 def local(f,point):
-    m=matrix(f);q=tuple(point[i]-f[k] for i,k in enumerate(('x','y','z')))
-    return tuple(sum(m[j][i]*q[j] for j in range(3)) for i in range(3))
+    u,v,w=axes(f);x,y,z=point[0]-f['x'],point[1]-f['y'],point[2]-f['z']
+    return (u[0]*x+u[1]*y+u[2]*z,v[0]*x+v[1]*y+v[2]*z,w[0]*x+w[1]*y+w[2]*z)
 
 
 def half_size(f):
@@ -81,21 +88,22 @@ def half_size(f):
 
 def bounds(model):
     # Cutters/intersections cannot enlarge the body. Use the Add primitives'
-    # conservative rotated boxes, plus a small camera-framing margin.
-    points=[]
+    # conservative rotated boxes, plus a small camera-framing margin. A rotated
+    # box's world half-extent along axis j is sum(|M[j][i]|*half[i]).
+    low=[1e30]*3;high=[-1e30]*3
     for f in model['features']:
         if f['op']!='Add':continue
-        hx,hy,hz=half_size(f)
-        if f['shape']=='Sphere':
-            points.extend((f['x']+x,f['y']+y,f['z']+z) for x in (-hx,hx) for y in (-hy,hy) for z in (-hz,hz))
-        else:points.extend(world(f,(x,y,z)) for x in (-hx,hx) for y in (-hy,hy) for z in (-hz,hz))
-    if not points:return (-1,1,-1,1,-1,1)
+        half=half_size(f)
+        if f['shape']=='Sphere':extent=half
+        else:m=matrix(f);extent=[abs(m[j][0])*half[0]+abs(m[j][1])*half[1]+abs(m[j][2])*half[2] for j in range(3)]
+        for j,k in enumerate(('x','y','z')):
+            low[j]=min(low[j],f[k]-extent[j]);high[j]=max(high[j],f[k]+extent[j])
+    if low[0]>high[0]:return (-1,1,-1,1,-1,1)
     result=[]
-    extent=max(max(p[i] for p in points)-min(p[i] for p in points) for i in range(3))
+    extent=max(high[i]-low[i] for i in range(3))
     for i in range(3):
-        lo,hi=min(p[i] for p in points),max(p[i] for p in points)
-        pad=max((hi-lo)*.08,extent*.02)
-        result.extend((lo-pad,hi+pad))
+        pad=max((high[i]-low[i])*.08,extent*.02)
+        result.extend((low[i]-pad,high[i]+pad))
     return tuple(result)
 
 

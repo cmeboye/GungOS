@@ -16,7 +16,7 @@ class Camera:
         self.mode='Orbit';self.projection='Perspective'
 
     def setup(self,box,rect):
-        self.box,self.rect=box,rect
+        self.rect=rect
         self.center=tuple((box[2*i]+box[2*i+1])/2 for i in range(3))
         self.scale=max((box[2*i+1]-box[2*i])/2 for i in range(3))
         self.cy,self.sy,self.cp,self.sp=cos(self.yaw),sin(self.yaw),cos(self.pitch),sin(self.pitch)
@@ -31,9 +31,20 @@ class Camera:
         if distance<.4:return None
         return xx/distance,-yy/distance
 
+    def view(self,p):
+        """Camera-space (screen x, screen y, depth); linear, so curve axes rotate once."""
+        x,y,z=p;depth=x*self.sy+y*self.cy
+        return x*self.cy-y*self.sy,z*self.cp-depth*self.sp,z*self.sp+depth*self.cp
+
+    def flat(self,xx,yy,zz):
+        if self.projection=='Isometric':return xx/self.cam,-yy/self.cam
+        distance=self.cam-zz
+        if distance<.4:return None
+        return xx/distance,-yy/distance
+
     def project(self,p):
-        q=tuple((p[i]-self.center[i])/self.scale for i in range(3))
-        ratio=self.ratio(q)
+        c=self.center;s=self.scale
+        ratio=self.ratio(((p[0]-c[0])/s,(p[1]-c[1])/s,(p[2]-c[2])/s))
         if ratio is None:return None
         return self.cx+ratio[0]*self.focal*self.zoom,self.cy_screen+ratio[1]*self.focal*self.zoom
 
@@ -56,44 +67,46 @@ class Camera:
                        (rect[3]-24)/2/max(.01,max(abs(p[1]) for p in projected if p)))
 
 
-def segments(feature,steps=16):
+def outline(feature,steps=16):
+    """Local guide vertices and the index pairs joining them."""
     shape=feature['shape'];a,b,c=feature['a'],feature['b'],feature['c']
     if shape=='Box':
-        vertices=[(x*a/2,y*b/2,z*c/2) for z in (-1,1) for y in (-1,1) for x in (-1,1)]
-        for i in range(8):
-            for bit in (1,2,4):
-                if not i&bit:yield vertices[i],vertices[i|bit]
-        return
+        points=[(x*a/2,y*b/2,z*c/2) for z in (-1,1) for y in (-1,1) for x in (-1,1)]
+        return points,[(i,i|bit) for i in range(8) for bit in (1,2,4) if not i&bit]
+    ring=[(a*cos(2*pi*i/steps),a*sin(2*pi*i/steps)) for i in range(steps)]
+    loop=[(i,(i+1)%steps) for i in range(steps)]
     if shape=='Sphere':
+        points=[]
         for axis in range(3):
-            for i in range(steps):
-                p=[0.0]*3;q=[0.0]*3
-                p[(axis+1)%3],p[(axis+2)%3]=a*cos(2*pi*i/steps),a*sin(2*pi*i/steps)
-                q[(axis+1)%3],q[(axis+2)%3]=a*cos(2*pi*(i+1)/steps),a*sin(2*pi*(i+1)/steps)
-                yield p,q
-        return
-    for i in range(steps):
-        x,y=a*cos(2*pi*i/steps),a*sin(2*pi*i/steps)
-        xx,yy=a*cos(2*pi*(i+1)/steps),a*sin(2*pi*(i+1)/steps)
-        yield (x,y,-c/2),(xx,yy,-c/2)
-        if shape=='Cylinder':yield (x,y,c/2),(xx,yy,c/2)
-        if i%(steps//4)==0:yield (x,y,-c/2),((x,y,c/2) if shape=='Cylinder' else (0,0,c/2))
+            for x,y in ring:
+                p=[0.0]*3;p[(axis+1)%3],p[(axis+2)%3]=x,y;points.append(p)
+        return points,[(i+n*steps,j+n*steps) for n in range(3) for i,j in loop]
+    points=[(x,y,-c/2) for x,y in ring];edges=loop
+    if shape=='Cylinder':
+        points.extend((x,y,c/2) for x,y in ring)
+        edges+=[(i+steps,j+steps) for i,j in loop]+[(i,i+steps) for i in range(0,steps,steps//4)]
+    else:
+        points.append((0.0,0.0,c/2));edges+=[(i,steps) for i in range(0,steps,steps//4)]
+    return points,edges
 
 
 def primitive(draw,camera,feature,color,dashed=False):
-    m=dm.matrix(feature);position=tuple(feature[k] for k in ('x','y','z'))
-    for a,b in segments(feature):
-        if feature['shape']=='Sphere':
-            world_a=tuple(a[i]+position[i] for i in range(3));world_b=tuple(b[i]+position[i] for i in range(3))
-        else:
-            world_a=tuple(sum(m[i][j]*a[j] for j in range(3))+position[i] for i in range(3))
-            world_b=tuple(sum(m[i][j]*b[j] for j in range(3))+position[i] for i in range(3))
-        p,q=camera.project(world_a),camera.project(world_b)
+    points,edges=outline(feature)
+    px,py,pz=feature['x'],feature['y'],feature['z']
+    # Spheres are rotation invariant; each shared vertex is projected once.
+    if feature['shape']=='Sphere':screen=[camera.project((x+px,y+py,z+pz)) for x,y,z in points]
+    else:
+        (a,b,c),(d,e,f),(g,h,i)=dm.matrix(feature)
+        screen=[camera.project((a*x+b*y+c*z+px,d*x+e*y+f*z+py,g*x+h*y+i*z+pz)) for x,y,z in points]
+    for i,j in edges:
+        p,q=screen[i],screen[j]
         if p is None or q is None:continue
         if dashed:
-            for i in range(0,12,2):
-                draw._line(p[0]+(q[0]-p[0])*i/12,p[1]+(q[1]-p[1])*i/12,
-                           p[0]+(q[0]-p[0])*(i+1)/12,p[1]+(q[1]-p[1])*(i+1)/12,color)
+            # About one dash per 8px, at most six: short edges skip sub-pixel dashes.
+            dx,dy=q[0]-p[0],q[1]-p[1];count=min(6,max(1,int(abs(dx)+abs(dy))//8))
+            for n in range(count):
+                s,t=n/count,(n+.5)/count
+                draw._line(p[0]+dx*s,p[1]+dy*s,p[0]+dx*t,p[1]+dy*t,color)
         else:draw._line(p[0],p[1],q[0],q[1],color)
 
 

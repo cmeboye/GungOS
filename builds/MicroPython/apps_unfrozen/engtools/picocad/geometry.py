@@ -48,23 +48,31 @@ class Boundaries:
                         for z in (-r,r):yield add(c,(x,y,z))
             elif kind==2:yield add(c,mul(tuple(self.surfaces[i+10:i+13]),self.surfaces[i+14]/2))
 
-    def _arc(self,camera,curve,start,end,p,q,depth):
-        middle=(start+end)/2;m=camera.ratio(curve_point(curve,middle))
-        if p is None or q is None or m is None:split=True
-        else:
-            dx=(m[0]-(p[0]+q[0])/2)*camera.focal*camera.zoom
-            dy=(m[1]-(p[1]+q[1])/2)*camera.focal*camera.zoom
-            split=dx*dx+dy*dy>self.tolerance*self.tolerance
-        if split and depth<5:
-            for pair in self._arc(camera,curve,start,middle,p,m,depth+1):yield pair
-            for pair in self._arc(camera,curve,middle,end,m,q,depth+1):yield pair
-        elif p is not None and q is not None:yield p,q
-
     def _curve(self,camera,curve,start=0.0,end=2*pi):
-        span=end-start;origin=start;count=max(1,int(span/(pi/4)+.99999));p=camera.ratio(curve_point(curve,start))
+        # Rotate centre and scaled axes into camera space once: samples are
+        # then linear combinations needing only the perspective divide.
+        r=curve[9];flat=camera.flat
+        cx,cy,cz=camera.view(curve[0:3]);ux,uy,uz=camera.view(curve[3:6]);vx,vy,vz=camera.view(curve[6:9])
+        ux,uy,uz,vx,vy,vz=ux*r,uy*r,uz*r,vx*r,vy*r,vz*r
+        scale=camera.focal*camera.zoom;limit=self.tolerance*self.tolerance/(scale*scale)
+        span=end-start;origin=start;count=max(1,int(span/(pi/4)+.99999))
+        co,si=cos(start),sin(start);p=flat(cx+ux*co+vx*si,cy+uy*co+vy*si,cz+uz*co+vz*si)
         for n in range(1,count+1):
-            end=origin+span*n/count;q=camera.ratio(curve_point(curve,end))
-            for pair in self._arc(camera,curve,start,end,p,q,0):yield pair
+            end=origin+span*n/count;co,si=cos(end),sin(end)
+            q=flat(cx+ux*co+vx*si,cy+uy*co+vy*si,cz+uz*co+vz*si)
+            # Midpoint subdivision until the projected chord error is within
+            # tolerance pixels; the stack keeps output order left to right.
+            stack=[(start,end,p,q,0)]
+            while stack:
+                lo,hi,a,b,depth=stack.pop()
+                middle=(lo+hi)/2;co,si=cos(middle),sin(middle)
+                m=flat(cx+ux*co+vx*si,cy+uy*co+vy*si,cz+uz*co+vz*si)
+                if a is None or b is None or m is None:split=True
+                else:
+                    dx=m[0]-(a[0]+b[0])/2;dy=m[1]-(a[1]+b[1])/2
+                    split=dx*dx+dy*dy>limit
+                if split and depth<5:stack.append((middle,hi,m,b,depth+1));stack.append((lo,middle,a,m,depth+1))
+                elif a is not None and b is not None:yield a,b
             start,p=end,q
 
     def _surface(self,camera,s,windows=None):
@@ -106,7 +114,7 @@ class Boundaries:
 
     def projected(self,camera):
         for i in range(0,len(self.lines),6):
-            p=camera.ratio(tuple(self.lines[i:i+3]));q=camera.ratio(tuple(self.lines[i+3:i+6]))
+            p=camera.ratio(self.lines[i:i+3]);q=camera.ratio(self.lines[i+3:i+6])
             if p is not None and q is not None:yield p,q
         for i in range(0,len(self.circles),10):
             for pair in self._curve(camera,self.circles[i:i+10]):yield pair
@@ -165,7 +173,7 @@ class Build:
         try:
             for step in self._job():yield step
         except Issue:raise
-        except (ValueError,ZeroDivisionError,OverflowError) as exc:
+        except (ValueError,ZeroDivisionError,OverflowError):
             raise Issue('calculation','Boundary calculation failed')
 
     def _job(self):

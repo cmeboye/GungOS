@@ -14,11 +14,8 @@ def sub(a,b):return tuple(a[i]-b[i] for i in range(3))
 def add(a,b):return tuple(a[i]+b[i] for i in range(3))
 def mul(a,s):return tuple(x*s for x in a)
 def cross(a,b):return (a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])
-def position(f):return tuple(f[k] for k in ('x','y','z'))
-def axes(f):
-    cached=f.get('_cad_axes')
-    if cached is not None:return cached
-    m=dm.matrix(f);return tuple(tuple(m[j][i] for j in range(3)) for i in range(3))
+def position(f):return (f['x'],f['y'],f['z'])
+axes=dm.axes
 
 
 def support(f,n):
@@ -30,11 +27,6 @@ def support(f,n):
     radial=f['a']*sqrt(x*x+y*y)
     if shape=='Cylinder':return radial+abs(z)*f['c']/2
     return max(radial-z*f['c']/2,z*f['c']/2)
-
-
-def interval(f,n):
-    centre=dot(position(f),n)
-    return centre-support(f,mul(n,-1)),centre+support(f,n)
 
 
 def same(a,b):

@@ -65,7 +65,7 @@ HELP=(
     'Esc cancels Build; no partial result replaces',
     'the last successful result.',
     'Limits and files:',
-    'Eight construction steps; one part.',
+    'Eight construction steps.',
     'Q or Options > Curve Quality sets detail.',
     'Box / cylinder / cone / sphere render',
     'directly at any position and rotation.',
@@ -106,12 +106,12 @@ class CAD:
         self.selected=min(kept.get('selected',0),max(0,len(self.model['features'])-1))
         self.tab=0;self.row=0;self.focus='editor';self.camera=dd.Camera()
         self.built_model=self.geometry=None;self.show_built=False
-        self.builder=self.job=None;self.progress=None;self.build_us=0;self.result_kind=None
+        self.builder=self.job=None;self.progress=None;self.result_kind=None
         self.popup=None;self.menu_index=0;self.menu_kind='';self.prompt_kind=None
         self.edit=None;self.edit_key=None;self.replace=True
         self.help_open=False;self.help_first=0;self.message='F4 Build / Tab camera';self.error=False
         self.undo=[];self.pending=None;self.discard=False;self.redraw=True
-        self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
+        self.sync()
         if self.model['features']:self.build()
 
     def tell(self,message,error=False):self.message,self.error,self.redraw=str(message),error,True
@@ -120,6 +120,14 @@ class CAD:
         self.result_kind=getattr(exc,'kind','limit' if isinstance(exc,MemoryError) else 'input')
         self.tell('Memory limit; model retained' if isinstance(exc,MemoryError) else exc,True)
 
+    def refit(self):self.camera.fit(self.box,CANVAS,self.geometry if self.show_built else None)
+
+    def sync(self):
+        """Derived state after the model changes: bounds, cached-build match, camera."""
+        self.box=dm.bounds(self.model);self.row=0;self.show_built=self.built_model==self.model
+        self.result_kind=self.geometry.status if self.show_built and self.geometry is not None else None
+        self.refit()
+
     def transact(self,candidate,selected=None):
         dm.validate(candidate)
         self.undo.append((dm.clone(self.model),self.dirty,self.selected))
@@ -127,17 +135,13 @@ class CAD:
         self.model=candidate;self.dirty=True
         if selected is not None:self.selected=selected
         self.selected=max(0,min(self.selected,len(self.model['features'])-1))
-        self.row=0;self.show_built=self.built_model==self.model
-        self.result_kind=self.geometry.status if self.show_built and self.geometry is not None else None
-        self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
+        self.sync()
         self.tell('Changed; F4 rebuild' if not self.show_built else 'Previous build restored')
 
     def undo_edit(self):
         if not self.undo:self.tell('Nothing to undo');return
         self.model,self.dirty,self.selected=self.undo.pop()
-        self.row=0;self.show_built=self.built_model==self.model
-        self.result_kind=self.geometry.status if self.show_built and self.geometry is not None else None
-        self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None);self.tell('Undo')
+        self.sync();self.tell('Undo')
 
     def properties(self):
         if not self.model['features']:return []
@@ -154,7 +158,6 @@ class CAD:
 
     def change(self,key,value):
         candidate=dm.clone(self.model);candidate['features'][self.selected][key]=value
-        dm.validate(candidate)
         self.transact(candidate)
 
     def build(self):
@@ -163,7 +166,7 @@ class CAD:
         # Keep the last successful boundaries until a complete result is ready.
         try:
             self.builder=Build(self.model);self.job=self.builder.job();self.progress=('Preparing',0,1)
-            self.build_us=0;self.result_kind='building';self.tell('Building / Esc cancel')
+            self.result_kind='building';self.tell('Building / Esc cancel')
         except (ValueError,MemoryError) as exc:self.builder=None;self.fail(exc)
 
     def cancel_build(self):
@@ -173,19 +176,31 @@ class CAD:
         self.builder=None;self.progress=None
         self.result_kind='cancelled';self.tell('Build cancelled; model retained')
 
+    def progress_text(self):
+        name,done,total=self.progress
+        return '%s %d%% / Esc cancels'%(name,min(100,done*100//max(1,total)))
+
+    def draw_progress(self,d,p):
+        d._fill_rectangle(18,180,284,15,p.PANEL);lab.text(d,22,184,self.progress_text(),p.ACCENT)
+
     def pump(self):
         if self.job is None:return
-        started=ticks_us()
+        started=ticks_us();shown=self.progress_text()
         try:
             for _ in range(64):
                 next(self.job)
                 if ticks_diff(ticks_us(),started)>=8000:break
-            self.progress=self.builder.progress;self.redraw=True
+            # Repaint only the progress strip, and only when its text changes:
+            # a full frame per slice would cost more than the build itself.
+            self.progress=self.builder.progress
+            if not self.redraw and self.progress_text()!=shown:
+                d=self.vm.draw;self.draw_progress(d,theme.system_palette(self.vm));d.swap()
         except StopIteration:
-            self.geometry=self.builder.geometry
-            self.built_model=dm.clone(self.model);self.show_built=True
+            # The builder's own clone is exactly what was built.
+            self.geometry=self.builder.geometry;self.built_model=self.builder.model
+            self.show_built=self.built_model==self.model
             self.builder=None;self.job=None;self.progress=None
-            self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
+            self.refit()
             self.result_kind=self.geometry.status
             label={'success':'Built','multiple':'Multiple bodies','no_change':'No change','empty':'Empty result'}[self.result_kind]
             count=self.geometry.body_count
@@ -194,10 +209,11 @@ class CAD:
             self.job=None
             if self.builder is not None:self.builder.release()
             self.builder=None;self.progress=None;self.fail(exc)
-        self.build_us+=ticks_diff(ticks_us(),started)
 
     def menu(self,kind,options):
         self.menu_kind=kind;self.popup=tuple(options);self.menu_index=0;self.redraw=True
+
+    def quality_menu(self):self.menu('quality',tuple('Curve %.2gpx'%(4.0/n) for n in dm.QUALITIES))
 
     def guard(self,action):
         if self.dirty:
@@ -234,24 +250,24 @@ class CAD:
             self.transact(candidate);self.tell('Curve target %.2gpx / F4 applies'%(4.0/candidate['resolution']))
         elif kind=='view':
             if value in ('Isometric','Reset camera'):
-                self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH;self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
-            elif value=='Front':self.camera.yaw,self.camera.pitch=0.0,0.0;self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
-            elif value=='Top':self.camera.yaw,self.camera.pitch=0.0,1.570796;self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
-            elif value=='Right':self.camera.yaw,self.camera.pitch=1.570796,0.0;self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
-            elif value=='Fit':self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
+                self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH
+            elif value=='Front':self.camera.yaw,self.camera.pitch=0.0,0.0
+            elif value=='Top':self.camera.yaw,self.camera.pitch=0.0,1.570796
+            elif value=='Right':self.camera.yaw,self.camera.pitch=1.570796,0.0
+            self.refit()
             if self.job is None:self.tell(value)
         elif kind=='options':
             if value=='Save':self.save()
             elif value=='Save as':self.save(True)
             elif value=='Open':self.guard('open')
             elif value=='New':self.guard('blank')
-            elif value=='Curve Quality':self.menu('quality',tuple('Curve %.2gpx'%(4.0/n) for n in dm.QUALITIES))
+            elif value=='Curve Quality':self.quality_menu()
             elif value=='Projection':
                 self.menu('projection',dd.PROJECTIONS);self.menu_index=dd.PROJECTIONS.index(self.camera.projection)
         elif kind=='projection':
             self.camera.projection=value
             if value=='Isometric':self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH
-            self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None)
+            self.refit()
             self.tell('Projection: '+value)
         elif kind=='open':
             replacement=dm.load(self.vm.storage,value)
@@ -320,11 +336,13 @@ class CAD:
         if button==k.BUTTON_TAB:
             self.focus='preview' if self.focus=='editor' else 'editor';return
         if button==k.BUTTON_Z:self.undo_edit();return
-        if button in (k.BUTTON_PLUS,k.BUTTON_EQUAL,k.BUTTON_MINUS):
+        # On a numeric property row '-' starts a negative value instead of zooming.
+        numeric=self.focus=='editor' and self.tab and self.model['features'] and self.row>0
+        if button in (k.BUTTON_PLUS,k.BUTTON_EQUAL,k.BUTTON_MINUS) and not (numeric and button==k.BUTTON_MINUS):
             self.camera.zoom=max(.2,min(8.0,self.camera.zoom*(1/1.15 if button==k.BUTTON_MINUS else 1.15)));return
-        if button==k.BUTTON_F:self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None);return
+        if button==k.BUTTON_F:self.refit();return
         if button==k.BUTTON_R:
-            self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH;self.camera.fit(dm.bounds(self.model),CANVAS,self.geometry if self.show_built else None);return
+            self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH;self.refit();return
         char=self.vm.input_manager.button_to_char(button)
         if char in ('[',']'):self.select_feature(-1 if char=='[' else 1);return
         if self.focus=='preview':
@@ -340,8 +358,7 @@ class CAD:
         if button==k.BUTTON_ESCAPE:
             if self.tab:self.tab=0;self.row=0
             else:self.guard('exit')
-        elif button==k.BUTTON_Q:
-            self.menu('quality',tuple('Curve %.2gpx'%(4.0/n) for n in dm.QUALITIES))
+        elif button==k.BUTTON_Q:self.quality_menu()
         elif button in (k.BUTTON_LEFT,k.BUTTON_RIGHT):self.tab=1-self.tab;self.row=0
         elif button in (k.BUTTON_UP,k.BUTTON_DOWN):
             if self.tab:
@@ -350,12 +367,12 @@ class CAD:
             else:self.select_feature(-1 if button==k.BUTTON_UP else 1)
         elif button==k.BUTTON_CENTER:
             if not self.tab:self.tab=1;self.row=0
-            elif self.properties():
+            elif self.model['features']:
                 name=self.properties()[self.row][0]
                 f=self.model['features'][self.selected]
                 if name=='op':self.change(name,dm.OPERATIONS[(dm.OPERATIONS.index(f[name])+1)%3])
                 else:self.edit=LineEdit('%.8g'%f[name]);self.edit_key=name;self.replace=True
-        elif self.tab and self.properties() and char and char in '0123456789.-':
+        elif self.tab and self.model['features'] and char and char in '0123456789.-':
             name=self.properties()[self.row][0]
             if name!='op':self.edit=LineEdit(char);self.edit_key=name;self.replace=False
 
@@ -373,14 +390,15 @@ class CAD:
 
     def draw(self):
         d=self.vm.draw;p=theme.system_palette(self.vm);d.fill_screen(p.BG)
-        lab.chrome(d,p,'Camera / '+self.camera.mode if self.focus=='preview' else 'Model',self.message,self.error,title='PICOCAD',fallback=PATH)
+        page='Camera / '+self.camera.mode if self.focus=='preview' else 'Model'
         if self.help_open:
+            lab.chrome(d,p,page,self.message,self.error,title='PICOCAD',fallback=PATH)
             lab.help_box(d,p,HELP,self.help_first,308);d.swap();self.redraw=False;return
         body_label=('%d %s'%(self.geometry.body_count,'body' if self.geometry.body_count==1 else 'bodies')) if self.show_built and self.geometry is not None else 'Guides'
         status=body_label+' / '+('ISO' if self.camera.projection=='Isometric' else 'PERSP')
         lab.panel(d,p,PREVIEW,'PART PREVIEW',status)
         if self.focus=='preview':d._rectangle(*PREVIEW,p.ACCENT)
-        self.camera.setup(dm.bounds(self.model),CANVAS)
+        self.camera.setup(self.box,CANVAS)
         if self.show_built and self.geometry is not None:
             dd.built(d,self.camera,self.geometry,p)
             if not len(self.geometry):lab.centre_text(d,160,135,'Empty result',p.MUTED)
@@ -390,10 +408,7 @@ class CAD:
                 dd.primitive(bounded,self.camera,feature,p.TEXT,feature['op']!='Add')
         else:dd.preview(d,self.camera,self.model,self.selected,p)
         dd.axes(d,self.camera,p)
-        if self.progress:
-            name,done,total=self.progress
-            d._fill_rectangle(18,180,284,15,p.PANEL)
-            lab.text(d,22,184,'%s %d%% / Esc cancels'%(name,min(100,done*100//max(1,total))),p.ACCENT)
+        if self.progress:self.draw_progress(d,p)
         x,y,w,h=EDITOR
         lab.panel(d,p,EDITOR,'')
         from picoware.gui.status_bar import foreground
@@ -423,8 +438,8 @@ class CAD:
             height=28+17*min(8,len(self.popup))
             lab.popup(d,p,{'add':'ADD PRIMITIVE','options':'OPTIONS','view':'VIEW','open':'OPEN PROJECT','confirm':'UNSAVED CHANGES','quality':'CURVE QUALITY','projection':'PROJECTION'}[self.menu_kind],self.popup,self.menu_index,(20,max(43,(320-height)//2),280,height))
         if self.prompt_kind:lab.prompt(d,p,'SAVE PROJECT','Project name (.pcad) / SD',self.edit,self.message,self.error)
-        # Redraw error/footer after panels so error recovery remains visible.
-        lab.chrome(d,p,'Camera / '+self.camera.mode if self.focus=='preview' else 'Model',self.message,self.error,title='PICOCAD',fallback=PATH)
+        # Chrome last so the error/footer box stays above the panels.
+        lab.chrome(d,p,page,self.message,self.error,title='PICOCAD',fallback=PATH)
         d.swap();self.redraw=False
 
     def stop(self):

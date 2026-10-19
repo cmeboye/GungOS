@@ -32,7 +32,7 @@ the primitive preview immediately; combined boundaries require **F4 Build**.
 | F9 | Scrollable help; F9/Esc closes it |
 | Tab | Switch keyboard focus between preview and editor |
 | Arrows with preview focused | Orbit, or pan after pressing Space |
-| + / − | Zoom |
+| + / − | Zoom; on a numeric property − starts a negative value |
 | F / R | Fit / reset to isometric |
 | [ / ] | Previous / next feature |
 | Q in editor | Select curve quality |

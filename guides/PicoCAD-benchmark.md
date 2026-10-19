@@ -83,3 +83,25 @@ wire/model heap**. It stores 12 lines, two rims and one analytic cylindrical
 surface: **460 packed bytes**, drawing 46 segments in the fitted perspective
 view. The added two segments are the bore-wall silhouettes. The original
 sampler remains removed. These measurements retain the host/GC caveats above.
+
+
+## Lean pass
+
+A redundancy/performance pass left geometry unchanged: 600 seeded random
+models gave identical outcomes and packed boundaries, and 996 projected views
+gave identical segment counts (endpoints within 0.04 px). The default N8
+example now measures **0.471 ms** median with the same 46 drawn segments and
+460 packed bytes. Host medians for larger models, before → after:
+
+| Model | Build (ms) | Built frame (ms) | Guide frame (ms) |
+|---|---:|---:|---:|
+| 8-step plate: 4 bolt holes, blind bore, side notch, void | 10.8 → 4.7 | 1.8 → 1.1 | 5.5 → 1.5 |
+| Box with seven bores, N24 | 10.9 → 4.8 | 2.7 → 1.5 | 5.3 → 1.5 |
+| Eight separate primitives, N24 | 6.4 → 2.4 | 1.9 → 1.0 | 3.2 → 1.1 |
+
+Coordinate transforms reuse cached primitive axes instead of recomputing the
+rotation per point; projected curves rotate their axes into camera space once;
+guides project each shared vertex once; bounds are cached per model edit.
+During a build the app repaints only the progress strip when its text changes,
+instead of a full frame per 8 ms slice. With yields padded to ~9 ms to mimic
+the board, the plate build now draws 2 full frames instead of 38.

@@ -219,10 +219,20 @@ key(k.BUTTON_DOWN);assert c.properties()[c.row][0]=='a'
 key(k.BUTTON_CENTER);text('6');key(k.BUTTON_CENTER)
 assert c.model['features'][1]['a']==6 and c.dirty and not c.show_built
 snap('properties')
+# Typing '-' on a numeric row starts a negative value; it must not zoom.
+zoom=c.camera.zoom;key(k.BUTTON_DOWN);key(k.BUTTON_DOWN);assert c.properties()[c.row][0]=='x'
+text('-2');key(k.BUTTON_CENTER)
+assert c.model['features'][1]['x']==-2 and c.camera.zoom==zoom
+key(k.BUTTON_Z);assert c.model['features'][1]['x']==0 and c.model['features'][1]['a']==6
 # Partial rebuilds never replace the old cache; Esc retains edited primitives.
 c.input(k.BUTTON_F4);assert c.job is not None
 c.input(k.BUTTON_ESCAPE);assert c.job is None and c.geometry is cached and c.model['features'][1]['a']==6
 key(k.BUTTON_F4);finish();assert c.geometry is not cached and c.show_built
+# A finished build is labelled with the model it was given, not the current one.
+built=dm.clone(c.model);c.input(k.BUTTON_F4)
+edited=dm.clone(c.model);edited['features'][1]['a']=5;c.transact(edited);finish()
+assert c.built_model==built and not c.show_built
+c.undo_edit();assert c.show_built and c.model==built
 key(k.BUTTON_F9);assert c.help_open
 key(k.BUTTON_END);assert c.help_first>0
 key(k.BUTTON_CTRL_UP);snap('help');key(k.BUTTON_F9)
