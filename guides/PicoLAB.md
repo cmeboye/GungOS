@@ -13,7 +13,8 @@ PicoLAB
 │   └── Scientific calculator
 └── Modules
     ├── Structural
-    │   └── Beam view
+    │   ├── Beam view
+    │   └── Mohr circle
     ├── Dynamics
     ├── Thermal
     ├── Electrical
@@ -33,10 +34,11 @@ for example `/ tools / Scientific calculator` or
 `/ modules / structural / Beam view`. The logo follows the system accent.
 The header remains visible in tool subpages, help and graph text editors.
 The calculator and Beam view use the top 18-pixel strip; their mode bars and
-content panels remain below it. Graph input uses the keyboard below the
-23-pixel header, preserving its first text line.
+content panels remain below it. Beam view, Mohr circle, Graph and Graph3D share the same
+title bar, panels, property forms, editor panel and F9 help box
+(`engtools/ui/lab.py`); values are typed in place, with no on-screen keyboard.
 
-See [Beam view](BeamLab.md), [Scientific calculator](ScientificCalculator.md),
+See [Beam view](BeamLab.md), [Mohr circle](MohrCircle.md), [Scientific calculator](ScientificCalculator.md),
 [Graph](Graph.md), [Graph3D](Graph3D.md) and [plot previews](SharedPlots.md).
 
 The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Graph,

@@ -1,7 +1,7 @@
 # Eggcel — keyboard spreadsheet
 
 Open **Apps → PicoDESK → Eggcel** in the updated firmware/simulator.
-The hierarchy and shared theme are included in the v1.2 UF2; subsequent
+The hierarchy and shared theme are included in the v1.2 and later UF2s; subsequent
 spreadsheet changes are SD updates. Chrome follows system foreground, background
 and accent colours, reserving the top 18 pixels for system indicators.
 
@@ -223,7 +223,7 @@ Compile the current app sources with the matching `mpy-cross` using
 `tools/compile-engineering-apps.py`; see [BUILD.md](../BUILD.md). Generated ZIPs
 and `.mpy` files are local build outputs rather than tracked source. Merge the
 compiled Eggcel entry and complete `desktopapps/eggcel/` package into an existing
-GungOS v1.2 SD installation. Keep shared `engtools`/`desktopapps` dependencies,
+GungOS v1.31 SD installation. Keep shared `engtools`/`desktopapps` dependencies,
 exit apps and restart after replacement. Keep one `.py` or `.mpy` per module.
 Documents/settings stay on the device. No UF2 change is required for this batch.
 

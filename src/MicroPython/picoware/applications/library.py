@@ -66,6 +66,8 @@ def launch(view_manager, item):
 
 def start(view_manager):
     global _library
+    from picoware.system.app_loader import AppLoader
+    AppLoader.release(view_manager)  # unload closed SD apps
     from picoware.gui.split_menu import SplitMenu
     _library = SplitMenu(view_manager, CATEGORIES, SECTIONS)
     if _library_state is not None:

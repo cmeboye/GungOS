@@ -15,14 +15,22 @@ builds/MicroPython/desktop/micropython -X heapsize=16M simulator/run.py --viewer
 
 ## Controls
 
+Graph uses the same screen parts and keys as Beam view: the PicoLAB title bar,
+panels, a one-line footer and the F9 help box. Values and expressions are typed
+in place on the PicoCalc keyboard; there is no on-screen keyboard.
+
 - Arrows: pan the plot; select rows in menus.
 - Plus / minus: zoom around the center. Equals also zooms in.
-- Enter: expressions; select a row to edit with the Picoware keyboard.
+- Enter: expressions. Enter on a row (or + Add expression) opens an editor
+  panel; Enter applies, Esc cancels, and an invalid expression stays open with
+  the reason.
 - Back: plot menu; return from submenus. Choose Quit to exit.
-- W: exact window bounds, parameter range, fit padding and grid.
+- W: the Window form: X, Y and T limits, fit padding and grid. Type a number
+  to replace the selected value (arithmetic such as `2*pi` works), Enter to
+  edit it, Up/Down while typing to apply and move on. Enter on Grid toggles it.
 - F: Fit Y, Fit visible curves, Equal axis scale or Default window.
 - R: reset to the default -10 to 10 window.
-- G: toggle grid. H or ?: help.
+- G: toggle grid. F9, H or ?: help.
 - In Expressions: Space toggles visibility; D or Delete removes a row.
 
 ## Expressions

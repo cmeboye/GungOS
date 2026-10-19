@@ -71,6 +71,81 @@ class AppLoader:
         except Exception as e:
             self.view_manager.log("Error cleaning up modules: {}".format(e), 2)
 
+    # Views opened from the SD card: library/misc/custom apps, games, screensavers.
+    SD_VIEW_PREFIXES = ("app_", "game_", "screensaver_")
+
+    def release_unused(self) -> int:
+        """Unload SD app modules once no SD app view is open.
+
+        Called when a firmware menu starts. Loaded app code otherwise stays
+        in sys.modules (and RAM) until reboot: a closed tool can keep
+        100+ KB of bytecode and everything its globals reference.
+        App modules are those whose top-level package or file is in an SD
+        apps folder, so firmware modules are never touched.
+
+        Returns:
+            int: Number of modules unloaded.
+        """
+        vm = self.view_manager
+        open_views = [vm.view_stack[i] for i in range(vm._stack_depth)] + [vm.current_view]
+        for view in open_views:
+            if view is not None and view.name.startswith(self.SD_VIEW_PREFIXES):
+                return 0
+        tops = self._app_tops()
+        if not tops:
+            return 0
+        names = [name for name in sys.modules if name.split(".")[0] in tops]
+        if not names and not self.loaded_apps:
+            return 0
+        self.loaded_apps.clear()
+        self.current_app = None
+        for name in names:
+            del sys.modules[name]
+        collect()
+        self.view_manager.log(
+            f"[AppLoader]: Released {len(names)} app modules, free memory: {mem_free()} bytes"
+        )
+        return len(names)
+
+    def _app_tops(self) -> set:
+        """Top-level module names provided by the SD apps folders."""
+        tops = set()
+        storage = self.view_manager.storage
+        try:
+            if not storage.active:
+                return tops
+            # App folders (apps, games, misc, misc/screensavers) hold top-level
+            # modules; a folder with __init__ is a package such as engtools.
+            folders = ["picoware/apps"]
+            while folders:
+                folder = folders.pop()
+                for entry in storage.listdir(folder):
+                    if entry.startswith(".") or entry == "__pycache__":
+                        continue
+                    if entry.endswith(".mpy"):
+                        tops.add(entry[:-4])
+                    elif entry.endswith(".py"):
+                        tops.add(entry[:-3])
+                    elif storage.is_directory(folder + "/" + entry):
+                        inner = storage.listdir(folder + "/" + entry)
+                        if "__init__.py" in inner or "__init__.mpy" in inner:
+                            tops.add(entry)
+                        elif folder.count("/") < 3:
+                            folders.append(folder + "/" + entry)
+        except Exception as e:
+            self.view_manager.log(f"[AppLoader]: Could not list apps: {e}", 2)
+        return tops
+
+    @staticmethod
+    def release(view_manager):
+        """release_unused() for a menu's start, ignoring a missing loader or SD."""
+        loader = getattr(view_manager, "app_loader", None)
+        if loader is not None:
+            try:
+                loader.release_unused()
+            except Exception as e:
+                view_manager.log(f"[AppLoader]: Release failed: {e}", 2)
+
     def list_available_apps(self, subdirectory="") -> list[str]:
         """List available apps in the picoware/apps directory or subdirectory.
 

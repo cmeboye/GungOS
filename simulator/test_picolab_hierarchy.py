@@ -57,17 +57,16 @@ from engtools.calculator import app as calc
 key(k.BUTTON_F2);assert calc._active.page=='modes';path('tools','Scientific calculator')
 key(k.BUTTON_ESCAPE);exit_child()
 assert lab._page=='tools' and lab._selected==2;path('tools')
-# Graph's own menus, drawing progress and native keyboard retain the route.
+# Graph's own menus, drawing progress and inline editor retain the route.
 pick('Graph');assert vm.current_view.name=='app_Graph';path('tools','Graph')
 from engtools.plots import plot2d
 for _ in range(2000):
     key(k.BUTTON_NONE)
     if plot2d._app.completed:break
 key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)
-assert plot2d._app.state=='input'
-kb=plot2d._app._keyboard
-assert kb.draw.top==23 and kb.draw.size.y==297
-assert kb._text_y+kb.draw.top>=23
+# Editing happens in place under the shared title bar: no on-screen keyboard.
+assert plot2d._app.state=='input' and plot2d._app.edit is not None
+assert not hasattr(plot2d._app,'_keyboard')
 path('tools','Graph');shot('graph-editor')
 key(k.BUTTON_2);path('tools','Graph')
 exit_child();assert lab._page=='tools' and lab._selected==0;path('tools')
@@ -78,10 +77,10 @@ for _ in range(2000):
     key(k.BUTTON_NONE)
     if plot3d._state==plot3d.ST_PLOT and not plot3d._dirty:break
 key(k.BUTTON_CENTER)
-assert plot3d._state==plot3d.ST_INPUT and plot3d._keyboard.draw.top==23,(plot3d._state,plot3d._menu.selected_index if plot3d._menu else None,vm.current_view.name)
+assert plot3d._state==plot3d.ST_INPUT and plot3d._edit is not None,(plot3d._state,vm.current_view.name)
 path('tools','Graph3D');shot('graph3d-editor')
 exit_child();assert lab._page=='tools' and lab._selected==1
-assert plot3d._keyboard is None and breadcrumbs.current(vm,'app_Graph3D') is None
+assert plot3d._edit is None and breadcrumbs.current(vm,'app_Graph3D') is None
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==1
 pick('Modules');path('modules');shot('modules')
 assert [r[1] for r in lab.MENUS['modules']]==['Structural','Dynamics','Thermal','Electrical','Fluids']

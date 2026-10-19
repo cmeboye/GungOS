@@ -10,7 +10,8 @@ import re
 from array import array
 from time import ticks_ms, ticks_diff
 from gc import collect
-from ..ui import theme
+from ..ui import theme, lab
+from ..ui.forms import LineEdit, erase_key, parse_number
 
 from picoware.system.font import FONT_SMALL, FONT_MEDIUM
 from picoware.system.buttons import (
@@ -37,6 +38,9 @@ from picoware.system.buttons import (
     BUTTON_F,
     BUTTON_C,
     BUTTON_BACKSPACE,
+    BUTTON_F9,
+    BUTTON_L,
+    BUTTON_NONE,
 )
 
 ST_MENU = const(0)
@@ -77,6 +81,7 @@ RANGES = (2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0)
 GRIDS = (8, 12, 16, 20, 24, 32, 48, 64)
 DIR_APP = "picoware/settings/graph3d"
 FILE_SAVED = "picoware/settings/graph3d/saved.txt"
+FILE_SESSION = "picoware/settings/graph3d/session.json"
 C_WIRE2 = const(0xA11E)
 C_LINE2 = const(0xFC9F)
 
@@ -97,6 +102,25 @@ PRESETS = (
     ("Ellipsoid", "x^2/4+y^2+z^2=1"),
     ("Torus", "(sqrt(x^2+y^2)-1.2)^2+z^2=0.25"),
     ("Cone", "z^2=x^2+y^2"),
+)
+
+HELP_LINES = (
+    'Menu:', 'Plot, edit f or a second surface g,', 'presets, saved plots, settings, help',
+    'On the plot:', 'ARROWS pan (SPACE: orbit)   + - zoom', 'F fit   R reset camera   A auto spin',
+    'S style: wire, solid, heat map', 'W settings: ranges, aspect, N, style',
+    'G resolution N   Z next symmetric range', 'C 2D slice   P screenshot to SD',
+    'ENTER edit the equation   ESC menu',
+    'Heat map (style):', 'Height shown as colour, bar on the right', 'ARROWS move the probe: x, y, z on top',
+    'L contours on/off   + - zoom the range', 'Needs z = f(x, y); implicit surfaces stay 3D',
+    'Settings (W):', 'UP/DOWN choose   ENTER edit or change', 'Type a number to replace a value',
+    'UP/DOWN while typing applies it', 'LEFT/RIGHT change a choice',
+    'X, Y ranges; Z Auto fits f, Fixed clips it', 'and bounds the volume of F(x,y,z)=0',
+    'Aspect Equal keeps proportions; Box fills', 'Typing a Z value sets Z range Fixed',
+    'Equations:', 'z=f(x,y), or F(x,y,z)=0', 'x^2+y^2+z^2=1 draws a sphere', '^ is power; sin cos tan exp log sqrt',
+    'abs min max pow atan2 pi e', '0.6*sin(x)*cos(y)   sin(sqrt(x*x+y*y))',
+    'Tips:', 'Functions use N x N samples,', 'implicit surfaces N x N x N', 'High N asks first; ESC cancels sampling',
+    'Wire is faster; movement previews wire', 'Two surfaces: f heat colours, g pink',
+    'Shots go to picoware/settings/graph3d/', 'F9 or H opens this help; ESC closes',
 )
 
 _SAFE = {
@@ -184,8 +208,30 @@ _resolution_return = ST_SETTINGS
 _fit_pending = False
 _embedded = False
 _brand = "GRAPH 3D"
-_keyboard = None
 _plot_title = ""
+# Ranges: None means the symmetric +/-_range (the Z key's presets).
+_bounds = None        # [x0, x1, y0, y1]
+_zrange = None        # fixed [z0, z1]; None fits z (functions) or follows x/y (implicit)
+_aspect = "equal"     # "equal": true proportions; "box": every axis fills the cube
+_H = 4.0              # half-size of the displayed box
+_sx = _sy = _sz = 1.0
+# Heatmap (style 2): f(x, y) as colour on fine cells, with optional contours.
+_need_heat = True
+_heat_values = None
+_heat_info = None     # (cols, rows, left, top, cell_w, cell_h, lo, hi)
+_heat_lines = None
+_contours = True
+_probe = [0, 0]
+HEAT_CELL = 3
+HEAT_IMPLICIT = "Heatmap needs z = f(x, y); this is an implicit surface F(x,y,z)=0"
+STYLES = ("Wireframe", "Solid + wire", "Heatmap")
+# Inline editing (no on-screen keyboard) and the shared help box.
+_edit = None
+_edit_note = ""
+_edit_error = False
+_toast_error = False
+_help_first = 0
+_help_return = ST_MENU
 
 
 def _palette():
@@ -469,11 +515,26 @@ def _sample_job(native=True):
     specs=[_surface_expression(text) for text in expressions]
     _has_implicit=any(kind for kind,_ in specs)
     _zmin,_zmax=1e30,-1e30
-    n,r=_grid_n,_range
-    step=2*r/(n-1)
-    coords=[-r+i*step for i in range(n)]
+    n=_grid_n
+    x0,x1,y0,y1=_xy_bounds()
+    cx,cy,hx,hy=(x0+x1)/2,(y0+y1)/2,(x1-x0)/2,(y1-y0)/2
+    cz,hz=0.0,0.0
+    if _has_implicit:
+        z0,z1=_implicit_z()
+        cz,hz=(z0+z1)/2,(z1-z0)/2
+    _set_scales(hx,hy,hz)
+    # Real coordinates for the formula, display coordinates for the mesh.
+    coords=[x0+(x1-x0)*i/(n-1) for i in range(n)]
+    ycoords=[y0+(y1-y0)*i/(n-1) for i in range(n)]
+    zcoords=[cz-hz+2*hz*i/(n-1) for i in range(n)]
     xs=array('f',coords)
+    xd=array('f',[(x-cx)*_sx for x in coords])
+    yd=[(y-cy)*_sy for y in ycoords]
+    clip=_zrange if not _has_implicit else None
     plane=array('f',bytes(4*n))
+    unit=[-1+2*i/(n-1) for i in range(n)]
+    grid=array('f',unit)
+    ax,ay,az=hx*_sx,hy*_sy,hz*_sz
     if geom:
         # Formulas are evaluated here; the C code builds the triangles.
         strip=array('f',[0.0]*(18*(n-1)))
@@ -484,29 +545,31 @@ def _sample_job(native=True):
         native=type(code) is not _CODE
         if not implicit:
             rows=[]
-            for y in coords:
+            for y in ycoords:
                 if native:
                     # One call per row; NaN marks undefined points.
                     row=array('f',bytes(4*n))
                     code.map(row,xs,y,0.0)
-                    for z in row:
-                        if z==z:
-                            if z<_zmin:_zmin=z
-                            if z>_zmax:_zmax=z
                 else:
                     row=array('f')
                     for x in coords:
                         z=_field(code,env,x,y)
                         row.append(z if z is not None else float('nan'))
-                        if z is not None:
-                            _zmin,_zmax=min(_zmin,z),max(_zmax,z)
+                for i in range(n):
+                    z=row[i]
+                    if z==z:
+                        if clip and not clip[0]<=z<=clip[1]:
+                            row[i]=float('nan')  # a fixed z range clips the surface
+                            continue
+                        if z<_zmin:_zmin=z
+                        if z>_zmax:_zmax=z
                 rows.append(row)
                 yield ('sampling function',len(rows),n)
             if surface==0: _zs=rows
             else: _zs2=rows
             if geom:
                 for j in range(n-1):
-                    count=geom.grid_strip(rows[j],rows[j+1],xs,coords[j],coords[j+1],strip)
+                    count=geom.grid_strip(rows[j],rows[j+1],xd,yd[j],yd[j+1],strip)
                     if len(_mesh_colors)+count>_mesh_limit:
                         raise ValueError('Mesh too detailed; lower resolution/range')
                     _mesh.extend(strip[:9*count])
@@ -515,16 +578,16 @@ def _sample_job(native=True):
                 continue
             for j in range(n-1):
                 for i in range(n-1):
-                    a=(coords[i],coords[j],rows[j][i]); b=(coords[i+1],coords[j],rows[j][i+1])
-                    c=(coords[i],coords[j+1],rows[j+1][i]); d=(coords[i+1],coords[j+1],rows[j+1][i+1])
+                    a=(xd[i],yd[j],rows[j][i]); b=(xd[i+1],yd[j],rows[j][i+1])
+                    c=(xd[i],yd[j+1],rows[j+1][i]); d=(xd[i+1],yd[j+1],rows[j+1][i+1])
                     for triangle in ((a,b,c),(b,d,c)):
                         if all(_finite(v[2]) for v in triangle): _mesh_triangle(triangle,surface)
                 yield ('building mesh',j+1,n-1)
         else:
             previous=None
-            for k,z in enumerate(coords):
+            for k,z in enumerate(zcoords):
                 current=array('f')
-                for y in coords:
+                for y in ycoords:
                     if native:
                         code.map(plane,xs,y,z)
                         current.extend(plane)
@@ -536,7 +599,11 @@ def _sample_job(native=True):
                 if previous is not None and geom:
                     cube,cubes=0,(n-1)*(n-1)
                     while cube<cubes:
-                        count,cube=geom.iso_slab(previous,current,xs,coords[k-1],z,tris,centres,limits,cube)
+                        # Marching tetrahedra on the unit grid; then real and display units.
+                        count,cube=geom.iso_slab(previous,current,grid,unit[k-1],unit[k],tris,centres,limits,cube)
+                        for t in range(count):
+                            o=3*t
+                            centres[o]=cx+centres[o]*hx; centres[o+1]=cy+centres[o+1]*hy; centres[o+2]=cz+centres[o+2]*hz
                         if native: code.points(middles,centres,count)
                         for t in range(count):
                             # Avoid joining sign changes across undefined poles.
@@ -550,6 +617,8 @@ def _sample_job(native=True):
                             if len(_mesh_colors)>=_mesh_limit:
                                 raise ValueError('Mesh too detailed; lower resolution/range')
                             o=9*t
+                            for v in (o,o+3,o+6):
+                                tris[v]*=ax; tris[v+1]*=ay; tris[v+2]*=az
                             _mesh.extend(tris[o:o+9])
                             _mesh_colors.append(surface)
                             for zz in (tris[o+2],tris[o+5],tris[o+8]):
@@ -563,9 +632,9 @@ def _sample_job(native=True):
                             values=tuple(previous[index] for index in indices)+tuple(current[index] for index in indices)
                             if not all(_finite(v) for v in values): continue
                             if all(v>=0 for v in values) or all(v<0 for v in values): continue
-                            x0,x1,y0,y1,z0,z1=coords[i],coords[i+1],coords[j],coords[j+1],coords[k-1],z
-                            points=((x0,y0,z0),(x1,y0,z0),(x1,y1,z0),(x0,y1,z0),
-                                    (x0,y0,z1),(x1,y0,z1),(x1,y1,z1),(x0,y1,z1))
+                            xa,xb,ya,yb,za,zb=coords[i],coords[i+1],ycoords[j],ycoords[j+1],zcoords[k-1],z
+                            points=((xa,ya,za),(xb,ya,za),(xb,yb,za),(xa,yb,za),
+                                    (xa,ya,zb),(xb,ya,zb),(xb,yb,zb),(xa,yb,zb))
                             for tetra in _TETRA:
                                 vertices=tuple(points[index] for index in tetra)
                                 field=tuple(values[index] for index in tetra)
@@ -574,6 +643,7 @@ def _sample_job(native=True):
                                     center=tuple(sum(v[axis] for v in triangle)/3 for axis in (0,1,2))
                                     middle=_field(code,env,*center)
                                     if middle is None or abs(middle)>max(abs(v) for v in field)*2+1e-8: continue
+                                    triangle=tuple(((v[0]-cx)*_sx,(v[1]-cy)*_sy,(v[2]-cz)*_sz) for v in triangle)
                                     _mesh_triangle(triangle,surface)
                                     for vertex in triangle:
                                         _zmin,_zmax=min(_zmin,vertex[2]),max(_zmax,vertex[2])
@@ -581,9 +651,193 @@ def _sample_job(native=True):
                 previous=current
     if not _mesh_colors:
         raise ValueError('No surface found; adjust range/resolution')
+    if clip:
+        _zmin,_zmax=clip  # colours and height follow the fixed range
     if _zmax-_zmin<1e-9: _zmax=_zmin+1
-    _zscale=1.0 if _has_implicit else (_range*.72)/(_zmax-_zmin)
+    _zscale=1.0 if _has_implicit else (_H*.72)/(_zmax-_zmin)
     yield ('complete',1,1)
+
+
+def _xy_bounds():
+    return list(_bounds) if _bounds else [-_range,_range,-_range,_range]
+
+
+def _implicit_z():
+    """The sampled z range of an implicit surface."""
+    if _zrange: return list(_zrange)
+    x0,x1,y0,y1=_xy_bounds()
+    h=max(x1-x0,y1-y0)/2
+    return [-h,h]
+
+
+def _set_scales(hx,hy,hz=0.0):
+    """Display scale per axis: 1 keeps true proportions; Box stretches each
+    axis to the largest half-size."""
+    global _H,_sx,_sy,_sz
+    _H=max(hx,hy,hz)
+    if _aspect=="box":
+        _sx,_sy=_H/hx,_H/hy
+        _sz=_H/hz if hz else 1.0
+    else:
+        _sx=_sy=_sz=1.0
+
+
+def _any_implicit():
+    try:
+        return any(_surface_expression(e)[0] for e in (_expr,_expr2) if _clean_expr(e))
+    except Exception:
+        return False
+
+
+def _heat_rect():
+    """Screen rectangle of the heat map, leaving room for the colour bar and labels."""
+    return _px0+30, _py0+6, _px1-52, _py1-14
+
+
+def _heat_job():
+    """Sample f(x, y) on screen cells, then trace contour lines; yields progress."""
+    global _heat_values,_heat_info,_heat_lines,_need_heat,_probe
+    implicit,code=_surface_expression(_expr)
+    if implicit:
+        raise ValueError(HEAT_IMPLICIT)
+    _heat_values=_heat_lines=None
+    collect()
+    x0,x1,y0,y1=_xy_bounds()
+    left,top,right,bottom=_heat_rect()
+    w,h=right-left,bottom-top
+    if _aspect=="equal":
+        # True proportions: the map keeps x and y at the same scale.
+        scale=min(w/(x1-x0),h/(y1-y0))
+        w,h=max(2*HEAT_CELL,int((x1-x0)*scale)),max(2*HEAT_CELL,int((y1-y0)*scale))
+        left,top=left+(right-left-w)//2,top+(bottom-top-h)//2
+    cols,rows=max(2,w//HEAT_CELL),max(2,h//HEAT_CELL)
+    cell_w,cell_h=w/cols,h/rows
+    xs=array('f',[x0+(i+0.5)*(x1-x0)/cols for i in range(cols)])
+    values=array('f',bytes(4*cols*rows))
+    row=array('f',bytes(4*cols))
+    env=dict(_SAFE)
+    native=type(code) is not _CODE
+    lo,hi=1e30,-1e30
+    for j in range(rows):
+        y=y1-(j+0.5)*(y1-y0)/rows
+        if native:
+            code.map(row,xs,y,0.0)
+        else:
+            for i in range(cols):
+                z=_field(code,env,xs[i],y)
+                row[i]=z if z is not None else float('nan')
+        o=j*cols
+        for i in range(cols):
+            z=row[i]
+            values[o+i]=z
+            if z==z:
+                if z<lo:lo=z
+                if z>hi:hi=z
+        yield ('sampling heat map',j+1,rows)
+    if lo>hi:
+        raise ValueError('f(x, y) is undefined everywhere in this range')
+    if _zrange:
+        lo,hi=_zrange
+    if hi-lo<1e-12:
+        hi=lo+1.0
+    _heat_values=values
+    _heat_info=(cols,rows,left,top,cell_w,cell_h,lo,hi)
+    _probe=[cols//2,rows//2]
+    # Contours at nine levels by marching squares between cell centres.
+    lines=array('h')
+    levels=[lo+(hi-lo)*(k+1)/10 for k in range(9)]
+    for j in range(rows-1):
+        for i in range(cols-1):
+            a,b=values[j*cols+i],values[j*cols+i+1]
+            c,d=values[(j+1)*cols+i+1],values[(j+1)*cols+i]
+            if not (a==a and b==b and c==c and d==d):
+                continue
+            low,high=min(a,b,c,d),max(a,b,c,d)
+            for level in levels:
+                if not low<level<high:
+                    continue
+                points=[]
+                for (p,q,px,py,qx,qy) in ((a,b,0,0,1,0),(b,c,1,0,1,1),(c,d,1,1,0,1),(d,a,0,1,0,0)):
+                    if (p<level)!=(q<level):
+                        t=(level-p)/(q-p)
+                        points.append((left+(i+0.5+px+(qx-px)*t)*cell_w,top+(j+0.5+py+(qy-py)*t)*cell_h))
+                for k in range(0,len(points)-1,2):
+                    lines.extend((int(points[k][0]),int(points[k][1]),int(points[k+1][0]),int(points[k+1][1])))
+        yield ('tracing contours',j+1,rows-1)
+    _heat_lines=lines
+    _need_heat=False
+    yield ('complete',1,1)
+
+
+_heat_ramp=None
+
+
+def _heat_colors():
+    """64 RGB565 steps of the height colour scale."""
+    global _heat_ramp
+    if _heat_ramp is None:
+        _heat_ramp=[_rgb565(*_heat(i/63)) for i in range(64)]
+    return _heat_ramp
+
+
+def _probe_point():
+    cols,rows,left,top,cell_w,cell_h,lo,hi=_heat_info
+    x0,x1,y0,y1=_xy_bounds()
+    i,j=_probe
+    return x0+(i+0.5)*(x1-x0)/cols, y1-(j+0.5)*(y1-y0)/rows
+
+
+def _draw_heatmap(draw):
+    draw.fill_screen(C_BG)
+    p=_palette()
+    cols,rows,left,top,cell_w,cell_h,lo,hi=_heat_info
+    ramp=_heat_colors()
+    span=hi-lo
+    for j in range(rows):
+        y=int(top+j*cell_h)
+        h=int(top+(j+1)*cell_h)-y
+        o=j*cols
+        for i in range(cols):
+            z=_heat_values[o+i]
+            x=int(left+i*cell_w)
+            w=int(left+(i+1)*cell_w)-x
+            if z==z:
+                k=int((z-lo)/span*63)
+                color=ramp[0 if k<0 else 63 if k>63 else k]
+            else:
+                color=p.PANEL  # undefined
+            draw._fill_rectangle(x,y,w,h,color)
+    if _contours and _heat_lines:
+        lines=_heat_lines
+        for k in range(0,len(lines),4):
+            draw._line(lines[k],lines[k+1],lines[k+2],lines[k+3],C_BG)
+    w,h=int(cols*cell_w),int(rows*cell_h)
+    draw._rectangle(left-1,top-1,w+2,h+2,C_FRAME)
+    # Axis limits at the corners.
+    x0,x1,y0,y1=_xy_bounds()
+    lab.text(draw,left,top+h+3,'{:g}'.format(x0),C_MUTED)
+    lab.right_text(draw,left+w,top+h+3,'{:g}'.format(x1),C_MUTED)
+    lab.right_text(draw,left-3,top,'{:g}'.format(y1),C_MUTED)
+    lab.right_text(draw,left-3,top+h-8,'{:g}'.format(y0),C_MUTED)
+    # Colour bar with its range: the bar, then its labels to the right.
+    bx=_px1-46
+    for k in range(h):
+        draw._line(bx,top+k,bx+7,top+k,ramp[63-k*63//max(1,h-1)])
+    draw._rectangle(bx-1,top-1,9,h+2,C_FRAME)
+    for value,y in ((hi,top),((hi+lo)/2,top+h//2-4),(lo,top+h-8)):
+        label='{:.3g}'.format(value)
+        if len(label)>6:label='{:.0e}'.format(value)
+        lab.text(draw,bx+11,y,label,C_MUTED)
+    # Probe and its reading.
+    i,j=_probe
+    px,py=int(left+(i+0.5)*cell_w),int(top+(j+0.5)*cell_h)
+    draw._line(px-5,py,px+5,py,C_TITLE)
+    draw._line(px,py-5,px,py+5,C_TITLE)
+    x,y=_probe_point()
+    z=_field(_surface_expression(_expr)[1],dict(_SAFE),x,y)
+    reading='x {:.3g}  y {:.3g}  z {}'.format(x,y,'--' if z is None else '{:.4g}'.format(z))
+    _paint_chrome(draw,reading,'','')
+    draw.swap()
 
 
 def _eval_grid():
@@ -641,7 +895,7 @@ def _draw_mesh(draw,preview=False,native=True):
     draw._rectangle(_px0,_py0,_px1-_px0,_py1-_py0,C_FRAME)
     status='preview' if preview else 'ready'
     sub=(_plot_title+' '+status) if _plot_title else '{} {:.2f}x {} {}'.format(status,_zoom,_navigation,'implicit' if _has_implicit else '')
-    _paint_chrome(draw,_toast or sub,'ARROWS {}  +/- zoom  SPACE mode'.format(_navigation),'F fit  W settings  ESC return' if _embedded else 'F fit  W settings  ENTER edit  ESC menu')
+    _paint_chrome(draw,sub)  # a toast shows in the footer (errors in a box)
     draw.swap()
 
 
@@ -671,23 +925,29 @@ def _draw_mesh_python(draw,style,count,stride):
 
 def _draw_sampling(draw,progress):
     draw.fill_screen(C_BG)
+    p=_palette()
     name,done,total=progress
     percent=min(100,int(done*100/max(1,total)))
-    draw._text(18,100,name,C_ACCENT,FONT_MEDIUM)
-    draw._text(18,132,'{}%  N={}  {} triangles'.format(percent,_grid_n,len(_mesh_colors or ())),C_MUTED,FONT_SMALL)
-    draw._fill_rectangle(18,160,_sw-36,10,C_PANEL)
-    draw._fill_rectangle(18,160,int((_sw-36)*percent/100),10,C_ACCENT)
-    _paint_chrome(draw,'sampling','Building surface in small batches','ESC cancel  ENTER after errors to edit')
+    bottom=int(draw.size.y)-lab.FOOT
+    lab.panel(draw,p,(8,43,_sw-16,bottom-46),'BUILDING','%d%%'%percent)
+    lab.text(draw,18,100,name,C_ACCENT,FONT_MEDIUM)
+    detail='N={}  {} triangles'.format(_grid_n,len(_mesh_colors or ())) if _style!=2 else 'heat map cells'
+    lab.text(draw,18,130,detail,C_MUTED,FONT_SMALL)
+    draw._fill_rectangle(18,156,_sw-36,10,C_PANEL)
+    draw._fill_rectangle(18,156,int((_sw-36)*percent/100),10,C_ACCENT)
+    lab.text(draw,18,180,'ESC cancels',C_MUTED,FONT_SMALL)
+    _paint_chrome(draw,'sampling')
     draw.swap()
 
 
 def _begin_resolution(view_manager):
-    global _state,_resolution_return
-    _resolution_return=_state
-    _state=ST_RESOLUTION
-    kb=_get_keyboard(view_manager)
-    kb.reset(); kb.title='Resolution N (4..64)'; kb.response=str(_grid_n)
-    view_manager.input_manager.reset(); kb.run(force=True)
+    """G: the settings form with the resolution being typed."""
+    global _state,_set_row,_edit,_edit_note,_edit_error
+    _state=ST_SETTINGS
+    _set_row=[r[0] for r in _settings_rows()].index('res')
+    _edit=LineEdit(str(_grid_n),8)
+    _edit_note,_edit_error='',False
+    _draw_settings(view_manager.draw)
 
 
 def _draw_resolution_warning(draw):
@@ -699,8 +959,11 @@ def _draw_resolution_warning(draw):
            'More detail uses more RAM.',
            'Dense meshes may exceed memory.',
            'Sampling can be cancelled with ESC.')
-    for i,line in enumerate(lines): draw._text(12,64+i*25,line,C_AMBER if i==0 else C_TITLE,FONT_SMALL)
-    _paint_chrome(draw,'performance warning','ENTER apply resolution','ESC keep current resolution')
+    bottom=int(draw.size.y)-lab.FOOT
+    lab.panel(draw,_palette(),(8,43,_sw-16,bottom-46),'PERFORMANCE WARNING')
+    for i,line in enumerate(lines): lab.text(draw,18,70+i*20,line,C_AMBER if i==0 else C_TITLE,FONT_SMALL)
+    lab.text(draw,18,206,'ENTER apply   ESC keep N={}'.format(_grid_n),C_MUTED,FONT_SMALL)
+    _paint_chrome(draw,'warning')
     draw.swap()
 
 
@@ -907,30 +1170,24 @@ def _layout(draw):
     _sw = int(draw.size.x)
     _sh = int(draw.size.y)
     _px0 = 6
-    _py0 = 28
+    _py0 = lab.HEAD + 4
     _px1 = _sw - 7
-    _py1 = _sh - 43
+    _py1 = _sh - lab.FOOT - 4
     _cx = (_px0 + _px1) // 2
     _cy = (_py0 + _py1) // 2
     short = min(_px1 - _px0, _py1 - _py0)
     _focal = short * 0.78
-    _cam = max(7.6 + _range * 0.22, _range * 2.4)
+    _cam = max(7.6 + _H * 0.22, _H * 2.4)
 
 
-def _get_keyboard(vm):
-    global _keyboard
-    if _keyboard is None:
-        from engtools.ui.keyboard import create
-        _keyboard=create(vm,() if _embedded else ('tools','Graph3D'))
-    return _keyboard
-
-
-def _paint_chrome(draw, subtitle, footer1, footer2):
-    theme.chrome(draw,subtitle,footer1,footer2,_brand,_palette())
+def _paint_chrome(draw, subtitle, footer1='', footer2=''):
+    """The shared PicoLAB title bar and footer; footers are in F9 help now."""
+    title=(_plot_title or 'SURFACE').upper()[:20] if _embedded else 'GRAPH 3D'
+    lab.chrome(draw,_palette(),subtitle,_toast,_toast_error,title,() if _embedded else ('tools','Graph3D'))
 
 
 class _PanelMenu:
-    """Small Graph-style menu; no dependency on Graph.py on the SD."""
+    """A list of "label | detail" rows in the shared PicoLAB panel."""
     def __init__(self, draw, title, *unused):
         self.display = draw
         self.title = title
@@ -952,35 +1209,48 @@ class _PanelMenu:
         if self.items:
             self.set_selected((self.selected_index+1)%len(self.items))
 
-    def draw(self):
-        rows = [tuple(item.split(" | ",1)) if " | " in item else (item,"") for item in self.items]
-        theme.menu(self.display,rows,self.selected_index,self.title,_brand,'UP/DOWN choose  ENTER select','ESC returns   H help',palette=_palette())
+    def rows(self):
+        return [tuple(item.split(" | ",1)) if " | " in item else (item,"") for item in self.items]
+
+    def draw(self, prompt=False):
+        draw = self.display
+        draw.fill_screen(C_BG)
+        lab.menu(draw,_palette(),self.rows(),self.selected_index,self.title.upper(),int(draw.size.y)-lab.FOOT)
+        if prompt:
+            _draw_prompt(draw)
+        _paint_chrome(draw,self.title)
+        draw.swap()
 
 
 class _HelpPanel:
+    """The shared F9 help box."""
     def __init__(self, draw, *unused):
         self.display = draw
         self.lines = []
         self.row = 0
 
     def set_text(self, text):
-        self.lines = text.split("\n")
+        self.lines = text if isinstance(text, (tuple, list)) else text.split("\n")
+        self.draw()
+
+    def capacity(self):
+        return lab.help_capacity(int(self.display.size.y)-lab.FOOT)
+
+    def scroll(self, step):
+        self.row = min(max(0, self.row+step), max(0, len(self.lines)-self.capacity()))
         self.draw()
 
     def scroll_up(self):
-        self.row = max(0, self.row-1)
-        self.draw()
+        self.scroll(-1)
 
     def scroll_down(self):
-        self.row = min(max(0, len(self.lines)-16), self.row+1)
-        self.draw()
+        self.scroll(1)
 
     def draw(self):
         draw = self.display
         draw.fill_screen(C_BG)
-        for i, line in enumerate(self.lines[self.row:self.row+16]):
-            draw._text(11, 32+i*15, line[:48], C_MUTED if not line.isupper() else C_ACCENT, FONT_SMALL)
-        _paint_chrome(draw, "help", "UP/DOWN scroll", "ESC menu")
+        lab.help_box(draw,_palette(),self.lines,self.row,int(draw.size.y)-lab.FOOT)
+        _paint_chrome(draw, "help")
         draw.swap()
 
 
@@ -1014,39 +1284,62 @@ def _draw_gizmo(draw):
 
 
 def _draw_plot(draw, preview=False):
-    _draw_mesh(draw, preview)
+    if _style == 2 and _heat_info is not None:
+        _draw_heatmap(draw)
+    else:
+        _draw_mesh(draw, preview)
 
 
 def _draw_error(draw):
     draw.fill_screen(C_BG)
-    draw._fill_rectangle(draw.scale_x(14), draw.scale_y(70), _sw - draw.scale_x(28), draw.scale_y(132), C_PANEL)
-    draw._rectangle(draw.scale_x(14), draw.scale_y(70), _sw - draw.scale_x(28), draw.scale_y(132), C_ERR)
-    draw._text(draw.scale_x(26), draw.scale_y(84), "Could not plot", C_ERR, FONT_MEDIUM)
-    msg = _error_msg or "Unknown error"
-    if len(msg) > 34:
-        draw._text(draw.scale_x(26), draw.scale_y(114), msg[:34], C_TITLE, FONT_SMALL)
-        draw._text(draw.scale_x(26), draw.scale_y(128), msg[34:68], C_TITLE, FONT_SMALL)
-    else:
-        draw._text(draw.scale_x(26), draw.scale_y(114), msg, C_TITLE, FONT_SMALL)
-    draw._text(draw.scale_x(26), draw.scale_y(156), "ENTER  fix equation", C_ACCENT, FONT_SMALL)
-    draw._text(draw.scale_x(26), draw.scale_y(172), "ESC   main menu", C_MUTED, FONT_SMALL)
-    _paint_chrome(draw, "error", "ENTER edit   G resolution", "ESC menu")
+    p=_palette()
+    bottom=int(draw.size.y)-lab.FOOT
+    lab.panel(draw,p,(8,43,_sw-16,bottom-46),'COULD NOT PLOT')
+    for i,line in enumerate(lab.wrap(_error_msg or "Unknown error",44)[:6]):
+        lab.text(draw,18,70+12*i,line,C_ERR,FONT_SMALL)
+    for i,line in enumerate(("ENTER  fix the equation","W      ranges and resolution","ESC    "+("return" if _embedded else "main menu"))):
+        lab.text(draw,18,160+16*i,line,C_MUTED,FONT_SMALL)
+    _paint_chrome(draw, "error")
     draw.swap()
+
+
+def _settings_rows():
+    """(key, label, value, kind) for the settings form; kind num, choice or action."""
+    x0,x1,y0,y1=_xy_bounds()
+    implicit=_any_implicit()
+    if _zrange:
+        z=_zrange
+    elif implicit:
+        z=_implicit_z()
+    else:
+        z=[_zmin,_zmax] if _mesh_colors else None
+    zt=lambda v:'{:.4g}'.format(v) if z else 'auto'
+    return [('x0','X minimum','{:g}'.format(x0),'num'),('x1','X maximum','{:g}'.format(x1),'num'),
+            ('y0','Y minimum','{:g}'.format(y0),'num'),('y1','Y maximum','{:g}'.format(y1),'num'),
+            ('zmode','Z range','Fixed' if _zrange else 'Auto','choice'),
+            ('z0','Z minimum',zt(z[0] if z else 0),'num'),('z1','Z maximum',zt(z[1] if z else 0),'num'),
+            ('aspect','Aspect','Equal' if _aspect=='equal' else 'Box','choice'),
+            ('res','Resolution N',str(_grid_n),'num'),
+            ('style','Style',STYLES[_style],'choice'),
+            ('contours','Heat map contours','On' if _contours else 'Off','choice'),
+            ('spin','Auto spin','On' if _auto else 'Off','choice'),
+            ('nav','Arrow controls','Pan' if _navigation=='pan' else 'Orbit','choice'),
+            ('fit','Fit surface to view','ENTER','action'),
+            ('camera','Reset camera','ENTER','action')]
 
 
 def _draw_settings(draw):
     draw.fill_screen(C_BG)
-    rows = (
-        ("XYZ range" if _has_implicit else "XY range", "{:.1f} to {:.1f}".format(-_range, _range)),
-        ("Resolution", "N={}   ENTER type (4..64)".format(_grid_n)),
-        ("Style", "Solid + wire" if _style == 1 else "Wireframe"),
-        ("Auto spin", "On" if _auto else "Off"),
-        ("Arrow controls", "Pan" if _navigation == "pan" else "Orbit"),
-        ("Fit surface", "center + zoom; keep orientation"),
-        ("Reset camera", "pan / pitch / yaw / zoom"),
-        ("Return to plot", ""),
-    )
-    theme.menu(draw,rows,_set_row,'settings',_brand,'UP/DOWN choose  LEFT/RIGHT change','ENTER activate   ESC plot',palette=_palette())
+    p=_palette()
+    rows=_settings_rows()
+    bottom=int(draw.size.y)-lab.FOOT
+    lab.panel(draw,p,(8,43,_sw-16,bottom-46),'SETTINGS','%d/%d'%(_set_row+1,len(rows)))
+    lab.form(draw,p,[('field',label,value,True) for key,label,value,kind in rows],_set_row,_edit,67,bottom-24)
+    note=_edit_note or ('Type a number   ENTER edit   ESC plot' if rows[_set_row][3]=='num' else
+                        'ENTER or LEFT/RIGHT change   ESC plot')
+    lab.text(draw,16,bottom-18,note[:46],C_ERR if _edit_error else C_MUTED)
+    _paint_chrome(draw, "settings")
+    draw.swap()
 
 
 def _reset_camera():
@@ -1147,7 +1440,7 @@ def _make_menu(view_manager):
         _menu.add_item("Second surface | Off")
     _menu.add_item("Presets | Functions and implicit surfaces")
     _menu.add_item("Saved plots | Save or load equations")
-    _menu.add_item("Settings | range / mesh / camera")
+    _menu.add_item("Settings | ranges / heat map / mesh / camera")
     _menu.add_item("Help")
     _menu.add_item("Quit")
     _menu.set_selected(0)
@@ -1187,74 +1480,34 @@ def _make_help(view_manager):
         view_manager.foreground_color,
         view_manager.background_color,
     )
-    _help_box.set_text(
-        "GRAPH 3D\n"
-        "Plot z = f(x, y) as a surface.\n"
-        "\n"
-        "MAIN MENU\n"
-        "  Plot      draw current equation\n"
-        "  Type      keyboard editor\n"
-        "  Preset    functions / implicit shapes\n"
-        "  Settings  range, grid, style\n"
-        "\n"
-        "ON THE PLOT\n"
-        "  Arrows    pan by default\n"
-        "  SPACE     switch pan / orbit\n"
-        "  F         fit surface to view\n"
-        "  +  -      zoom\n"
-        "  ENTER     edit equation\n"
-        "  ESC      menu\n"
-        "  C         2D slice\n"
-        "  P         screenshot to SD\n"
-        "  A         auto-spin on/off\n"
-        "  W         settings\n"
-        "  S         wire / solid toggle\n"
-        "  G         enter grid resolution N\n"
-        "  Z         next XY range\n"
-        "  R         reset camera\n"
-        "  ? or H    this help\n"
-        "\n"
-        "EQUATIONS\n"
-        "  z=f(x,y), or F(x,y,z)=0\n"
-        "  x^2+y^2+z^2=1 draws a sphere.\n"
-        "  Range bounds implicit XYZ cube.\n"
-        "  ^ is allowed (becomes **).\n"
-        "  sin cos tan exp log sqrt\n"
-        "  abs min max pow atan2 pi e\n"
-        "\n"
-        "  0.6*sin(x)*cos(y)\n"
-        "  0.12*(x*x-y*y)\n"
-        "  sin(sqrt(x*x+y*y))\n"
-        "\n"
-        "TIPS\n"
-        "  Functions: N x N samples.\n"
-        "  Implicit: N x N x N samples.\n"
-        "  High N requires confirmation.\n"
-        "  ESC cancels sampling.\n"
-        "  Wire mode is faster.\n"
-        "  Solid uses height + lighting.\n"
-        "  Two surfaces: f heat, g pink.\n"
-        "  Camera movement reuses mesh.\n"
-        "  Movement preview is wireframe.\n"
-        "  Saved list stores f | g.\n"
-        "  Tiny XYZ gizmo is top-left.\n"
-        "  Shots: picoware/settings/graph3d/\n"
-        "\n"
-        "ESC returns to the menu."
-    )
+    _help_box.set_text(HELP_LINES)
 
 
 def _begin_input(view_manager, second=False):
-    kb = _get_keyboard(view_manager)
-    view_manager.input_manager.reset()
-    kb.reset()
-    if second:
-        kb.title = "g(x,y)  empty clears"
-        kb.response = _clean_expr(_expr2)
-    else:
-        kb.title = "Surface: z=f(x,y) or F(x,y,z)=0"
-        kb.response = _clean_expr(_expr)
-    kb.run(force=True)
+    """Edit an equation in place: the menu stays behind a prompt panel."""
+    global _edit,_edit_note,_edit_error
+    _edit=LineEdit(_clean_expr(_expr2 if second else _expr).replace('**','^'),80)
+    _edit_note,_edit_error='',False
+    _draw_input(view_manager.draw, second)
+
+
+def _draw_prompt(draw):
+    second=_state==ST_INPUT2
+    bottom=int(draw.size.y)-lab.FOOT
+    title='Second surface g' if second else 'Surface'
+    detail=('g(x,y); empty clears it' if second else 'z = f(x,y) or F(x,y,z) = 0')
+    lab.prompt(draw,_palette(),title,detail,_edit,_edit_note or 'ENTER plot   ESC cancel',_edit_error,
+               (8,bottom-110,_sw-16,106))
+
+
+def _draw_input(draw, second=False):
+    if _menu is not None and not _embedded:
+        _menu.draw(True)
+        return
+    draw.fill_screen(C_BG)
+    _draw_prompt(draw)
+    _paint_chrome(draw,'equation')
+    draw.swap()
 
 
 def _draw_slice(draw):
@@ -1270,8 +1523,7 @@ def _draw_slice(draw):
         return
 
     n = _grid_n
-    r = _range
-    step = (2.0 * r) / (n - 1) if n > 1 else 1.0
+    x0, x1, y0, y1 = _xy_bounds()
     idx = _slice_idx
     idx = max(idx, 0)
     idx = min(idx, n - 1)
@@ -1312,11 +1564,9 @@ def _draw_slice(draw):
         _poly(_zs2, C_LINE2)
 
     if _slice_axis == 0:
-        val = -r + idx * step
-        title = "slice  y={:.2f}".format(val)
+        title = "slice  y={:.3g}".format(y0 + (y1 - y0) * idx / (n - 1))
     else:
-        val = -r + idx * step
-        title = "slice  x={:.2f}".format(val)
+        title = "slice  x={:.3g}".format(x0 + (x1 - x0) * idx / (n - 1))
     f1 = "LEFT/RIGHT  move cut"
     f2 = "C  other axis    ESC  3D"
     _paint_chrome(draw, title, f1, f2)
@@ -1340,11 +1590,19 @@ def _take_shot(view_manager):
 
 
 def _goto_plot(view_manager):
-    global _state, _dirty, _need_eval, _slice_idx, _toast, _preview_at, _sampling, _sampling_progress
+    global _state, _dirty, _need_eval, _slice_idx, _toast, _toast_error, _preview_at, _sampling, _sampling_progress, _style
     _layout(view_manager.draw)
     _preview_at = None
-    if _need_eval or not _mesh_colors:
-        _sampling = _sample_job()
+    _toast, _toast_error = "", False
+    if _style == 2 and _any_implicit():
+        # A heat map needs one height per (x, y): keep the 3D view and say why.
+        _style, _toast, _toast_error = 1, HEAT_IMPLICIT, True
+    if _style == 2:
+        job = _heat_job() if _need_heat or _heat_info is None else None
+    else:
+        job = _sample_job() if _need_eval or not _mesh_colors else None
+    if job is not None:
+        _sampling = job
         _sampling_progress = ("sampling",0,1)
         _state = ST_SAMPLING
         _draw_sampling(view_manager.draw,_sampling_progress)
@@ -1352,30 +1610,82 @@ def _goto_plot(view_manager):
         _state = ST_PLOT
         _dirty = True
     _slice_idx = _grid_n // 2
-    _toast = ""
+
+
+def _changed_ranges():
+    global _need_eval,_need_heat
+    _need_eval=_need_heat=True
+
+
+def _set_style(style):
+    """Change the style; a heat map of an implicit surface is refused with a reason."""
+    global _style,_toast,_toast_error
+    if style == 2 and _any_implicit():
+        _toast,_toast_error = HEAT_IMPLICIT,True
+        return False
+    _style=style
+    return True
 
 
 def _apply_setting(step):
-    global _range, _grid_n, _style, _auto, _need_eval, _navigation
-    row = _set_row
-    if row == 0:
-        _range = _cycle(RANGES, _range, step)
-        _need_eval = True
-    elif row == 1:
-        return False  # Resolution is entered and confirmed by the UI.
-    elif row == 2:
-        _style = 1 - _style
-    elif row == 3:
+    """Change the choice or run the action on the current settings row."""
+    global _zrange, _aspect, _contours, _auto, _navigation
+    key = _settings_rows()[_set_row][0]
+    if key == 'zmode':
+        if _zrange:
+            _zrange = None
+        else:
+            z = [_zmin,_zmax] if _mesh_colors and not _has_implicit else _implicit_z()
+            _zrange = [z[0], z[1] if z[1] > z[0] else z[0]+1]
+        _changed_ranges()
+    elif key == 'aspect':
+        _aspect = 'box' if _aspect == 'equal' else 'equal'
+        _changed_ranges()
+    elif key == 'style':
+        order = (1, 0, 2)
+        target = order[(order.index(_style) + (1 if step > 0 else -1)) % 3]
+        if not _set_style(target) and target == 2:
+            _set_style(order[(order.index(target) + (1 if step > 0 else -1)) % 3])
+    elif key == 'contours':
+        _contours = not _contours
+    elif key == 'spin':
         _auto = not _auto
-    elif row == 4:
+    elif key == 'nav':
         _navigation = "orbit" if _navigation == "pan" else "pan"
-    elif row == 5:
+    elif key == 'fit':
         if _need_eval:
             return False
         _fit_surface()
-    elif row == 6:
+    elif key == 'camera':
         _reset_camera()
     return True
+
+
+def _set_number(key, text):
+    """Apply a typed settings value; raises ValueError and changes nothing."""
+    global _bounds, _zrange, _pending_resolution
+    if key == 'res':
+        value = parse_number(text)
+        if value != int(value):
+            raise ValueError('Resolution must be an integer: 4..64')
+        return int(value)
+    value = parse_number(text)
+    if not abs(value) <= 1e6:
+        raise ValueError('Values must be within 1e6')
+    if key in ('x0','x1','y0','y1'):
+        b = _xy_bounds()
+        b[('x0','x1','y0','y1').index(key)] = value
+        if not (b[1]-b[0] > 1e-6 and b[3]-b[2] > 1e-6):
+            raise ValueError('Minimum must be below maximum')
+        _bounds = b
+    else:
+        z = list(_zrange) if _zrange else ([_zmin,_zmax] if _mesh_colors and not _has_implicit else _implicit_z())
+        z[0 if key == 'z0' else 1] = value
+        if not z[1]-z[0] > 1e-9:
+            raise ValueError('Z minimum must be below Z maximum')
+        _zrange = z
+    _changed_ranges()
+    return None
 
 
 def start(view_manager, plot_spec=None) -> bool:
@@ -1384,6 +1694,7 @@ def start(view_manager, plot_spec=None) -> bool:
     global _menu, _preset_menu, _help_box, _saved_menu
     global _storage, _grid_n, _toast, _navigation, _mesh, _mesh_colors, _sampling
     global _embedded,_brand,_plot_title,_expr,_expr2,_range,_style,_pending_resolution,_resolution_return
+    global _bounds,_zrange,_need_heat,_heat_info,_edit,_toast_error
 
     global C_BG,C_PLOT,C_PANEL,C_FRAME,C_ACCENT,C_TITLE,C_MUTED,C_SEL,C_ERR
     palette=theme.system_palette(view_manager)
@@ -1399,7 +1710,9 @@ def start(view_manager, plot_spec=None) -> bool:
         expressions = [item['expression'] for item in plot_spec['surfaces']]
         _expr,_expr2 = expressions[0],expressions[1] if len(expressions)>1 else ''
         _range = float(plot_spec.get('range',2.0))
-        _style = 0 if plot_spec.get('style','solid') == 'wire' else 1
+        _bounds = list(plot_spec['bounds']) if 'bounds' in plot_spec else None
+        _zrange = None
+        _style = {'wire': 0, 'solid': 1, 'heatmap': 2}[plot_spec.get('style','solid')]
         requested_resolution = int(plot_spec.get('resolution',12))
         _grid_n = requested_resolution
     _storage = None if _embedded else view_manager.storage
@@ -1413,6 +1726,10 @@ def start(view_manager, plot_spec=None) -> bool:
     _saved_menu = None
     _dirty = True
     _need_eval = True
+    _need_heat = True
+    _heat_info = None
+    _edit = None
+    _toast_error = False
     _auto = False
     _zs = None
     _zs2 = None
@@ -1430,6 +1747,7 @@ def start(view_manager, plot_spec=None) -> bool:
     view_manager.input_manager.reset()
     _ensure_dir(_storage)
     _load_saved(_storage)
+    _load_session(_storage)
     if requested_resolution is not None and _resolution_warning(requested_resolution)[0]:
         _pending_resolution = requested_resolution
         _grid_n = 12
@@ -1447,6 +1765,7 @@ def run(view_manager) -> None:
     global _range, _grid_n, _set_row, _slice_axis, _slice_idx, _toast
     global _pan_x, _pan_y, _navigation, _preview_at, _last_spin_ms
     global _sampling,_sampling_progress,_sampling_draw_ms,_error_msg,_pending_resolution,_fit_pending
+    global _need_heat,_edit,_edit_note,_edit_error,_help_return,_bounds,_contours,_probe,_toast_error,_help_box,_resolution_return
 
     inp = view_manager.input_manager
     button = view_manager.button
@@ -1469,9 +1788,11 @@ def run(view_manager) -> None:
                 _sampling_progress=next(_sampling)
                 if ticks_diff(ticks_ms(),started)>=12: break
         except StopIteration:
-            _sampling=None; _need_eval=False; _error_msg=''
+            _sampling=None; _error_msg=''
+            if _style!=2: _need_eval=False
             _state=ST_PLOT; _dirty=True
-            if _has_implicit or _fit_pending: _fit_surface()
+            _layout(draw)  # the camera follows the new box size before fitting
+            if _style!=2 and (_has_implicit or _fit_pending): _fit_surface()
             _fit_pending=False
         except Exception as exc:
             _sampling=None; _error_msg=("Out of RAM; press G to lower resolution" if isinstance(exc,MemoryError) else str(exc))[:80]
@@ -1479,28 +1800,6 @@ def run(view_manager) -> None:
             _fit_pending=False; _state=ST_ERROR; _dirty=True
         if _state==ST_SAMPLING and ticks_diff(ticks_ms(),_sampling_draw_ms)>=100:
             _draw_sampling(draw,_sampling_progress); _sampling_draw_ms=ticks_ms()
-        return
-
-    elif _state == ST_RESOLUTION:
-        kb=_get_keyboard(view_manager)
-        if button==BUTTON_ESCAPE or not kb.run():
-            inp.reset(); kb.reset()
-            _state=_resolution_return; _dirty=True
-        elif kb.is_finished:
-            result=kb.response.strip(); kb.reset(); inp.reset()
-            try:
-                n=int(result)
-                warning,_,_=_resolution_warning(n)
-                if warning:
-                    _pending_resolution=n; _state=ST_RES_WARNING
-                    _draw_resolution_warning(draw)
-                else:
-                    _apply_resolution(n); _state=_resolution_return; _dirty=True
-                    if _state in (ST_PLOT,ST_ERROR): _goto_plot(view_manager)
-            except Exception as exc:
-                _state=ST_RESOLUTION
-                kb.title=str(exc)[:46]; kb.response=result; kb.run(force=True)
-        if _state==ST_SETTINGS and _dirty: _draw_settings(draw); _dirty=False
         return
 
     elif _state == ST_RES_WARNING:
@@ -1511,11 +1810,20 @@ def run(view_manager) -> None:
                 return
             _state=_resolution_return; _dirty=True
             if _state==ST_SETTINGS: _draw_settings(draw); _dirty=False
+            elif _state==ST_ERROR: _draw_error(draw); _dirty=False
         elif button==BUTTON_CENTER:
             inp.reset(); _apply_resolution(_pending_resolution)
             _state=_resolution_return; _dirty=True
             if _state in (ST_PLOT,ST_ERROR): _goto_plot(view_manager)
             else: _draw_settings(draw); _dirty=False
+        return
+
+    if button == BUTTON_F9 and _edit is None and _state not in (ST_HELP, ST_RES_WARNING):
+        inp.reset()
+        _auto = False
+        _help_return = _state
+        _state = ST_HELP
+        _make_help(view_manager)
         return
 
     if _state == ST_MENU:
@@ -1552,6 +1860,7 @@ def run(view_manager) -> None:
                 _set_row = 0
                 _dirty = True
             elif idx == 6:
+                _help_return = ST_MENU
                 _state = ST_HELP
                 _make_help(view_manager)
             elif idx == 7:
@@ -1578,8 +1887,8 @@ def run(view_manager) -> None:
                 _expr = PRESETS[idx][1]
                 if idx >= 12:
                     _expr2 = ""
-                    _range = 2.0
-                _need_eval = True
+                    _range, _bounds = 2.0, None
+                _need_eval = _need_heat = True
                 _kill_menu("preset")
                 _goto_plot(view_manager)
 
@@ -1615,110 +1924,137 @@ def run(view_manager) -> None:
                 _make_saved(view_manager)
             elif idx >= 1 and idx - 1 < len(_saved):
                 _expr, _expr2 = _unpack_entry(_saved[idx - 1])
-                _need_eval = True
+                _need_eval = _need_heat = True
                 _kill_menu("saved")
                 _goto_plot(view_manager)
 
     elif _state == ST_SETTINGS:
-        if button in (BUTTON_UP, BUTTON_DOWN):
+        rows = _settings_rows()
+        key, label, value, kind = rows[_set_row]
+        if button == BUTTON_NONE:
+            pass
+        elif _edit is not None:
             inp.reset()
-            _set_row = (_set_row + (-1 if button == BUTTON_UP else 1)) % 8
+            result = 'cancel' if button == BUTTON_ESCAPE else _edit.key(view_manager, button)
+            if result == 'cancel':
+                _edit, _edit_note, _edit_error = None, '', False
+            elif result is not None:
+                try:
+                    n = _set_number(key, _edit.text)
+                except ValueError as exc:
+                    _edit_note, _edit_error = str(exc), True
+                else:
+                    _edit, _edit_note, _edit_error = None, '', False
+                    if n is not None:
+                        warning, _, _ = _resolution_warning(n)
+                        if warning:
+                            _pending_resolution, _resolution_return, _state = n, ST_SETTINGS, ST_RES_WARNING
+                            _draw_resolution_warning(draw)
+                            return
+                        _apply_resolution(n)
+                    if result in ('up', 'down'):
+                        _set_row = (_set_row + (-1 if result == 'up' else 1)) % len(rows)
             _dirty = True
-        elif button in (BUTTON_LEFT, BUTTON_RIGHT, BUTTON_CENTER):
+        elif button in (BUTTON_UP, BUTTON_DOWN):
             inp.reset()
-            if _set_row == 7:
-                _goto_plot(view_manager)
-                return
-            if _set_row == 1:
-                _begin_resolution(view_manager)
-                return
-            if _set_row == 5 and _need_eval:
-                _fit_pending=True
-                _goto_plot(view_manager)
-                return
-            _apply_setting(-1 if button == BUTTON_LEFT else 1)
+            _set_row = (_set_row + (-1 if button == BUTTON_UP else 1)) % len(rows)
             _dirty = True
         elif button == BUTTON_ESCAPE:
             inp.reset()
             _goto_plot(view_manager)
             return
-        if _dirty:
+        elif kind == 'num':
+            char = inp.button_to_char(button)
+            if button == BUTTON_CENTER or erase_key(view_manager, button):
+                inp.reset()
+                start_text = value if value != 'auto' else ''
+                _edit = LineEdit(start_text, 16)
+                if button != BUTTON_CENTER:
+                    _edit.key(view_manager, button)
+                _edit_note, _edit_error = '', False
+                _dirty = True
+            elif char and (char.isdigit() or char in '-.('):
+                inp.reset()
+                _edit = LineEdit('', 16)
+                _edit.key(view_manager, button)
+                _edit_note, _edit_error = '', False
+                _dirty = True
+        elif button in (BUTTON_LEFT, BUTTON_RIGHT, BUTTON_CENTER):
+            inp.reset()
+            _toast, _toast_error = '', False
+            if key == 'fit' and _need_eval:
+                _fit_pending = True
+                _goto_plot(view_manager)
+                return
+            _apply_setting(-1 if button == BUTTON_LEFT else 1)
+            if key in ('fit', 'camera'):
+                _goto_plot(view_manager)
+                return
+            _dirty = True
+        if _state == ST_SETTINGS and _dirty:
             _draw_settings(draw)
             _dirty = False
 
     elif _state == ST_HELP:
         if _help_box is None:
             _make_help(view_manager)
-        if button in (BUTTON_ESCAPE,):
+        if button in (BUTTON_ESCAPE, BUTTON_F9, BUTTON_CENTER):
             inp.reset()
             _kill_menu("help")
-            if _embedded: _goto_plot(view_manager)
+            back = _help_return
+            if back in (ST_PLOT, ST_SLICE, ST_ERROR) or _embedded:
+                _state = back if back in (ST_SLICE, ST_ERROR) else ST_PLOT
+                if _state == ST_PLOT: _goto_plot(view_manager)
+                else: _dirty = True
+            elif back == ST_SETTINGS:
+                _state, _dirty = ST_SETTINGS, True
+                _draw_settings(draw); _dirty = False
             else:
                 _state = ST_MENU
                 _make_menu(view_manager)
-        elif button == BUTTON_UP:
+        elif button in (BUTTON_UP, BUTTON_DOWN):
             inp.reset()
-            _help_box.scroll_up()
-        elif button == BUTTON_DOWN:
+            _help_box.scroll(-1 if button == BUTTON_UP else 1)
+        elif button in (BUTTON_LEFT, BUTTON_RIGHT):
             inp.reset()
-            _help_box.scroll_down()
+            step = _help_box.capacity()
+            _help_box.scroll(-step if button == BUTTON_LEFT else step)
 
-    elif _state == ST_INPUT:
-        kb = _get_keyboard(view_manager)
-        if button == BUTTON_ESCAPE:
+    elif _state in (ST_INPUT, ST_INPUT2):
+        second = _state == ST_INPUT2
+        if _edit is None:
+            _begin_input(view_manager, second)
+        if button != BUTTON_NONE:
             inp.reset()
-            kb.reset()
-            if _embedded: _goto_plot(view_manager)
-            else:
-                _state = ST_MENU
-                _make_menu(view_manager)
-        elif not kb.run():
-            inp.reset()
-            kb.reset()
-            if _embedded: _goto_plot(view_manager)
-            else:
-                _state = ST_MENU
-                _make_menu(view_manager)
-        elif kb.is_finished:
-            result = (kb.response or "").strip()
-            kb.reset()
-            inp.reset()
-            if result:
-                _expr = result
-                _need_eval = True
-                _goto_plot(view_manager)
-            else:
-                _state = ST_MENU
-                _make_menu(view_manager)
-
-    elif _state == ST_INPUT2:
-        kb = _get_keyboard(view_manager)
-        if button == BUTTON_ESCAPE:
-            inp.reset()
-            kb.reset()
-            if _embedded: _goto_plot(view_manager)
-            else:
-                _state = ST_MENU
-                _make_menu(view_manager)
-        elif not kb.run():
-            inp.reset()
-            kb.reset()
-            if _embedded: _goto_plot(view_manager)
-            else:
-                _state = ST_MENU
-                _make_menu(view_manager)
-        elif kb.is_finished:
-            result = (kb.response or "").strip()
-            kb.reset()
-            inp.reset()
-            _expr2 = result
-            _need_eval = True
-            if result:
-                _goto_plot(view_manager)
-            else:
-                _zs2 = None
-                _state = ST_MENU
-                _make_menu(view_manager)
+            result = 'cancel' if button == BUTTON_ESCAPE else _edit.key(view_manager, button)
+            if result == 'cancel':
+                _edit = None
+                if _embedded: _goto_plot(view_manager)
+                else:
+                    _state = ST_MENU
+                    _make_menu(view_manager)
+                return
+            if result in ('commit', 'up', 'down'):
+                text = _edit.text.strip()
+                try:
+                    if text: _surface_expression(text)
+                except Exception as exc:
+                    _edit_note, _edit_error = str(exc)[:80], True
+                else:
+                    _edit = None
+                    if second:
+                        _expr2 = text
+                    elif text:
+                        _expr = text
+                    _need_eval = _need_heat = True
+                    if text:
+                        _goto_plot(view_manager)
+                        return
+                    if second: _zs2 = None
+                    _state = ST_MENU
+                    _make_menu(view_manager)
+                    return
+            _draw_input(draw, second)
 
     elif _state == ST_ERROR:
         if _dirty:
@@ -1731,9 +2067,13 @@ def run(view_manager) -> None:
                 return
             _state = ST_MENU
             _make_menu(view_manager)
-        elif button == BUTTON_G:
+        elif button in (BUTTON_G, BUTTON_W):
             inp.reset()
-            _begin_resolution(view_manager)
+            if button == BUTTON_G:
+                _begin_resolution(view_manager)
+            else:
+                _state, _set_row = ST_SETTINGS, 0
+                _draw_settings(draw)
         elif button == BUTTON_CENTER:
             inp.reset()
             _state = ST_INPUT
@@ -1780,7 +2120,32 @@ def run(view_manager) -> None:
             _state = ST_MENU
             _make_menu(view_manager)
             return
-        if button in (BUTTON_LEFT, BUTTON_RIGHT, BUTTON_UP, BUTTON_DOWN):
+        heat = _style == 2 and _heat_info is not None
+        if heat and button in (BUTTON_LEFT, BUTTON_RIGHT, BUTTON_UP, BUTTON_DOWN):
+            inp.reset()
+            cols, rows = _heat_info[0], _heat_info[1]
+            if button == BUTTON_LEFT: _probe[0] = max(0, _probe[0]-1)
+            elif button == BUTTON_RIGHT: _probe[0] = min(cols-1, _probe[0]+1)
+            elif button == BUTTON_UP: _probe[1] = max(0, _probe[1]-1)
+            else: _probe[1] = min(rows-1, _probe[1]+1)
+            moved = True
+        elif heat and button in (BUTTON_PLUS, BUTTON_EQUAL, BUTTON_MINUS):
+            inp.reset()
+            # Zoom the x/y range about the probe.
+            x, y = _probe_point()
+            x0, x1, y0, y1 = _xy_bounds()
+            k = 1.25 if button == BUTTON_MINUS else 0.8
+            hx, hy = (x1-x0)*k/2, (y1-y0)*k/2
+            if hx > 1e-6 and hy > 1e-6 and max(abs(x)+hx, abs(y)+hy) < 1e6:
+                _bounds = [x-hx, x+hx, y-hy, y+hy]
+                _need_eval = _need_heat = True
+                _goto_plot(view_manager)
+            return
+        elif heat and button == BUTTON_L:
+            inp.reset()
+            _contours = not _contours
+            moved = True
+        elif button in (BUTTON_LEFT, BUTTON_RIGHT, BUTTON_UP, BUTTON_DOWN):
             inp.reset()
             _auto = False
             if _navigation == "pan":
@@ -1836,7 +2201,18 @@ def run(view_manager) -> None:
             return
         elif button == BUTTON_S:
             inp.reset()
-            _style = 1 - _style
+            _auto = False
+            order = (1, 0, 2)
+            target = order[(order.index(_style)+1) % 3]
+            refused = not _set_style(target)
+            if refused:
+                target = order[(order.index(target)+1) % 3]
+                _set_style(target)
+            _goto_plot(view_manager)
+            if refused:
+                _toast, _toast_error, _dirty = HEAT_IMPLICIT, True, True  # say why the heat map was skipped
+            if target == 2 or _state != ST_PLOT:
+                return
             moved = True
         elif button == BUTTON_R:
             inp.reset()
@@ -1845,6 +2221,7 @@ def run(view_manager) -> None:
         elif button in (BUTTON_H, BUTTON_QUESTION):
             inp.reset()
             _auto = False
+            _help_return = ST_PLOT
             _state = ST_HELP
             _make_help(view_manager)
             return
@@ -1856,7 +2233,7 @@ def run(view_manager) -> None:
             return
         elif button == BUTTON_C:
             inp.reset()
-            if _has_implicit:
+            if _has_implicit or _zs is None:
                 _toast = "Slices available for z=f(x,y) only"
                 _dirty = True
                 return
@@ -1876,12 +2253,13 @@ def run(view_manager) -> None:
             return
         elif button == BUTTON_Z:
             inp.reset()
-            _range = _cycle(RANGES, _range, 1)
-            _need_eval = True
+            _range = _cycle(RANGES, max(_xy_bounds()[1], _range) if _bounds is None else _range, 1)
+            _bounds = None
+            _need_eval = _need_heat = True
             _goto_plot(view_manager)
             return
 
-        if _auto and ticks_diff(ticks_ms(), _last_spin_ms) >= 50:
+        if _auto and not heat and ticks_diff(ticks_ms(), _last_spin_ms) >= 50:
             _yaw = (_yaw + 0.040) % (2*pi)
             _last_spin_ms = ticks_ms()
             _preview_at = ticks_ms()
@@ -1895,11 +2273,52 @@ def run(view_manager) -> None:
             _dirty = False
 
 
+def _save_session(storage):
+    """Keep the standalone surface and settings on SD: PicoLAB unloads Graph3D's
+    code when it closes, so module globals do not survive."""
+    if not storage:
+        return
+    try:
+        import json
+        data = json.dumps({'version': 1, 'f': _expr, 'g': _expr2, 'range': _range, 'bounds': _bounds,
+                           'zrange': _zrange, 'aspect': _aspect, 'n': _grid_n, 'style': _style,
+                           'contours': _contours})
+        if not storage.exists(FILE_SESSION) or storage.read(FILE_SESSION) != data:
+            storage.write(FILE_SESSION, data)
+    except Exception as exc:
+        print('[Graph3D] Save session:', exc)
+
+
+def _load_session(storage):
+    global _expr, _expr2, _range, _bounds, _zrange, _aspect, _grid_n, _style, _contours
+    if not storage:
+        return
+    try:
+        if not storage.exists(FILE_SESSION):
+            return
+        import json
+        data = json.loads(storage.read(FILE_SESSION))
+        for text in (data['f'], data['g']):
+            if text: _surface_expression(text)
+        n = data['n']
+        if not (isinstance(n, int) and 4 <= n <= 64) or data['style'] not in (0, 1, 2) or \
+                data['aspect'] not in ('equal', 'box') or not 0.01 <= data['range'] <= 100:
+            raise ValueError('settings out of range')
+        for box in (data['bounds'], data['zrange']):
+            if box is not None and not (len(box) in (2, 4) and box[1] > box[0] and box[-1] > box[-2]):
+                raise ValueError('invalid range')
+        _expr, _expr2, _range, _bounds = data['f'], data['g'], float(data['range']), data['bounds']
+        _zrange, _aspect, _grid_n, _style = data['zrange'], data['aspect'], n, data['style']
+        _contours = bool(data['contours'])
+    except Exception as exc:
+        print('[Graph3D] Load session:', exc)
+
+
 def stop(view_manager) -> None:
     global _menu, _preset_menu, _help_box, _zs
     global _state, _auto, _dirty
 
-    global _saved_menu, _zs2, _sampling, _fit_pending, _keyboard
+    global _saved_menu, _zs2, _sampling, _fit_pending, _edit, _heat_values, _heat_info, _heat_lines, _need_heat
     if _menu:
         del _menu
         _menu = None
@@ -1914,6 +2333,8 @@ def stop(view_manager) -> None:
         _saved_menu = None
     if _sampling is not None:
         _sampling.close(); _sampling=None
+    if not _embedded:
+        _save_session(_storage)
     _release_mesh()
     _fit_pending=False
     _zs = None
@@ -1921,7 +2342,9 @@ def stop(view_manager) -> None:
     _auto = False
     _dirty = True
     _state = ST_MENU
-    _keyboard = None
+    _edit = None
+    _heat_values = _heat_info = _heat_lines = None
+    _need_heat = True
     collect()
 
 def _release_mesh():
@@ -1944,8 +2367,13 @@ def validate_spec(spec):
     resolution = spec.get('resolution',12)
     if not isinstance(resolution,int) or not 4<=resolution<=64:
         raise ValueError('Resolution must be an integer: 4..64')
-    if spec.get('style','solid') not in ('solid','wire'):
-        raise ValueError('Style must be solid or wire')
+    if spec.get('style','solid') not in ('solid','wire','heatmap'):
+        raise ValueError('Style must be solid, wire or heatmap')
+    bounds = spec.get('bounds')
+    if bounds is not None:
+        if len(bounds) != 4 or not all(isinstance(v,(int,float)) and _finite(v) for v in bounds) or \
+                not (bounds[1] > bounds[0] and bounds[3] > bounds[2]):
+            raise ValueError('3D bounds: [x0, x1, y0, y1] with min < max')
     return spec
 
 
@@ -1954,17 +2382,17 @@ class _PlotView:
         self.spec,self.previous = spec,None
 
     def start(self,vm):
-        self.previous = (_expr,_expr2,_range,_grid_n,_style)
+        self.previous = (_expr,_expr2,_range,_grid_n,_style,_bounds,_zrange,_aspect)
         return start(vm,self.spec)
 
     def run(self,vm):
         run(vm)
 
     def stop(self,vm):
-        global _expr,_expr2,_range,_grid_n,_style,_embedded,_brand,_plot_title
+        global _expr,_expr2,_range,_grid_n,_style,_embedded,_brand,_plot_title,_bounds,_zrange,_aspect
         stop(vm)
         if self.previous is not None:
-            _expr,_expr2,_range,_grid_n,_style = self.previous
+            _expr,_expr2,_range,_grid_n,_style,_bounds,_zrange,_aspect = self.previous
         self.spec,self.previous = None,None
         _embedded,_brand,_plot_title = False,'GRAPH 3D',''
 

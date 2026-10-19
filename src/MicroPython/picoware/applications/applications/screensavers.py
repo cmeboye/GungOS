@@ -16,6 +16,8 @@ def start(view_manager) -> bool:
     Returns:
         bool: True on success.
     """
+    from picoware.system.app_loader import AppLoader
+    AppLoader.release(view_manager)  # unload closed SD apps
     from picoware.gui.menu import Menu
 
     # create screensavers folder if it doesn't exist

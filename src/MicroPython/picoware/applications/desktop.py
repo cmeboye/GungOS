@@ -162,6 +162,9 @@ def start(view_manager):
     from picoware.gui.dashboard import Dashboard
     from picoware.applications.wifi.utils import connect_to_saved_wifi
     global _dashboard
+    # Closed SD apps give their code back before the widget loads.
+    from picoware.system.app_loader import AppLoader
+    AppLoader.release(view_manager)
     _dashboard = Dashboard(view_manager, _dashboard_state)
     if view_manager.has_wifi:
         connect_to_saved_wifi(view_manager)

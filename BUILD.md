@@ -1,4 +1,4 @@
-# Building GungOS v1.2
+# Building GungOS v1.31
 
 The release vendors its source dependencies. Building does not fetch from the
 network. Use the pinned sources in `vendor/`; no `git submodule update` is needed.
@@ -25,8 +25,8 @@ The script builds a matching `mpy-cross`, host picotool and the RP2350 firmware,
 compiles the shipped applications, regenerates clean SD contents and records
 checksums. Output:
 
-- `firmware/GungOS-v1.2-PicoCalc-Pico2W.uf2`
-- `sd-card/` and `GungOS-v1.2-SD.zip`
+- `firmware/GungOS-v1.31-PicoCalc-Pico2W.uf2`
+- `sd-card/` and `GungOS-v1.31-SD.zip`
 - `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
 
 Intermediate files live in `.build/` and can be deleted after building. To place
@@ -40,7 +40,7 @@ module drives PicoCalc speakers with PWM/DMA.
 
 `vendor/revisions.json` identifies upstream revisions. Any local MicroPython
 adaptation is recorded in `vendor/micropython-local.patch` and already applied
-to the vendored source. Firmware build date defaults to 2026-10-18 UTC through
+to the vendored source. Firmware build date defaults to 2026-10-19 UTC through
 `SOURCE_DATE_EPOCH`; toolchain changes can change the firmware checksum.
 
 The PicoCalc CMake adapter keeps GCC 15's array-bounds diagnostic for the

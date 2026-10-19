@@ -74,7 +74,42 @@ for i in (0,3,4,5,6):
     a.set_state('presets'); a.row=i; a.activate(); finish()
     assert all(e.bbox for e in a.items),(i,[e.bbox for e in a.items])
     vm.draw.screenshot('/private/tmp/graph-preset-'+str(i)+'.bmp')
-a.set_state('window'); a.draw_menu(); vm.draw.screenshot('/private/tmp/graph-window.bmp')
+# Window values are typed in place (Beam view's form), never on a screen keyboard.
+def typed(text):
+    for c in text: key(vm.input_manager._key_to_button(ord(c)))
+a.bounds=[-10.,10.,-10.,10.]
+a.set_state('window'); a.draw_menu()
+a.row=1; typed('2*pi')
+assert a.state=='input' and a.edit.text=='2*pi' and a.return_state=='window'
+vm.draw.screenshot('/private/tmp/graph-window-edit.bmp')
+key(BUTTON_DOWN)
+assert a.state=='window' and abs(a.bounds[1]-6.283185)<1e-5 and a.row==2
+typed('20'); key(BUTTON_CENTER)
+assert a.state=='input' and a.edit_error and 'Min' in a.edit_note and a.bounds[2]==-10
+vm.draw.screenshot('/private/tmp/graph-window-error.bmp')
+key(BUTTON_ESCAPE); assert a.state=='window' and a.bounds[2]==-10
+key(BUTTON_BACKSPACE); assert a.state=='input' and a.edit.text=='-1'
+key(BUTTON_ESCAPE)
+a.row=len(a.window_fields()); grid=a.grid; key(BUTTON_CENTER); assert a.grid!=grid
+key(BUTTON_CENTER); assert a.grid==grid
+vm.draw.screenshot('/private/tmp/graph-window.bmp')
+key(BUTTON_ESCAPE); assert a.state=='plot'
+# Expressions are edited in a prompt panel with the hardware keyboard.
+key(BUTTON_CENTER); assert a.state=='expressions'
+a.row=len(a.items); key(BUTTON_CENTER)
+assert a.state=='input' and a.edit.text=='' and a.edit_target==('expression',len(a.items))
+typed('cos(x)'); vm.draw.screenshot('/private/tmp/graph-expression-edit.bmp')
+count=len(a.items); key(BUTTON_CENTER); assert a.state=='expressions' and a.items[-1].text=='cos(x)' and len(a.items)==count+1
+a.row=len(a.items)-1; key(BUTTON_CENTER); typed('+'); key(BUTTON_CENTER)
+assert a.state=='input' and a.edit_error
+key(BUTTON_ESCAPE); assert a.items[-1].text=='cos(x)'
+# F9 opens the shared help box from anywhere and returns where it was.
+key(BUTTON_F9); assert a.state=='help'
+vm.draw.screenshot('/private/tmp/graph-help.bmp')
+key(BUTTON_DOWN); assert a.help_first==1
+key(BUTTON_F9); assert a.state=='expressions'
+key(BUTTON_ESCAPE); finish(); assert a.state=='plot'
+vm.draw.screenshot('/private/tmp/graph-plot.bmp')
 a.save(); b=Graph.GraphApp(vm)
 assert b.bounds==a.bounds and b.trange==a.trange
 assert [e.text for e in b.items]==[e.text for e in a.items]

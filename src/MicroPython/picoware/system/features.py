@@ -1,7 +1,7 @@
 """Release identity and the SD application set shipped with GungOS."""
 
 FIRMWARE_NAME = 'GungOS'
-FIRMWARE_VERSION = '1.2'
+FIRMWARE_VERSION = '1.31'
 RELEASE_APPS = ('PicoDESK', 'PicoLAB', 'Graph', 'Graph3D')
 RELEASE_GAMES = ('Tetris',)
 RELEASE_SCREENSAVERS = ('Lorenz', 'Lenia')

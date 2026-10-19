@@ -2,10 +2,10 @@
 
 Open **Apps → PicoDESK**, then choose Eggcel, PicoWord or PicoPaint.
 PicoLAB is a separate engineering app, including Graph and Graph3D. The new
-hierarchy, shared firmware theme and Esc-only navigation are included in v1.2.
+hierarchy, shared firmware theme and Esc-only navigation are included in v1.2 and later.
 Review changes in the simulator before building/flashing firmware.
 
-After installing the matching v1.2 UF2, merge the `picoware` folder from
+After installing the matching v1.31 UF2, merge the `picoware` folder from
 the matching app update into the SD root and restart. For a fresh SD card, use
 the complete clean SD package instead.
 The bundle includes all dependencies. Keep one `.py` or `.mpy` copy per module.

@@ -10,10 +10,11 @@ MENUS = {
     'tools': (('Graph','Graph','2D expressions, curves and shading'),
               ('Graph3D','Graph3D','3D surfaces and implicit expressions'),
               ('calculator','Scientific calculator','Expressions, statistics, solver and matrices')),
-    'modules': (('structural','Structural','Beams, supports, loads and sections'),
+    'modules': (('structural','Structural','Beams, frames, sections and stress'),
                 ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','No tools yet'),
                 ('electrical','Electrical','No tools yet'),('fluids','Fluids','No tools yet')),
-    'structural': (('beam','Beam view','Supports, loads, sections and diagrams'),),
+    'structural': (('beam','Beam view','Supports, loads, sections and diagrams'),
+                   ('mohr','Mohr circle','2D/3D stress, element rotation, principal')),
     'dynamics': (), 'thermal': (), 'electrical': (), 'fluids': (),
 }
 PARENTS = {'checks':'root','tools':'root','modules':'root','structural':'modules',
@@ -38,8 +39,34 @@ _bench_rows = []
 _bench_info = ''
 
 
+# Kept loaded while PicoLAB runs: its menu's own modules and tools' saved state.
+_KEEP = ('engtools.ui', 'engtools.session')
+
+
+def _release_tools(view_manager):
+    """Unload closed tools' code on returning to the PicoLAB menu: Beam view,
+    Graph, Graph3D and the calculator are each tens to 100+ KB of heap."""
+    import sys
+    names=[n for n in sys.modules if n in ('Graph','Graph3D') or
+           (n.startswith('engtools.') and not n.startswith(_KEEP))]
+    for name in names:
+        # A parent package's attribute would keep the module alive.
+        parent,_,child=name.rpartition('.')
+        if parent and parent in sys.modules and parent not in names:
+            try:delattr(sys.modules[parent],child)
+            except AttributeError:pass
+        del sys.modules[name]
+    loader=getattr(view_manager,'app_loader',None)
+    if loader is not None:
+        for key in ('Graph','Graph3D'):loader.loaded_apps.pop(key,None)
+    from gc import collect
+    collect()
+
+
 def start(view_manager):
     global _selected, _gallery_selected, _page, _selections, _dirty, _resume, _suspended, _error
+    if _resume:
+        _release_tools(view_manager)
     if not _resume:
         _selected, _gallery_selected, _page, _selections, _error = 0,0,'root',{},''
     _resume, _suspended = False,False
@@ -87,8 +114,10 @@ def _launch(view_manager,target):
     global _resume,_error,_dirty
     from engtools.ui import breadcrumbs
     before=view_manager.current_view
-    name={'Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab'}[target]
-    path=('modules','structural','Beam view') if target=='beam' else ('tools','Scientific calculator' if target=='calculator' else target)
+    name={'Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
+          'mohr':'mohr_view'}[target]
+    path={'beam':('modules','structural','Beam view'),'mohr':('modules','structural','Mohr circle'),
+          'calculator':('tools','Scientific calculator')}.get(target,('tools',target))
     breadcrumbs.bind(view_manager,path,name)
     _resume=True
     try:
@@ -97,6 +126,9 @@ def _launch(view_manager,target):
             launch(view_manager,target)
         elif target=='calculator':
             from engtools.calculator import app
+            app.show(view_manager)
+        elif target=='mohr':
+            from engtools.mohr import app
             app.show(view_manager)
         else:
             from engtools.beamlab import app

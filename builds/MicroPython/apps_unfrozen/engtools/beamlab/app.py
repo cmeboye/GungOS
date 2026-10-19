@@ -43,6 +43,8 @@ HELP = (
     'B1/B2... Start/End shows the Add target',
     'ENTER opens a property; ESC returns',
     '+ or = zoom in  - zoom out (1x/2x/4x)',
+    'I shows/hides the result summary box',
+    'Model problems always show in red',
     'Model shortcuts:',
     'B add member  C split / section change',
     'S support  H hinge',
@@ -73,7 +75,9 @@ HELP = (
     'UP/DOWN previous/next point',
     'TAB next peak  ENTER pin (up to 8)',
     'V or SPACE next case / combination',
-    'D third diagram / whole-frame quantity',
+    'D third diagram: deflection, slope,',
+    '  normal force (frames), axial displ.',
+    'D in whole-frame view: next quantity',
     'M or ] next beam  [ previous beam',
     'B2/3 identifies the inspected beam',
     'x measures distance from that beam start',
@@ -96,18 +100,19 @@ HELP = (
     'Moments ccw +; settlement down +',
     'Reactions up and right +; tension +',
     'Sagging M +; V = dM/dx',
+    'Axial displ. u + toward the member end',
     'm, kN, kNm, kN/m, GPa, cm4, mm, mrad',
     'Euler-Bernoulli; small deflections',
 )
 
-_kept = None  # model, undo, view and pins while PicoLAB stays open
 _active = None
 
 
 class BeamLab:
     def __init__(self, vm):
         self.vm = vm
-        kept = _kept or {}
+        from engtools import session
+        kept = session.kept.get('beam') or {}
         self.model = kept.get('model')
         self.undo = kept.get('undo', [])
         self.view = kept.get('view', 0)
@@ -130,6 +135,7 @@ class BeamLab:
         self.help_first = 0
         self.zoom = 0
         self.help_open = False
+        self.info = False  # result summary box over the preview (I)
         self.solution, self.problem = None, None
         self.peaks = {}
         self.dline, self.ds, self.third, self.cache = 0, 0.0, 'W', None
@@ -143,8 +149,11 @@ class BeamLab:
     # ------------------------------------------------------------ state
 
     def keep(self):
-        global _kept
-        _kept = {'model': self.model, 'undo': self.undo[-UNDO_LIMIT:], 'view': self.view, 'pins': self.pins, 'pin_beams': self.pin_beams}
+        """What survives closing Beam view while PicoLAB stays open. The undo
+        history is left behind: each step is a copy of the whole model."""
+        from engtools import session
+        session.kept['beam'] = {'model': self.model, 'view': self.view, 'pins': self.pins,
+                                'pin_beams': self.pin_beams}
 
     def close(self):
         self.keep()
@@ -445,8 +454,12 @@ class BeamLab:
         return 12
 
     def properties_rect(self):
-        return (8,render.PROPERTIES_TOP,int(self.vm.draw.size.x)-16,
-                int(self.vm.draw.size.y)-self.footer_height-render.PROPERTIES_TOP-3)
+        top = render.MODEL_PROPERTIES_TOP if self.page == 'model' else render.PROPERTIES_TOP
+        return (8,top,int(self.vm.draw.size.x)-16,int(self.vm.draw.size.y)-self.footer_height-top-3)
+
+    def menu_rect(self):
+        """Add/choice menus and prompts replace the lower box; the preview stays visible."""
+        return self.properties_rect() if self.page in ('model','section') else None
 
     def insert_item(self,kind,support_type=None):
         undo_before = self.undo[:]
@@ -590,6 +603,8 @@ class BeamLab:
             self.remove_selected()
         elif c == 'z':
             self.undo_last()
+        elif c == 'i':
+            self.info = not self.info
         elif c in ('+', '='):
             self.zoom = min(self.zoom + 1, len(ZOOMS) - 1)
         elif c == '-':
@@ -718,7 +733,7 @@ class BeamLab:
             if self.whole:
                 self.quantity = (self.quantity + 1) % len(render.OVERVIEW)
             else:
-                order = ('W', 'T', 'N') if not bm.is_straight_beam(self.model) else ('W', 'T')
+                order = ('W', 'T', 'N', 'U') if not bm.is_straight_beam(self.model) else ('W', 'T', 'U')
                 self.third = order[(order.index(self.third) + 1) % len(order)] if self.third in order else 'W'
                 self.cache = None
         elif c in ('m', '[', ']'):
@@ -739,7 +754,7 @@ class BeamLab:
         start, end = self.plot_bounds()
         out = []
         names = (('M', 'moment', 'kNm'), ('V', 'shear', 'kN'), ('N', 'normal', 'kN'), ('W', 'deflection', 'mm'),
-                 ('T', 'slope', 'mrad'))
+                 ('U', 'axial displ.', 'mm'), ('T', 'slope', 'mrad'))
         for q, name, unit in names:
             hi, sh, lo, sl = ext[q]
             if abs(hi) > 1e-6:
@@ -820,13 +835,17 @@ class BeamLab:
         rows.append(('Equilibrium', 'OK' if ok else 'CHECK', detail, None if ok else theme.ERROR, None))
         names = (('M', 'moment', 'kNm'), ('V', 'shear', 'kN'), ('W', 'deflection', 'mm'), ('T', 'slope', 'mrad'))
         if not straight:
-            names = (('M', 'moment', 'kNm'), ('V', 'shear', 'kN'), ('N', 'normal force', 'kN'), ('W', 'deflection', 'mm'))
+            names = (('M', 'moment', 'kNm'), ('V', 'shear', 'kN'), ('N', 'normal force', 'kN'), ('W', 'deflection', 'mm'),
+                     ('U', 'axial displacement', 'mm'))
         for line in range(len(sol.lines)):
             run = sol.lines[line]
             heading = 'Peaks' if straight else 'Members ' + ', '.join(str(m + 1) for m in run)
             rows.append((heading, None, '', None, None))
             ext = self.extremes(line)
-            for q, name, unit in names:
+            shown = names
+            if straight and max(abs(ext['U'][0]), abs(ext['U'][2])) > 1e-9:
+                shown = names + (('U', 'axial displacement', 'mm'),)  # axial loads on a straight beam
+            for q, name, unit in shown:
                 hi, sh, lo, sl = ext[q]
                 rows.append(('Max ' + name, units.show(hi, unit), 'at s = ' + units.show(sh, 'm'), None, ('goto', line, sh)))
                 rows.append(('Min ' + name, units.show(lo, unit), 'at s = ' + units.show(sl, 'm'), None, ('goto', line, sl)))
@@ -1118,7 +1137,7 @@ class BeamLab:
                 render.form(bounded,p,[r[:4] for r in self.combo_rows()],max(1,self.menu_index),None,70,bottom-7)
 
         render.chrome(draw,p,subtitle.replace('Beam / ',''),self.message,self.error)
-        box=self.properties_rect() if self.page in ('model','section') else None
+        box=self.menu_rect()
         if self.popup is not None:
             title,options,index,apply=self.popup
             render.popup(draw,p,title,options,index,box)
@@ -1127,7 +1146,7 @@ class BeamLab:
 
     def draw_prompt(self,draw,p):
         q=self.prompt
-        box=self.properties_rect() if self.page in ('model','section') else None
+        box=self.menu_rect()
         render.prompt(draw,p,q['title'],q['detail'],q['edit'],q['message'] or 'ENTER saves  ESC cancels',
                       bool(q['message']),box)
 
@@ -1181,19 +1200,20 @@ class BeamLab:
     def draw_model(self,draw,p):
         frame=render.layout(self.model);runs=bm.lines(self.model)
         here=items.cursor_point(self.model,self.line,self.s,runs)
-        x,y,w,h=render.PREVIEW_RECT
+        x,y,w,h=render.MODEL_PREVIEW
         title='BEAM PREVIEW' if bm.is_straight_beam(self.model) else 'FRAME PREVIEW'
-        render.panel(draw,p,render.PREVIEW_RECT,title,self.cursor_label()+'  %dx'%ZOOMS[self.zoom],p.PANEL)
+        render.panel(draw,p,render.MODEL_PREVIEW,title,self.cursor_label()+'  %dx'%ZOOMS[self.zoom],p.PANEL)
         preview=render.Viewport(draw,(x+5,y+17,x+w-5,frame['bottom']))
         pp=theme.colors(p.PANEL,p.TEXT,p.ACCENT)
         view=render.View(self.model,frame['box'],ZOOMS[self.zoom],here)
         shape=render.deflected(self.model,self.solution,view,self.view) if self.solution is not None else None
         render.sketch(preview,pp,self.model,view,self.sel[0] if self.sel else None,(here,self.s),
                       self.problem,shape,runs[self.line],frame['bottom'],self.cursor_member(runs))
-        draw._line(x+7,frame['bottom']+1,x+w-8,frame['bottom']+1,p.GRID)
         lines,bad=self.summary()
-        summary=render.Viewport(draw,(x+7,frame['status'],x+w-7,y+h-3))
-        render.status(summary,p,lines[:2],[p.ERROR if bad else p.MUTED]*2,frame['status'])
+        if self.info or bad:
+            render.summary_box(draw,p,lines,bad,render.MODEL_PREVIEW)
+        else:
+            render.right_text(draw,x+w-8,y+h-12,'I results',p.MUTED)
         rect=self.properties_rect();rows=self.rows();index=self.row_index(rows)
         render.model_tabs(draw,p,rect,MODEL_TABS,self.model_tab,[len(self.model['members']),len(self.model['supports']),len(self.model['loads'])])
         if rows:
@@ -1242,6 +1262,9 @@ class BeamLab:
                                                                  units.number(right[2] * 1e3, 3))
         else:
             readout = 'V %s kN  M %s kNm  N %s kN  w %s mm' % (pair(0, 'kN'), pair(1, 'kNm'), pair(4, 'kN'), pair(3, 'mm'))
+        if self.third == 'U' and not self.whole:
+            # The axial displacement panel reads u in place of the last value.
+            readout = readout.rsplit('  ', 1)[0] + '  u %s mm' % pair(5, 'mm')
         title = self.plot_title()
         if self.whole:
             render.diagram_header(draw,p,title,sol.view_names()[self.view],readout)

@@ -11,7 +11,8 @@ from array import array
 from time import ticks_ms, ticks_diff
 from picoware.system.buttons import *
 from picoware.system.font import FONT_SMALL
-from ..ui import theme
+from ..ui import theme, lab
+from ..ui.forms import LineEdit, erase_key, parse_number
 
 BG, PANEL, TEXT, MUTED = theme.BG, theme.PANEL, theme.TEXT, theme.MUTED
 ACCENT, GRID, AXIS, SELECT, ERROR = theme.ACCENT, theme.GRID, theme.AXIS, theme.SELECT, theme.ERROR
@@ -307,10 +308,20 @@ def validate_spec(spec):
     return spec
 
 
+WINDOW_FIELDS = (('X minimum', 0), ('X maximum', 1), ('Y minimum', 2), ('Y maximum', 3),
+                 ('T minimum', 4), ('T maximum', 5), ('Fit padding %', 6))
+
+
 class GraphApp:
     def __init__(self, vm, spec=None, persistent=True, embedded=False):
         self.vm = vm
-        self._keyboard = None
+        self.edit = None
+        self.edit_title = ''
+        self.edit_error = False
+        self.help_first = 0
+        self.help_return = 'plot'
+        self.edit_note = ''
+        self.error = False
         self.palette=theme.system_palette(vm)
         self.data_only=bool(spec and spec.get('data_only'))
         self.note=str(spec.get('note','')) if spec else ''
@@ -320,8 +331,8 @@ class GraphApp:
         self.title, self.axes_spec, self.legend = '', {}, False
         self.draw = vm.draw
         self.width, self.height = int(vm.draw.size.x), int(vm.draw.size.y)
-        self.left, self.top = 6, 28
-        self.right, self.bottom = self.width - 7, self.height - 43
+        self.left, self.top = 6, lab.HEAD + 4
+        self.right, self.bottom = self.width - 7, self.height - lab.FOOT - 4
         self.pw, self.ph = self.right - self.left, self.bottom - self.top
         self.bounds = [-10., 10., -10., 10.]
         self.trange = [0., 2 * math.pi]
@@ -344,7 +355,7 @@ class GraphApp:
             self.axes_spec = spec.get('axes',{})
             self.legend = bool(spec.get('legend',False))
             if self.axes_spec:
-                self.top, self.bottom = 42, self.height-56
+                self.top, self.bottom = lab.HEAD + 16, self.height - lab.FOOT - 18
                 self.ph = self.bottom-self.top
             self.bounds = list(spec.get('bounds',self.bounds))
             self.trange = list(spec.get('t_range',self.trange))
@@ -374,14 +385,15 @@ class GraphApp:
         if color is None: color=self.palette.TEXT
         self.draw._text(int(x), int(y), str(text), color, FONT_SMALL)
 
-    def keyboard(self):
-        if self._keyboard is None:
-            from engtools.ui.keyboard import create
-            self._keyboard=create(self.vm,('tools','Graph'))
-        return self._keyboard
-
-    def chrome(self, subtitle, hint1, hint2):
-        theme.chrome(self.draw,subtitle,hint1,hint2,self.brand,self.palette)
+    def chrome(self, page):
+        """The shared PicoLAB title bar and footer (Beam view's look)."""
+        if self.data_only:
+            title, fallback, brand = 'CHART', ('Eggcel', 'chart'), 'PicoDESK'
+        elif self.embedded:
+            title, fallback, brand = (self.title or 'PLOT')[:20].upper(), (), 'PicoLAB'
+        else:
+            title, fallback, brand = 'GRAPH', ('tools', 'Graph'), 'PicoLAB'
+        lab.chrome(self.draw, self.palette, page, self.message, self.error, title, fallback, brand=brand)
 
     def annotations(self):
         for axis in ('x','y'):
@@ -391,7 +403,7 @@ class GraphApp:
             caption = label+(' ['+unit+']' if unit else '')
             caption = caption[:theme.columns(self.draw,self.width-14)]
             if self.axes_spec:
-                if axis == 'y': self.text(7,27,caption,self.palette.MUTED)
+                if axis == 'y': self.text(7,self.top-14,caption,self.palette.MUTED)
                 else: self.text(max(7,(self.width-self.draw.len(caption,FONT_SMALL))//2),self.bottom+5,caption,self.palette.MUTED)
         if self.legend:
             visible=[e for e in self.items if e.visible]
@@ -491,7 +503,6 @@ class GraphApp:
         self.completed = False
         self.draw.fill_screen(self.palette.BG)
         self.axes()
-        self.message = ''
         # Shade first, then draw curves, so a fill cannot obscure another curve.
         active = [e for e in self.items if e.visible and not e.error]
         ordered = [e for e in active if e.relation != '='] + [e for e in active if e.relation == '=']
@@ -506,15 +517,9 @@ class GraphApp:
 
     def plot_chrome(self, status):
         b = self.bounds
-        subtitle = self.title+' '+status if self.title else '{}  x:{:g}..{:g}'.format(status,b[0],b[1])
-        second='W window  F fit  ESC return' if self.embedded else 'W window  F fit  R reset  ESC menu'
-        if self.data_only:
-            second=self.note or 'F fit all data  ESC sheet'
-            self.chrome(subtitle,'ARROWS pan +/- zoom F fit ESC sheet',second)
-        else:
-            self.chrome(subtitle,'ARROWS pan  +/- zoom  ENTER series' if self.embedded else 'ARROWS pan  +/- zoom  ENTER expressions',second)
-        if self.message:
-            self.text(8,self.top+5,self.message[:49],self.palette.ERROR)
+        self.chrome('{}  x {:g}..{:g}'.format(status, b[0], b[1]))
+        if self.data_only and self.note and not self.message:
+            lab.text(self.draw, 60, self.height - lab.FOOT + 2, self.note[:40], self.palette.MUTED)
 
     def render_batch(self):
         job = self.job
@@ -758,6 +763,9 @@ class GraphApp:
         return py2 >= self.bottom
 
     def set_state(self, state):
+        if state == 'help' and self.state != 'help':
+            self.help_return = self.state if self.state not in ('input', 'help') else 'plot'
+            self.help_first = 0
         self.state,self.row,self.dirty = state,0,True
         self.job,self.refine = None,None
 
@@ -768,46 +776,101 @@ class GraphApp:
                         ('Help','controls'),('Return to sheet','preserve unsaved changes')]
             return [('Plot',''),('Expressions',str(len(self.items))),('Window','bounds / t / padding'),
                     ('Fit','Y / visible / equal scale'),('Presets','examples'),('Save session','SD card'),('Help','syntax and controls'),('Quit','')]
-        if self.state == 'expressions':
+        if self.state in ('expressions', 'input'):
             rows=[(('ON ' if e.visible else 'OFF ')+e.text, e.error or ('sampled '+e.style if e.kind=='samples' else 'parametric' if e.kind=='param' else e.relation)) for e in self.items]
-            return rows+([] if self.data_only else [('Add expression',str(len(self.items))+'/6')])+[('Return to plot','')]
+            return rows+([] if self.data_only else [('+ Add expression',str(len(self.items))+'/6')])
         if self.state == 'window':
-            if self.data_only:
-                return [(label,'{:g}'.format(value)) for label,value in zip(
-                    ('X minimum','X maximum','Y minimum','Y maximum','Fit padding %'),self.bounds+[self.padding])]+[('Grid','On' if self.grid else 'Off'),('Return to plot','')]
-            labels=('X minimum','X maximum','Y minimum','Y maximum','T minimum','T maximum','Fit padding %')
-            values=self.bounds+self.trange+[self.padding]
-            return [(lab,'{:g}'.format(val)) for lab,val in zip(labels,values)]+[('Grid','On' if self.grid else 'Off'),('Return to plot','')]
+            return [(label,'{:g}'.format(value)) for label,value,_ in self.window_fields()]+[('Grid','On' if self.grid else 'Off')]
         if self.state == 'fit':
-            return [('Fit Y','functions in current X window'),('Fit visible curves','current window search only'),('Equal axis scale','circles stay circular'),('Default window','-10 .. 10'),('Return to plot','')]
+            return [('Fit Y','functions in current X window'),('Fit visible curves','current window search only'),('Equal axis scale','circles stay circular'),('Default window','-10 .. 10')]
         if self.state == 'presets': return [(name,'') for name,_ in PRESETS]
-        if self.state == 'help':
-            if self.data_only:
-                return [('ARROWS / +/-','Pan / zoom'),('F fit all data','Restore bounds including offscreen samples'),
-                        ('ENTER series; SPACE show/hide','Series use distinct point markers'),
-                        ('W window; G grid','Change plot bounds / toggle grid'),
-                        ('ESC from plot returns to Eggcel','Unsaved cells and selection are preserved'),
-                        ('Blank/text/error pairs are gaps','Edit source cells and redraw to refresh')]
-            return [('sin(x) or y=x^2','^ means power; use 2*x'),('x=3 or x*y=1','equations can use x and y'),('x^2+y^2<=25','< > <= >= shade regions'),('cos(t);sin(t)','parametric; set T in Window'),('ARROWS pan / +/- zoom','ENTER expressions; ESC menu'),('SPACE show/hide','D delete; ENTER edit'),('F fit / W window / R reset','Implicit fit searches visible area'),('Save session','equations + bounds on SD'),('ESC returns to menu','')]
         return []
 
+    def window_fields(self):
+        """(label, value, target) of the numeric Window rows."""
+        values = self.bounds+self.trange+[self.padding]
+        return [(label, values[i], i) for label, i in WINDOW_FIELDS if not (self.data_only and i in (4, 5))]
+
+    def help_lines(self):
+        if self.data_only:
+            return ('Chart:', 'ARROWS pan   + - zoom', 'F fit all data   G grid', 'W window   ESC back to the sheet',
+                    'Series (ENTER):', 'ENTER or SPACE shows / hides', 'Series use distinct point markers',
+                    'Window (W):', 'UP/DOWN choose   ENTER edit', 'Type a number to replace a value',
+                    'UP/DOWN while typing applies it', 'ENTER on Grid toggles it',
+                    'Data:', 'Blank, text or error pairs are gaps', 'Edit cells and redraw to refresh',
+                    'F9 or H opens this help; ESC closes')
+        return ('Plot:', 'ARROWS pan   + - zoom', 'ENTER expressions   W window', 'F fit   R reset   G grid',
+                'ESC menu' + (' (returns to the tool)' if self.embedded else ''),
+                'Expressions (ENTER):', 'UP/DOWN choose   ENTER edit or add', 'SPACE show / hide   DEL removes',
+                'Typing happens in place; ESC cancels',
+                'Window (W):', 'UP/DOWN choose   ENTER edit', 'Type a number to replace a value',
+                'UP/DOWN while typing applies it', 'ENTER on Grid toggles it',
+                'Syntax:', 'sin(x) or y=x^2   ^ is power', 'x=3 or x*y=1   equations', 'x^2+y^2<=25   shaded region',
+                'cos(t);sin(t)   parametric, T in Window', 'Arithmetic in numbers: 2*pi, 10/3',
+                'Session:', 'Save session keeps equations and bounds', 'F9 or H opens this help; ESC closes')
+
     def draw_menu(self):
-        rows = self.menu_rows()
-        colors = [(e.color,self.palette.ERROR if e.error else self.palette.MUTED) for e in self.items] if self.state=='expressions' else []
-        colors += [(self.palette.TEXT,self.palette.MUTED)]*(len(rows)-len(colors))
-        footer = 'SPACE visibility  D delete  ENTER edit' if self.state=='expressions' else 'UP/DOWN choose  ENTER select'
-        if self.data_only and self.state=='expressions': footer='ENTER/SPACE visibility  ESC plot'
-        theme.menu(self.draw,rows,self.row,self.state,self.brand,footer,self.message or 'ESC returns   H help',colors,self.palette)
+        d, p = self.draw, self.palette
+        bottom = self.height - lab.FOOT
+        d.fill_screen(p.BG)
+        state = self.return_state if self.state == 'input' else self.state
+        if self.state == 'help':
+            lab.help_box(d, p, self.help_lines(), self.help_first, bottom)
+        elif state == 'window':
+            fields = self.window_fields()
+            rows = [('field', label, '{:g}'.format(value), True) for label, value, _ in fields]
+            rows.append(('field', 'Grid', 'On' if self.grid else 'Off', True))
+            lab.panel(d, p, (8, 43, self.width-16, bottom-46), 'WINDOW', '%d/%d' % (self.row+1, len(rows)))
+            lab.form(d, p, rows, self.row, self.edit if self.state == 'input' else None, 67, bottom-7)
+            if self.state == 'input' and self.edit_note:
+                lab.text(d, 16, bottom-20, self.edit_note[:46], p.ERROR if self.edit_error else p.MUTED)
+        else:
+            saved, self.state = self.state, state
+            rows = self.menu_rows()
+            self.state = saved
+            colors = None
+            if state == 'expressions':
+                colors = [(e.color, p.ERROR if e.error else p.MUTED) for e in self.items]
+                colors += [(p.TEXT, p.MUTED)]*(len(rows)-len(colors))
+            names = {'menu': 'MENU', 'expressions': 'SERIES' if self.data_only else 'EXPRESSIONS',
+                     'fit': 'FIT', 'presets': 'PRESETS'}
+            lab.menu(d, p, rows, min(self.row, max(0, len(rows)-1)), names.get(state, state.upper()), bottom, colors)
+            if self.state == 'input':
+                lab.prompt(d, p, self.edit_title, 'Equation, inequality or x(t);y(t)', self.edit,
+                           self.edit_note or 'ENTER apply   ESC cancel', self.edit_error, (8, bottom-110, self.width-16, 106))
+        self.chrome('help' if self.state == 'help' else state)
+        d.swap()
         self.dirty = False
 
-    def begin_edit(self, target, initial, title):
-        self.edit_target=target
-        if self.state != "input": self.return_state=self.state
-        self.state='input'
-        kb=self.keyboard()
-        kb.reset(); kb.title=title; kb.response=initial
-        self.vm.input_manager.reset()
-        kb.run(force=True)
+    def begin_edit(self, target, initial, title, first=None):
+        """Edit in place: a prompt for expressions, the Window row for numbers."""
+        self.edit_target = target
+        if self.state != 'input': self.return_state = self.state
+        self.state = 'input'
+        self.edit = LineEdit('' if first is not None else initial, 80 if target[0] == 'expression' else 24)
+        if first is not None: self.edit.key(self.vm, first)
+        self.edit_title, self.edit_note, self.edit_error = title, '', False
+        self.dirty = True
+
+    def edit_key(self, button):
+        """A key while editing; True when the editor closed."""
+        result = 'cancel' if button == BUTTON_ESCAPE else self.edit.key(self.vm, button)
+        if result == 'cancel':
+            self.edit, self.state, self.dirty = None, self.return_state, True
+            return True
+        if result is None:
+            self.dirty = True
+            return False
+        try:
+            self.finish_edit(self.edit.text.strip())
+        except Exception as exc:
+            # Keep the text for correction rather than discard invalid input.
+            self.edit_note, self.edit_error, self.dirty = str(exc), True, True
+            return False
+        self.edit, self.state, self.message, self.error, self.dirty = None, self.return_state, '', False, True
+        if result in ('up', 'down') and self.state == 'window':
+            self.row = (self.row + (-1 if result == 'up' else 1)) % len(self.menu_rows())
+        return True
 
     def finish_edit(self, text):
         target=self.edit_target
@@ -819,7 +882,7 @@ class GraphApp:
                 e.visible=self.items[target[1]].visible
                 self.items[target[1]]=e
         else:
-            value=float(text)
+            value=parse_number(text)
             if not finite(value): raise ValueError('Enter a finite number')
             i=target[1]
             if i<4:
@@ -919,25 +982,17 @@ class GraphApp:
         elif self.state=='expressions':
             if self.data_only:
                 if i<len(self.items): self.items[i].visible=not self.items[i].visible;self.dirty=True
-                else: self.set_state('plot')
             elif i<=len(self.items):
                 if i==len(self.items) and len(self.items)>=MAX_EXPRESSIONS: raise ValueError('Six expressions maximum')
                 if i<len(self.items) and self.items[i].kind=='samples': raise ValueError('Sample data is edited in its source tool')
                 text=self.items[i].text if i<len(self.items) else ''
-                self.begin_edit(('expression',i),text,'Equation / inequality / x(t);y(t)')
-            else: self.set_state('plot')
+                self.begin_edit(('expression',i),text,'Expression %d' % (i+1) if i<len(self.items) else 'New expression')
         elif self.state=='window':
-            if self.data_only:
-                if i<5:
-                    target=i if i<4 else 6
-                    self.begin_edit(('number',target),str((self.bounds+[self.padding])[i]),self.menu_rows()[i][0])
-                elif i==5: self.grid=not self.grid;self.dirty=True
-                else: self.set_state('plot')
-            elif i<7:
-                val=(self.bounds+self.trange+[self.padding])[i]
-                self.begin_edit(('number',i),str(val),self.menu_rows()[i][0])
-            elif i==7: self.grid=not self.grid; self.dirty=True
-            else: self.set_state('plot')
+            fields=self.window_fields()
+            if i<len(fields):
+                label,value,target=fields[i]
+                self.begin_edit(('number',target),'{:g}'.format(value),label)
+            else: self.grid=not self.grid; self.dirty=True
         elif self.state=='fit':
             if i==3: self.bounds=[-10.,10.,-10.,10.]
             elif i<3: self.fit(('y','visible','equal')[i])
@@ -953,26 +1008,25 @@ class GraphApp:
         button=self.vm.button
         if self.data_only and button==inp._key_esc: button=BUTTON_ESCAPE
         if self.state=='input':
-            kb=self.keyboard()
-            if button==BUTTON_ESCAPE:
-                inp.reset(); kb.reset(); self.set_state(self.return_state)
-            elif not kb.run():
-                kb.reset(); self.set_state(self.return_state)
-            elif kb.is_finished:
-                result=kb.response.strip(); kb.reset(); inp.reset()
-                try:
-                    self.finish_edit(result)
-                    self.message=''
-                except Exception as exc:
-                    # Keep the text for correction rather than discard invalid input.
-                    self.begin_edit(self.edit_target,result,str(exc)[:46])
-                    return
-                self.set_state(self.return_state)
+            if button!=BUTTON_NONE:
+                inp.reset()
+                self.edit_key(button)
+                if self.dirty: self.draw_menu()
             return
         if button!=BUTTON_NONE:
             inp.reset()
+            self.message, self.error = '', False
             try:
-                if self.state=='plot':
+                if button==BUTTON_F9 or (self.state=='help' and button in (BUTTON_ESCAPE,BUTTON_CENTER,BUTTON_H)):
+                    if self.state=='help': self.state,self.dirty=self.help_return,True
+                    else: self.set_state('help')
+                elif self.state=='help':
+                    capacity=lab.help_capacity(self.height-lab.FOOT)
+                    last=max(0,len(self.help_lines())-capacity)
+                    if button in (BUTTON_UP,BUTTON_DOWN): self.help_first+=1 if button==BUTTON_DOWN else -1
+                    elif button in (BUTTON_LEFT,BUTTON_RIGHT): self.help_first+=capacity if button==BUTTON_RIGHT else -capacity
+                    self.help_first=min(max(self.help_first,0),last); self.dirty=True
+                elif self.state=='plot':
                     if button in (BUTTON_LEFT,BUTTON_RIGHT,BUTTON_UP,BUTTON_DOWN):
                         b=self.bounds[:]; dx=(b[1]-b[0])*0.12; dy=(b[3]-b[2])*0.12
                         if button==BUTTON_LEFT: b[0]-=dx; b[1]-=dx
@@ -1004,13 +1058,24 @@ class GraphApp:
                     if self.state=='menu' and not self.data_only:self.vm.back();return
                     self.set_state('plot' if self.data_only or self.state in ('expressions','window','fit','menu') else 'menu')
                 elif button in (BUTTON_UP,BUTTON_DOWN):
-                    self.row=(self.row+(-1 if button==BUTTON_UP else 1))%len(self.menu_rows()); self.dirty=True
+                    count=len(self.menu_rows())
+                    if count: self.row=(self.row+(-1 if button==BUTTON_UP else 1))%count
+                    self.dirty=True
                 elif button==BUTTON_CENTER: self.activate()
+                elif button in (BUTTON_H,BUTTON_QUESTION): self.set_state('help')
+                elif self.state=='window' and self.row<len(self.window_fields()):
+                    char=inp.button_to_char(button)
+                    label,value,target=self.window_fields()[self.row]
+                    if erase_key(self.vm,button):
+                        self.begin_edit(('number',target),'{:g}'.format(value),label)
+                        self.edit.key(self.vm,button)
+                    elif char and (char.isdigit() or char in '-.('):
+                        self.begin_edit(('number',target),'',label,button)
                 elif self.state=='expressions' and self.row<len(self.items):
                     if button==BUTTON_SPACE: self.items[self.row].visible=not self.items[self.row].visible; self.dirty=True
-                    elif button in (BUTTON_D,BUTTON_DELETE,BUTTON_BACKSPACE) and not self.data_only: self.items.pop(self.row); self.row=min(self.row,len(self.items)); self.dirty=True
+                    elif button in (BUTTON_D,BUTTON_DELETE,BUTTON_BACKSPACE,inp._key_back) and not self.data_only: self.items.pop(self.row); self.row=min(self.row,len(self.items)); self.dirty=True
             except Exception as exc:
-                self.message=str(exc); self.dirty=True
+                self.message=str(exc); self.error=True; self.dirty=True
         if self.state=='plot':
             if self.dirty: self.redraw()
             if self.refine is not None and ticks_diff(ticks_ms(),self.refine)>250: self.redraw()

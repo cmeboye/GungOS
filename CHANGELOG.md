@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+- Mohr circle in PicoLAB → Modules → Structural: a 2D plane-stress or 3D
+  stress state typed in MPa, drawn as Mohr's circle(s) beside the element
+  turned by theta. Left/Right turn the element 1 deg ([ / ] 15 deg), P and S
+  jump to the principal and maximum-shear axes, and in 3D A picks the rotation
+  axis (x, y or z). Shows rotated stresses, principal stresses and angle,
+  maximum shear, von Mises and Tresca, and safety factors against a yield
+  strength. F3 has worked examples. About 29 KB of heap while open, all
+  returned at the PicoLAB menu. SD update only. See
+  [Mohr circle](guides/MohrCircle.md).
+- Beam view plots axial displacement u (along the member, positive toward its
+  end) as a third diagram panel (`D`), with its peaks under Tab and in F5
+  Results for frames, and for straight beams that carry axial load.
+- Beam view's model preview is 184 pixels tall instead of 142: the tabs and
+  property list move down and show three rows at a time, and the result
+  summary is a box toggled with `I` (model problems always show).
+
+## v1.31 — 2026-10-19
+
+Fixes the v1.3 performance problem below; use v1.31 instead of v1.3. Tested on
+hardware: Beam view runs without freezes.
+
+- Closed SD apps give their heap back. Their modules used to stay loaded until
+  reboot (after Beam view, Graph and Graph3D about 275 KB in the simulator);
+  the firmware menus now unload SD app modules once no SD app is open, and
+  PicoLAB unloads a tool's code when you return to its menu (Beam view alone
+  is over 100 KB). Beam view keeps its model while PicoLAB is open, without
+  the undo history; Graph3D saves its surface and ranges to SD. Beam view
+  caches fewer diagram samples. The first load of a tool still interns its
+  names once (about 35 KB for Beam view); repeated visits add nothing.
+
+## v1.3 — 2026-10-19
+
+> **Known issue, fixed in v1.31:** closed SD apps kept their code and data in
+> RAM until reboot, so the heap climbed during use and stayed high after
+> leaving Beam view, Graph or Graph3D, and performance degraded over a
+> session. Do not use v1.3; flash v1.31.
+
+- Graph and Graph3D share Beam view's screen parts (`engtools/ui/lab.py`): the
+  PicoLAB title bar, panels, menus, one-line footer and F9 help. Window
+  values, settings and equations are typed in place on the hardware keyboard;
+  the on-screen keyboard is gone from both.
+- Graph3D ranges: X, Y and Z minimum/maximum, Z Auto or Fixed (clips z=f, or
+  bounds an implicit volume), Equal or Box aspect.
+- Graph3D heat map: z = f(x, y) as colour with a colour bar, contours and a
+  probe reading x, y, z; implicit surfaces refuse it with a reason.
+
 - Beam Lab in PicoLAB: build a beam on its drawing (supports, springs,
   hinges, point, moment and distributed loads, section changes with material
   and shape presets), solved after every change by `picosolve`. Diagrams of

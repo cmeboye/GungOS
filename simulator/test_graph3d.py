@@ -84,9 +84,51 @@ key(BUTTON_R); assert (g._pitch,g._yaw,g._zoom,g._pan_x,g._pan_y)==(.55,.70,1.,0
 key(BUTTON_W); assert g._state==g.ST_SETTINGS
 key(BUTTON_NONE)
 vm.draw.screenshot('/private/tmp/graph3d-settings.bmp')
-g._set_row=4; key(BUTTON_CENTER); assert g._navigation=='pan'
-g._set_row=0; old_range=g._range; key(BUTTON_RIGHT); assert g._range!=old_range and g._need_eval
+def row(name): return [r[0] for r in g._settings_rows()].index(name)
+def typed(text):
+ for c in text: key(vm.input_manager._key_to_button(ord(c)))
+g._set_row=row('nav'); before=g._navigation; key(BUTTON_CENTER); assert g._navigation!=before
+key(BUTTON_CENTER); assert g._navigation==before
+# Ranges are typed in place, like Beam view's values: no on-screen keyboard.
+g._set_row=row('x1'); typed('6'); assert g._edit is not None and g._edit.text=='6'
+key(BUTTON_DOWN); assert g._edit is None and g._bounds==[-4,6,-4,4] and g._need_eval and g._set_row==row('y0')
+typed('-2'); key(BUTTON_CENTER); assert g._bounds==[-4,6,-2,4]
+g._set_row=row('x0'); typed('9'); key(BUTTON_CENTER)
+assert g._edit is not None and g._edit_error and 'below' in g._edit_note and g._bounds==[-4,6,-2,4]
+key(BUTTON_ESCAPE); assert g._edit is None and g._state==g.ST_SETTINGS
+vm.draw.screenshot('/private/tmp/graph3d-settings-ranges.bmp')
 key(BUTTON_ESCAPE); sampled(); assert g._state==g.ST_PLOT and not g._need_eval
+xs=[g._mesh[i] for i in range(0,len(g._mesh),3)]; ys=[g._mesh[i+1] for i in range(0,len(g._mesh),3)]
+assert abs(max(xs)-min(xs)-10)<1e-3 and abs(max(ys)-min(ys)-6)<1e-3, 'Equal aspect keeps true x and y spans'
+vm.draw.screenshot('/private/tmp/graph3d-ranges.bmp')
+# Box aspect stretches both axes to the same displayed size; a fixed Z clips the surface.
+key(BUTTON_W); g._set_row=row('aspect'); key(BUTTON_CENTER); assert g._aspect=='box'
+g._set_row=row('z1'); typed('0.3'); key(BUTTON_CENTER); assert g._zrange and g._zrange[1]==0.3
+key(BUTTON_ESCAPE); sampled()
+xs=[g._mesh[i] for i in range(0,len(g._mesh),3)]; ys=[g._mesh[i+1] for i in range(0,len(g._mesh),3)]
+assert abs((max(xs)-min(xs))-(max(ys)-min(ys)))<1e-3 and g._zmax==0.3
+assert max(g._mesh[i+2] for i in range(0,len(g._mesh),3))<=0.3+1e-6
+key(BUTTON_W); g._set_row=row('zmode'); key(BUTTON_CENTER); assert g._zrange is None
+g._set_row=row('aspect'); key(BUTTON_CENTER); assert g._aspect=='equal'
+key(BUTTON_ESCAPE); sampled()
+# Heat map: style cycles wire -> heat map; the probe reads f at its cell.
+key(BUTTON_S); sampled(); assert g._style==0
+key(BUTTON_S); sampled(); assert g._style==2 and g._heat_info and g._heat_lines is not None
+cols,rows,left,top,cw,ch,lo,hi=g._heat_info
+assert cols>40 and rows>30 and lo<0<hi
+vm.draw.screenshot('/private/tmp/graph3d-heatmap.bmp')
+p0=list(g._probe); key(BUTTON_RIGHT); key(BUTTON_UP); assert g._probe==[p0[0]+1,p0[1]-1]
+x,y=g._probe_point(); assert abs(g._field(g._surface_expression(g._expr)[1],dict(g._SAFE),x,y)-0.6*g.sin(x)*g.cos(y))<1e-5
+key(BUTTON_L); assert not g._contours
+vm.draw.screenshot('/private/tmp/graph3d-heatmap-plain.bmp')
+key(BUTTON_L); old=g._xy_bounds(); key(BUTTON_PLUS); sampled()
+assert g._xy_bounds()[1]-g._xy_bounds()[0]<old[1]-old[0] and g._style==2
+# An implicit surface refuses the heat map with a reason and stays 3D.
+g._expr='x^2+y^2+z^2=1'; g._bounds=None; g._range=2; g._need_eval=g._need_heat=True; g._goto_plot(vm); sampled()
+assert g._style==1 and g._toast_error and 'implicit' in g._toast
+vm.draw.screenshot('/private/tmp/graph3d-heatmap-implicit.bmp')
+key(BUTTON_S); key(BUTTON_S); sampled(); assert g._style==1 and g._toast_error
+g._expr='0.6*sin(x)*cos(y)'; g._range=4; g._need_eval=g._need_heat=True; g._goto_plot(vm); sampled()
 key(BUTTON_ESCAPE); assert g._state==g.ST_MENU
 vm.draw.screenshot('/private/tmp/graph3d-menu.bmp')
 # Existing presets, second surface, saved equations and slices remain usable.
@@ -107,4 +149,4 @@ key(BUTTON_A); assert g._auto
 sleep_ms(60); key(BUTTON_NONE); assert g._yaw!=yaw
 key(BUTTON_A); settle(); assert not g._auto and g._preview_at is None
 g.stop(vm); assert g._zs is None and g._zs2 is None
-print('PASS: pan/orbit, zoom limits, fit, clipping, cached mesh, preview refinement, menus, settings, slices, presets, saved equations and paced spin')
+print('PASS: pan/orbit, zoom limits, fit, typed ranges, aspect, fixed z, heat map, probe, contours, implicit refusal, menus, slices, presets, saved equations and paced spin')

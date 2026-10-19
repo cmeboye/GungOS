@@ -17,11 +17,16 @@ PicoLAB logo and breadcrumb, followed by a thin mode bar, a bordered preview and
 The system theme supplies the colours. No additional framebuffer is allocated
 for panel clipping; zoomed members, loads and labels stay inside the preview.
 
-On the 320 x 320 display, the preview is at `(8, 43)` and measures **304 x 142**
-pixels. The properties box starts at `(8, 191)`, with the same width. Its height
-is 114 pixels, above a fixed 12-pixel footer. The beam, frame and
-section views share those bounds. Property lists scroll to keep the active row
-and inline editor visible. The lower box has **Beams**, **Supports** and
+On the 320 x 320 display, the model preview is at `(8, 43)` and measures
+**304 x 184** pixels. The properties box starts at `(8, 230)`, with the same
+width, and shows three rows at a time above a fixed 12-pixel footer; it scrolls
+to keep the active row and inline editor visible. The section editor keeps a
+304 x 142 preview with its properties box from `(8, 191)`.
+
+The result summary (view name, peak moment, normal force, shear and
+deflection) is a box over the bottom of the preview, hidden until you press
+**I**. A model problem, such as a missing support, always shows there in
+red. The lower box has **Beams**, **Supports** and
 **Loads** tabs. Each lists all items of its type, with a count; selecting an
 item highlights its location in the preview. Add and choice menus replace the
 lower box while the preview stays visible. Joints and hinges remain available
@@ -40,14 +45,15 @@ The bottom bar only shows F9 Help and a brief status message.
 | F1 | Add at the cursor, with options belonging to the selected tab |
 | F2 | Rem: remove the selected item (Z undoes) |
 | F3 | Opt: templates, load cases, combinations, self-weight and files |
-| F4 | Plot: diagrams of shear, moment and deflection (slope or normal force) along a straight run, or the whole frame |
+| F4 | Plot: diagrams of shear, moment and deflection (slope, normal force or axial displacement) along a straight run, or the whole frame |
 | F5 | Results: reactions, equilibrium, peaks, stress, span/deflection, pinned points |
 | F9 | Open / close the scrollable keybindings box |
 
 `?` is an alias for help outside text entry. Help consumes its own navigation
 keys, so browsing it cannot change the model or a pending value.
 ESC closes the current properties first; from the tab list, it leaves Beam view.
-The model stays in memory until PicoLAB is closed.
+The model stays in memory until PicoLAB is closed; Beam view's own code is
+unloaded whenever you return to the PicoLAB menu, so it costs no RAM there.
 
 ## Model
 
@@ -81,7 +87,8 @@ The model stays in memory until PicoLAB is closed.
   During text entry, F2 leaves the item intact. DEL on an item's heading
   also removes it; on a numeric value it edits and erases before the caret.
   Removing a member removes everything on it.
-- `Z` undoes the last change (12 steps, including New and Open).
+- `Z` undoes the last change (12 steps, including New and Open). The undo
+  history is cleared when you leave Beam view, to keep RAM free.
 - `+` and `-` zoom the drawing around the cursor (x2, x4).
 
 Problems the solver finds, such as a structure that can move freely, are
@@ -178,7 +185,9 @@ Sections are shared: every member using one changes with it.
   that beam's side and reopening the pin selects the same beam. Repinning a
   physical point from another beam updates that pin's beam context.
 - `V` or SPACE shows the next load case or combination.
-- `D` changes the third panel: deflection, slope, normal force (frames).
+- `D` changes the third panel: deflection, slope, normal force (frames) and
+  axial displacement u, the movement along the member, positive toward its end.
+  With that panel showing, the readout gives u in place of the last value.
 - `]` or `M` switches to the next individual beam; `[` switches to the
   previous beam, wrapping at either end. TAB retains its peak-stepping role.
 - The top-left indicator identifies the selected beam, for example **B2/3**.
@@ -205,7 +214,8 @@ area x 9.81) to a load case, or turns it off.
 Reactions (vertical, plus horizontal and moment where the support resists
 them), the equilibrium check of all reactions against all loads, then for
 each straight run: largest and smallest moment, shear, normal force
-(frames), deflection and slope, and the largest stress |N/A| + |M/W|. A
+(frames), deflection and slope (straight beams), axial displacement (frames,
+and straight beams with axial load), and the largest stress |N/A| + |M/W|. A
 single beam also shows the worst span/deflection ratio.
 
 ## Signs and units

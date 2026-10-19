@@ -19,11 +19,17 @@ assert Graph._engine is None and Graph3D._engine is None
 assert 'engtools.plots.plot2d' not in sys.modules and 'engtools.plots.plot3d' not in sys.modules
 from engtools.plots import view as plot_view
 captured=[]
-real_open=plot_view.open_view
-def capture_open(vm,name,controller):
- captured[:]=[controller]
- return real_open(vm,name,controller)
-plot_view.open_view=capture_open
+def hook():
+ # PicoLAB unloads the plot modules on return, so patch the live module each time.
+ from engtools.plots import view as live
+ if getattr(live.open_view,'captures',False):return
+ real_open=live.open_view
+ def capture_open(vm,name,controller):
+  captured[:]=[controller]
+  return real_open(vm,name,controller)
+ capture_open.captures=True
+ live.open_view=capture_open
+hook()
 vm=ViewManager()
 vm.add(View('parent',lambda vm:None,lambda vm:True,lambda vm:None));vm.switch_to('parent')
 vm.add(View('lab',lab.run,lab.start,lab.stop));vm.switch_to('lab')
@@ -52,6 +58,7 @@ vm.draw.screenshot('/private/tmp/shared-gallery-menu.bmp')
 count=vm._view_count
 for index in range(5):
  assert lab._gallery_selected==index
+ hook()
  key(BUTTON_CENTER)
  owner=finish()
  vm.draw.screenshot('/private/tmp/shared-preview-'+str(index)+'.bmp')

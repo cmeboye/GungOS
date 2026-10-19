@@ -811,18 +811,18 @@ class Solution:
                         target_q[start + i] += f * part[i]
             start += n
         result = (S, out[0], out[1], out[2], out[3], out[4], out[5], starts)
-        if len(self._samples) > 6:
+        if len(self._samples) >= 3:  # about 7 KB per run and view: keep a few
             self._samples = {}
         self._samples[cache_key] = result
         return result
 
     def extremes(self, line, view, member=None):
-        """{quantity: (max, s_max, min, s_min)} for V, M, T (slope), W and N
+        """{quantity: (max, s_max, min, s_min)} for V, M, T (slope), W, N and U
         along a line (or one member), with interior peaks refined."""
         S, V, M, T, W, N, U, starts = self.samples(line, view, member=member)
         ends = set(starts) | set(s - 1 for s in starts[1:]) | {len(S) - 1}
         result = {}
-        for name, q, data in (('V', 0, V), ('M', 1, M), ('T', 2, T), ('W', 3, W), ('N', 4, N)):
+        for name, q, data in (('V', 0, V), ('M', 1, M), ('T', 2, T), ('W', 3, W), ('N', 4, N), ('U', 5, U)):
             hi = lo = 0
             for i in range(len(data)):
                 if data[i] > data[hi]:

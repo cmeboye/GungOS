@@ -57,13 +57,16 @@ app.show(vm);a=app._active
 def key(button):
     vm.input_manager._last_button=button;vm.run()
 
+def preview_rect():
+    return render.MODEL_PREVIEW if a.page=='model' else render.PREVIEW_RECT
+
 def preview():
-    x,y,w,h=render.PREVIEW_RECT
+    x,y,w,h=preview_rect()
     return [bytes(draw._read_row(yy)[x:x+w]) for yy in range(y,y+h)]
 
 def borders():
     fb=Pixels(draw);expected=colour(a.palette().GRID)
-    for x,y,w,h in (render.PREVIEW_RECT,a.properties_rect()):
+    for x,y,w,h in (preview_rect(),a.properties_rect()):
         assert all(fb.pixel(xx,y)==expected and fb.pixel(xx,y+h-1)==expected for xx in range(x,x+w))
         assert all(fb.pixel(x,yy)==expected and fb.pixel(x+w-1,yy)==expected for yy in range(y,y+h))
 

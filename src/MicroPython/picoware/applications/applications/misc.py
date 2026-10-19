@@ -5,6 +5,8 @@ _selected=0
 
 def start(vm):
     global _menu
+    from picoware.system.app_loader import AppLoader
+    AppLoader.release(vm)  # unload closed SD apps
     from picoware.gui.menu import Menu
     _menu=Menu(vm.draw,'Misc',0,vm.draw.size.y,vm.foreground_color,
                vm.background_color,vm.selected_color)

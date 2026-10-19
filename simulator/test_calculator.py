@@ -280,13 +280,15 @@ class Surface:
 e.clear(); type_text(e, 'int() '); e.template('frac'); e.template('sqrt')
 r = Renderer(Surface(), (40, 215, 303, 264))
 r.expression(e.root, 20, 200, editor=e, follow=True)
+import sys  # PicoLAB unloads the calculator when it closes: use the live module
 count = vm._view_count
 key(k.BUTTON_ESCAPE)
-assert vm.current_view.name == 'lab' and vm._view_count == count-1 and app._active is None
+assert vm.current_view.name == 'lab' and vm._view_count == count-1
+assert 'engtools.calculator.app' not in sys.modules, 'Closed calculator code should be unloaded'
 assert not calc.history and not calc.variables and not calc.editor.root
 key(k.BUTTON_CENTER)
-assert vm.current_view.name == 'eng_calculator' and app._active.answer == 0
-assert not app._active.show_hints
+assert vm.current_view.name == 'eng_calculator' and sys.modules['engtools.calculator.app']._active.answer == 0
+assert not sys.modules['engtools.calculator.app']._active.show_hints
 key(k.BUTTON_ESCAPE)
 assert vm.current_view.name == 'lab'
 print('PASS: mode grid, physical key routing, result/history, clipping and cleanup')

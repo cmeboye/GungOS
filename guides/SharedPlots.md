@@ -65,7 +65,7 @@ from engtools.plots import plot3d
 
 plot3d.show(view_manager, {
     'title': 'Sphere',
-    'range': 2,
+    'range': 2,                    # or 'bounds': [x0, x1, y0, y1]
     'resolution': 12,
     'style': 'solid',
     'surfaces': [{'expression': 'x^2+y^2+z^2=1'}],
@@ -73,7 +73,9 @@ plot3d.show(view_manager, {
 ```
 
 Use one or two expression surfaces, explicit or implicit. `range` is 0.01 to
-100 and `resolution` is an integer from 4 to 64. High resolution still requires
+100 (a symmetric ±range); `bounds` sets uneven x and y limits instead.
+`style` is `solid`, `wire` or `heatmap` (functions only), and `resolution` is
+an integer from 4 to 64. High resolution still requires
 confirmation, sampling can be cancelled, and the memory budget remains enforced.
 Sampled 3D grids and logarithmic axes are future extensions.
 

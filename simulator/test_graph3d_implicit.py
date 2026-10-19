@@ -62,24 +62,17 @@ vm.draw.screenshot('/private/tmp/graph3d-torus.bmp')
 g._expr='x^2+y^2+z^2=1';g._expr2='z=0';g._grid_n=12;g._range=2
 assert g._eval_grid(),g._error_msg
 assert any(c==0 for c in g._mesh_colors) and any(c==1 for c in g._mesh_colors) and g._zs2
-# Exercise actual numeric-editor validation and warning transitions.
-class KeyboardStub:
- def __init__(self): self.response='';self.title='';self.is_finished=False
- def reset(self): self.response='';self.is_finished=False
- def run(self,force=False): return True
-# Graph3D owns a scoped keyboard to retain its PicoLAB breadcrumb.
-old_keyboard=g._keyboard
-g._keyboard=KeyboardStub()
-g._grid_n=12;g._state=g.ST_SETTINGS;g._set_row=1
-key(BUTTON_CENTER);assert g._state==g.ST_RESOLUTION
-g._keyboard.response='12.5';g._keyboard.is_finished=True
-key(BUTTON_NONE);assert g._state==g.ST_RESOLUTION and g._grid_n==12
-g._keyboard.response='25';g._keyboard.is_finished=True
-key(BUTTON_NONE);assert g._state==g.ST_RES_WARNING and g._grid_n==12
+# Resolution is typed in the settings form, in place (no on-screen keyboard).
+def typed(text):
+ for c in text: key(vm.input_manager._key_to_button(ord(c)))
+g._grid_n=12;g._state=g.ST_SETTINGS;g._edit=None
+g._set_row=[r[0] for r in g._settings_rows()].index('res')
+typed('12.5');key(BUTTON_CENTER)
+assert g._state==g.ST_SETTINGS and g._edit is not None and g._edit_error and g._grid_n==12
+key(BUTTON_ESCAPE);typed('25');key(BUTTON_CENTER)
+assert g._state==g.ST_RES_WARNING and g._grid_n==12
 key(BUTTON_ESCAPE);assert g._state==g.ST_SETTINGS and g._grid_n==12
-key(BUTTON_CENTER);g._keyboard.response='15';g._keyboard.is_finished=True
-key(BUTTON_NONE);assert g._state==g.ST_SETTINGS and g._grid_n==15
-g._keyboard=old_keyboard
+typed('15');key(BUTTON_CENTER);assert g._state==g.ST_SETTINGS and g._grid_n==15 and g._edit is None
 # Warning leaves the old resolution untouched until confirmed.
 g._grid_n=12;g._resolution_return=g.ST_SETTINGS;g._pending_resolution=25;g._state=g.ST_RES_WARNING
 g._draw_resolution_warning(vm.draw)

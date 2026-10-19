@@ -151,6 +151,17 @@ for beam_angle in (0,37,90):
             near(uy*1000,(u*sine+v*c)*1000)
             balance(sol,0)
             sol.free()
+# Axial displacement u along the member: P*x/(EA) for a tip force along a
+# 37 deg cantilever, positive toward the member end; its peak is at the tip.
+m=bm.template(1);bm.set_member(m,0,3,37)
+m['loads']=[bm.point_load(0,3,10000,angle=37)]
+sol=bm.Solution(m);EA=bm.section_values(m['sections'][0])['E']*bm.section_values(m['sections'][0])['A']
+S,V,M,T,W,N,U,starts=sol.samples(0,0)
+for i in range(0,len(S),17):near(U[i]*1e3,10000*S[i]/EA*1e3);near(N[i],10000)
+near(sol.at(0,1.5,0)[5]*1e3,10000*1.5/EA*1e3)
+hi,shi,lo,slo=sol.extremes(0,0)['U'];near(hi*1e3,10000*3/EA*1e3);near(shi,3.0)
+sol.free()
+print('PASS: axial displacement along a member and its peak')
 m=bm.template(1);m['cases']=['A','B']
 m['loads']=[bm.point_load(0,3,8000,case=0,angle=315),bm.point_load(0,1,3000,case=1,angle=135)]
 m['combos']=[{'name':'ULS','factors':[1.35,1.5]}]
@@ -367,7 +378,8 @@ def esc():
 
 
 def ui():
-    return beam_app._active
+    # PicoLAB unloads Beam view when it closes: always ask the live module.
+    return sys.modules['engtools.beamlab.app']._active
 
 
 def pick(index):
@@ -501,6 +513,8 @@ key(k.BUTTON_RIGHT); assert a.ds > s_peak
 key(k.BUTTON_DOWN); assert any(abs(a.ds - p) < 1e-9 for p in bi.stops(a.model, 0))
 text('d'); assert a.third == 'T'
 shot('diagrams-slope')
+text('d'); assert a.third == 'U' and len(a.cache) == 3
+shot('diagrams-axial')
 text('d'); assert a.third == 'W'
 # Load cases and a combination.
 key(k.BUTTON_F3)

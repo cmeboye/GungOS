@@ -994,6 +994,9 @@ def request_open(name):
         raise LaunchTargetError("Menu route not found: " + str(name))
     lab_indices=None
     if len(parts)>2 and parts[:2]==['apps','picolab']:
+        # Routes are queued before boot puts the SD apps folder on sys.path.
+        import sys
+        if apps_source not in sys.path:sys.path.append(apps_source)
         import PicoLAB as lab
         tail=parts[2:]
         aliases={'graph':('tools','graph'),'graph3d':('tools','graph3d'),
@@ -1002,7 +1005,8 @@ def request_open(name):
                  'numerics checks':('checks','numerics check'),
                  'numerics check':('checks','numerics check'),
                  'beam lab':('modules','structural','beam view'),
-                 'beam view':('modules','structural','beam view')}
+                 'beam view':('modules','structural','beam view'),
+                 'mohr circle':('modules','structural','mohr circle')}
         if len(tail)==1:tail=list(aliases.get(tail[0],tail))
         page='root';lab_indices=[]
         for item in tail:
