@@ -18,6 +18,13 @@
 - Presenting the screen reads each changed PSRAM row once instead of twice;
   the panel's DMA buffers, the 12-bit palette and the SD read buffer are
   gone (8.9 KB more heap). Key and character lookup uses byte tables.
+- The home screen retries saved Wi-Fi and the network clock every 10 s
+  instead of every frame, and menus list the SD app folders only when
+  something new was imported. Inverted image blits no longer modify the
+  caller's buffer; ViewManager.remove keeps the other views; thread
+  timeouts survive the tick counter wrapping. Remove the unused Picoware
+  start-up animation.
+
 - Allow point/moment load offsets from terminal nodes without resetting them
   to zero, including older saved cases. Explain missing member connections
   when adding a load; identify and select orphaned items on evaluation.

@@ -1,6 +1,6 @@
 """Thread - Threading support for Picoware."""
 
-from utime import ticks_ms
+from utime import ticks_ms, ticks_diff
 from gc import collect
 
 class Thread:
@@ -257,7 +257,7 @@ class ThreadManager:
         if self._active_thread is not None:
             if not self._active_thread.is_running:
                 if self._active_task is not None:
-                    self._outgoing = f"[ThreadManager] Task {self._active_task.id} ({self._active_task.name}) finished after {ticks_ms() - self._active_task.start_time} ms.\n"
+                    self._outgoing = f"[ThreadManager] Task {self._active_task.id} ({self._active_task.name}) finished after {ticks_diff(ticks_ms(), self._active_task.start_time)} ms.\n"
                     # Task finished, capture error if any
                     thread_error = self._active_thread.error
                     if thread_error is not None:
@@ -273,7 +273,7 @@ class ThreadManager:
             elif (
                 self._active_task is not None
                 and self._active_task.timeout > 0
-                and ticks_ms() - self._active_task.start_time
+                and ticks_diff(ticks_ms(), self._active_task.start_time)
                 > self._active_task.timeout
             ):
                 # Task timed out, stop it

@@ -27,6 +27,8 @@ class AppLoader:
         if mount_vfs and view_manager.storage.mount_vfs("/sd"):
             self._vfs_ready = True
         self._error = None
+        # sys.modules as it was after the last release that found the apps
+        self._released_modules = None
 
     def __del__(self):
         """Cleanup loaded apps on deletion"""
@@ -91,21 +93,35 @@ class AppLoader:
         for view in open_views:
             if view is not None and view.name.startswith(self.SD_VIEW_PREFIXES):
                 return 0
+        # Nothing imported since the last release leaves nothing to unload,
+        # without listing the SD app folders (many card reads per menu).
+        if not self.loaded_apps and self._module_signature() == self._released_modules:
+            return 0
         tops = self._app_tops()
         if not tops:
             return 0
         names = [name for name in sys.modules if name.split(".")[0] in tops]
         if not names and not self.loaded_apps:
+            self._released_modules = self._module_signature()
             return 0
         self.loaded_apps.clear()
         self.current_app = None
         for name in names:
             del sys.modules[name]
         collect()
+        self._released_modules = self._module_signature()
         self.view_manager.log(
             f"[AppLoader]: Released {len(names)} app modules, free memory: {mem_free()} bytes"
         )
         return len(names)
+
+    @staticmethod
+    def _module_signature() -> tuple:
+        """Which modules are loaded, as (count, sum of name hashes)."""
+        total = 0
+        for name in sys.modules:
+            total = (total + hash(name)) & 0x3FFFFFFF
+        return len(sys.modules), total
 
     def _app_tops(self) -> set:
         """Top-level module names provided by the SD apps folders."""

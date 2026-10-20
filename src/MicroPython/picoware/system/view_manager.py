@@ -36,6 +36,8 @@ class ViewManager:
         "_log",
         "_app_loader",
         "_uart",
+        "_fast_drawing",
+        "_fast_owner",
     )
 
     def __init__(self):
@@ -658,10 +660,10 @@ class ViewManager:
                     self._current_view = None
                     self.clear()
 
-                # Delete the view and shift array
-                del self.views[i]
+                # Shift the later views down; the array keeps MAX_VIEWS slots
                 for j in range(i, self._view_count - 1):
                     self.views[j] = self.views[j + 1]
+                self.views[self._view_count - 1] = None
                 self._view_count -= 1
 
                 break
