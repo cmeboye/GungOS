@@ -71,7 +71,6 @@ class ViewManager:
         self._storage = Storage()
         self._storage.mkdir("picoware")
         self._storage.mkdir("picoware/settings")
-        self._storage.mkdir("picoware/keyboard")
 
         settings = Settings(self._storage)
         self._gmt_offset = settings.gmt_offset

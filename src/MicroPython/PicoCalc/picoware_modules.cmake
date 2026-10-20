@@ -6,7 +6,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/picoware_keyboard/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/picoware_lcd/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/picoware_psram/micropython.cmake)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../auto_complete/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../font/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../jpeg/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../lcd/micropython.cmake)

@@ -2,11 +2,9 @@
 
 import json
 
-# Retired upstream account fields: never load/use them, and drop them on the next save.
-RETIRED_SERVICE_SETTINGS = ("jblanked_api_key", "server_username", "server_password")
 # Fields of features removed from GungOS (AI providers, LVGL, USB video, fixed
-# theme/exit keys). Old SD cards may still contain them; they are dropped too.
-RETIRED_SETTINGS = RETIRED_SERVICE_SETTINGS + (
+# theme/exit keys). Old SD cards may still contain them; they are dropped on load/save.
+RETIRED_SETTINGS = (
     "anthropic_api_key",
     "dark_mode",
     "deepseek_api_key",

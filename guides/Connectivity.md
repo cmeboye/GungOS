@@ -127,10 +127,3 @@ After building a new UF2, check on PicoCalc:
    Secure pairing/reboot persistence is deferred until native support exists.
 6. Run Wi-Fi and BLE together, then repeat open/close and longer transfers while
    watching actual free heap. This is required before claiming device readiness.
-
-## Subsequent service-removal pass
-
-The [Comms inventory and service audit](Comms.md) records removal of the inherited
-social/notification clients and upstream account settings, while retaining local
-connectivity and NTP. Run `python3 tools/check-service-independence.py` before
-building to check for reintroduced endpoints.

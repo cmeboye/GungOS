@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The on-screen keyboard no longer offers word suggestions. The
+  `auto_complete` native module, its Python wrapper and the SD
+  `picoware/keyboard` folder are gone. The last code for the upstream
+  author's online service is removed too: the settings migration for its
+  account fields, the endpoint guard script and its test.
 - Fix SD directory corruption: a new entry whose slots crossed a cluster
   boundary overwrote the start of the directory ('.', '..' or other files).
   New directories are cleared in full, so old data in a reused cluster no

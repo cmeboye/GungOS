@@ -78,7 +78,6 @@ The source tree is checked separately with:
 
 ```sh
 python3 tools/check-public-repo.py
-python3 tools/check-service-independence.py
 python3 tools/tests/test_public_repo.py
 ```
 

@@ -3,7 +3,6 @@
 static mp_obj_t desktop_native_modules(void)
 {
     mp_obj_t modules[] = {
-        MP_OBJ_NEW_QSTR(MP_QSTR_auto_complete),
         MP_OBJ_NEW_QSTR(MP_QSTR_font),
         MP_OBJ_NEW_QSTR(MP_QSTR_lcd),
         MP_OBJ_NEW_QSTR(MP_QSTR_picoware_pcm),

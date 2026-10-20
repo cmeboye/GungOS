@@ -194,7 +194,6 @@ class Keyboard:
             on_save_callback (callable): Optional callback called when "Save" is pressed. Defaults to None.
         """
         from picoware.system.vector import Vector
-        from picoware.system.auto_complete import AutoComplete
 
         self.draw = draw
         self.input_manager = input_manager
@@ -223,7 +222,6 @@ class Keyboard:
         self.is_in_textbox = False
         self.text_cursor_position = 0
         self.text_scroll_x = 0
-        self.selected_suggestion_index = -1  # -1 means no suggestion selected
 
         self._layout_width = draw.size.x
         self._layout_height = draw.size.y
@@ -253,8 +251,8 @@ class Keyboard:
         title_y = self._layout_y + self.TEXTBOX_HEIGHT + 1
         self.title_vec = Vector(0, title_y)
         self._keys_y = title_y + font_height + 1
-        self._suggestion_y = self._layout_y + self._layout_height - font_height
-        self.KEY_HEIGHT = (self._suggestion_y - self._keys_y - (self.NUM_ROWS - 1)) // self.NUM_ROWS
+        keys_bottom = self._layout_y + self._layout_height - font_height
+        self.KEY_HEIGHT = (keys_bottom - self._keys_y - (self.NUM_ROWS - 1)) // self.NUM_ROWS
         self.keyboard_height = self.NUM_ROWS * self.KEY_HEIGHT + self.NUM_ROWS - 1
         self.text_box_pos_vec = Vector(self._layout_x, self._keys_y)
         self.text_box_pos_size = Vector(self._layout_width, self.keyboard_height)
@@ -344,9 +342,6 @@ class Keyboard:
         }
 
         self._show_keyboard = True
-        self._auto_complete = AutoComplete()
-        self._auto_complete_words_set = False
-        self._auto_complete_words = []
 
     def __del__(self) -> None:
         """Clean up keyboard resources."""
@@ -364,9 +359,6 @@ class Keyboard:
         self.manual_keys = {}
         self.key_mappings = {}
         self.d_pad = {}
-        del self._auto_complete
-        self._auto_complete = None
-        self._auto_complete_words.clear()
 
     @property
     def callback(self) -> callable:
@@ -438,21 +430,6 @@ class Keyboard:
         self.text_cursor_position = len(value)
         self.text_scroll_x = 0
 
-    @property
-    def auto_complete_words(self) -> list[str]:
-        """Returns the list of words for auto-completion"""
-        return self._auto_complete_words
-
-    @auto_complete_words.setter
-    def auto_complete_words(self, value: list[str]) -> None:
-        """Set the list of words for auto-completion.
-
-        Args:
-            value (list[str]): The new word list.
-        """
-        self._auto_complete_words = value
-        self._auto_complete_words_set = False
-
     def set_save_callback(self, callback: callable) -> None:
         """Set the save callback function.
 
@@ -476,11 +453,6 @@ class Keyboard:
         self.is_in_textbox = False
         self.text_cursor_position = 0
         self.text_scroll_x = 0
-        self.selected_suggestion_index = -1
-        self._auto_complete.remove_suggestions()
-        self._auto_complete.remove_words()
-        self._auto_complete_words_set = False
-        self._auto_complete_words.clear()
 
     def run(self, swap: bool = True, force: bool = False, max_characters: int = 0) -> bool:
         """Run the input manager, handle input, and draw the keyboard.
@@ -509,9 +481,6 @@ class Keyboard:
 
             self.draw.erase()
 
-            if not self._auto_complete_words_set:
-                self._set_auto_complete_words()
-
             # only process input/redraw if there's input
             self._handle_input(max_characters)
             self._draw_textbox()
@@ -525,63 +494,12 @@ class Keyboard:
                 self.text_color,
             )
 
-            # Draw auto-complete suggestions after keyboard/title
-            self._draw_suggestions()
-
             self.input_manager.reset()
 
             if swap or force:
                 self.draw.swap()
 
         return True
-
-    def _auto_complete_suggestion(self) -> str:
-        """Gets the top auto-complete suggestion based on current response"""
-        if self._auto_complete and self._response:
-            words = self._response.strip().split()
-            if words:
-                last_word = words[-1]
-                suggestions = self._auto_complete.search(last_word)
-                if suggestions:
-                    return suggestions[0]
-        return ""
-
-    def _auto_complete_suggestions(self) -> tuple:
-        """Gets auto-complete suggestions based on current response"""
-        if self.secret:
-            return ()
-        if self._auto_complete and self._response:
-            words = self._response.strip().split()
-            if words:
-                last_word = words[-1]
-                return self._auto_complete.search(last_word)
-        return ()
-
-    def _default_words(self) -> list[str]:
-        """Returns a default list of words for auto-completion"""
-        return [
-            "the",
-            "that",
-            "hi",
-            "hey",
-            "help",
-            "hello",
-            "how",
-            "hack",
-            "what",
-            "JBlanked",
-            "PicoCalc",
-            "yooo",
-            "everyone",
-            "anyone",
-            "good",
-            "great",
-            "morning",
-            "night",
-            "message",
-            "awesome",
-            "Picoware",
-        ]
 
     def _fit_text(self, text: str, width: int) -> str:
         """Keep a single line within the available pixel width."""
@@ -846,97 +764,14 @@ class Keyboard:
             self.cursor.y = _start_y + display_line * _distance
             self.draw._text(self.cursor.x, self.cursor.y, "_", self.text_color)
 
-    def _draw_suggestions(self):
-        """Draws auto-complete suggestions based on keyboard visibility"""
-        suggestions = self._auto_complete_suggestions()
-        if not suggestions:
-            return
-        if self._show_keyboard:
-            # Show only one suggestion below the keyboard area
-            suggestion = suggestions[0]
-            text = self._fit_text("Suggestion: " + suggestion, self._layout_width - 2 * self.KEY_MARGIN)
-            x_pos = self._layout_x + (self._layout_width - self.draw.len(text)) // 2
-            self.draw._text(x_pos, self._suggestion_y, text, self.text_color)
-        else:
-            # Scroll the two-column list so the selected suggestion stays visible.
-            padding_x = max(1, self.draw.scale_x(2))
-            padding_y = max(1, self.draw.scale_y(2))
-            line_height = self.draw.font_size.y + 2 * padding_y
-            visible_rows = max(1, (self._layout_y + self._layout_height - self._keys_y) // line_height)
-            first_row = max(0, self.selected_suggestion_index // 2 - visible_rows + 1)
-            column_width = (self._layout_width - 2 * self.KEY_MARGIN) // 2
-            for i in range(first_row * 2, min(len(suggestions), (first_row + visible_rows) * 2)):
-                x_pos = self._layout_x + self.KEY_MARGIN + (i % 2) * column_width + padding_x
-                y_pos = self._keys_y + (i // 2 - first_row) * line_height + padding_y
-                text = self._fit_text(suggestions[i], column_width - 2 * padding_x)
-                if i == self.selected_suggestion_index:
-                    self.draw._fill_rectangle(
-                        x_pos - padding_x, y_pos - padding_y, column_width, line_height, self.selected_color,
-                    )
-                from picoware.gui.status_bar import foreground
-                self.draw._text(x_pos, y_pos, text, foreground(self.selected_color) if i == self.selected_suggestion_index else self.text_color)
-
-    def _apply_suggestion(self, suggestion_text: str) -> None:
-        """Apply an auto-complete suggestion to the current response.
-
-        Args:
-            suggestion_text (str): The suggestion to apply.
-        """
-        if not suggestion_text or not self._response:
-            return
-
-        # Find the last word to replace
-        words = self._response[: self.text_cursor_position].strip().split()
-        if not words:
-            return
-
-        # Calculate where the last word starts
-        last_word = words[-1]
-        word_start_pos = self._response[: self.text_cursor_position].rfind(last_word)
-
-        if word_start_pos != -1:
-            # Replace the last word with the suggestion
-            self._response = (
-                self._response[:word_start_pos]
-                + suggestion_text
-                + self._response[self.text_cursor_position :]
-            )
-            self.text_cursor_position = word_start_pos + len(suggestion_text)
-
     def _handle_input(self, max_characters: int = 0) -> None:
         """Handles directional input and key selection.
 
         Args:
             max_characters (int): The maximum number of characters allowed in the response. 0 means no limit.
         """
-
-        suggestions = self._auto_complete_suggestions()
-
         # Handle directional navigation and direct key access
         if self.is_in_textbox or not self._show_keyboard:
-            # Check if we're in suggestion selection mode
-            if self.selected_suggestion_index >= 0:
-                # Navigation in suggestion list (non-keyboard mode only)
-                if self.dpad_input == BUTTON_UP:
-                    if self.selected_suggestion_index > 0:
-                        self.selected_suggestion_index -= 1
-                    else:
-                        # Go back to textbox
-                        self.selected_suggestion_index = -1
-                        self.is_in_textbox = True
-                elif self.dpad_input == BUTTON_DOWN:
-                    if self.selected_suggestion_index < len(suggestions) - 1:
-                        self.selected_suggestion_index += 1
-                elif self.dpad_input == BUTTON_CENTER:
-                    # Apply selected suggestion
-                    if self.selected_suggestion_index < len(suggestions):
-                        self._apply_suggestion(
-                            suggestions[self.selected_suggestion_index]
-                        )
-                        self.selected_suggestion_index = -1
-                        self.is_in_textbox = True
-                return
-
             # Textbox mode navigation
             if self.dpad_input == BUTTON_LEFT:
                 if self.text_cursor_position > 0:
@@ -948,11 +783,6 @@ class Keyboard:
                 if self._show_keyboard:
                     # Exit textbox mode and return to keyboard
                     self.is_in_textbox = False
-                else:
-                    # Enter suggestion selection mode
-                    if suggestions:
-                        self.selected_suggestion_index = 0
-                        self.is_in_textbox = False
             elif self.dpad_input == BUTTON_SPACE:
                 # Insert space at cursor position
                 self._response = (
@@ -975,10 +805,7 @@ class Keyboard:
                     self.text_cursor_position -= 1
                     return
             elif self.dpad_input == BUTTON_CENTER:
-                if self._show_keyboard and suggestions:
-                    # Apply first suggestion in keyboard mode
-                    self._apply_suggestion(suggestions[0])
-                elif not self._show_keyboard:
+                if not self._show_keyboard:
                     # Save from textbox mode
                     if self.on_save_callback:
                         self.on_save_callback(self._response)
@@ -986,10 +813,6 @@ class Keyboard:
 
         else:
             # Keyboard mode navigation
-            self.selected_suggestion_index = (
-                -1
-            )  # Reset suggestion selection in keyboard mode
-
             if self.dpad_input == BUTTON_SPACE:
                 self._set_cursor_position(4, 0)
                 self._process_key_press()
@@ -1130,13 +953,3 @@ class Keyboard:
             self.cursor_row = row
             self.cursor_col = col
 
-    def _set_auto_complete_words(self) -> None:
-        """Sets the words for auto-completion"""
-        if not self._auto_complete_words_set and self._auto_complete is not None:
-            if not self._auto_complete.add_dictionary(
-                "picoware/keyboard/dictionary.txt"
-            ):
-                if not self._auto_complete_words:
-                    self._auto_complete_words = self._default_words()
-                self._auto_complete.add_words(self._auto_complete_words)
-            self._auto_complete_words_set = True

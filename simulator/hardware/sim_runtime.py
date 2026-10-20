@@ -334,7 +334,6 @@ def seed_sd(profile="dev"):
         "picoware",
         "picoware/settings",
         "picoware/wifi",
-        "picoware/keyboard",
     )
     dev_dirs = base_dirs + (
         "picoware/apps",

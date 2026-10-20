@@ -581,7 +581,7 @@ def _run_selected_profile_check(opts):
         "test_ulab.py",
         "test_trimmed_firmware.py", "test_menu.py", "test_menu_headers.py", "test_home_visual.py",
         "test_preferences.py", "test_wifi_setup.py",
-        "test_connectivity.py", "test_connectivity_ui.py", "test_service_independence.py",
+        "test_connectivity.py", "test_connectivity_ui.py",
         "test_shared_plots.py", "test_graph.py", "test_graph3d.py",
         "test_graph3d_implicit.py", "test_benchmark.py", "test_engtool_benchmark.py", "test_choice_dialogs.py", "test_error_reporting.py", "test_secrets.py",
     )
