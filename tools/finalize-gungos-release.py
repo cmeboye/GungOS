@@ -33,7 +33,7 @@ def main():
             if name.startswith('picoware/apps/'):
                 assert '..' not in Path(name).parts
                 package.extract(name,card)
-    for name in ('settings','wifi','keyboard','engineering'):(card/'picoware'/name).mkdir()
+    for name in ('settings','wifi','engineering'):(card/'picoware'/name).mkdir()
     defaults={'screen_brightness':100,'theme_color':31,'background_color':0,
               'text_on_dark':65535,'text_on_light':0,'debug':False,
               'gmt_offset':0,'onscreen_keyboard':False,
