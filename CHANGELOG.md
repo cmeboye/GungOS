@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.33 — 2026-10-21
 
 - The home screen's resource snapshot (every 5 s) walks the heap once
   instead of twice: `gc.mem_free()` and `gc.mem_alloc()` each walk the whole

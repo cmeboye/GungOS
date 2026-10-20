@@ -1,6 +1,6 @@
 # Performance validation
 
-For **v1.32**, use [EngTool render benchmark](EngToolBenchmark.md) for the Beam and
+For **v1.33**, use [EngTool render benchmark](EngToolBenchmark.md) for the Beam and
 PicoCAD hardware stress ladder. Open Apps → Misc → EngTool render benchmark;
 F4 there opens the display/CPU suite described below. Build the current version
 with `sh tools/build-gungos-release.sh`; its version is read from `features.py`.

@@ -223,7 +223,7 @@ Compile the current app sources with the matching `mpy-cross` using
 `tools/compile-engineering-apps.py`; see [BUILD.md](../BUILD.md). Generated ZIPs
 and `.mpy` files are local build outputs rather than tracked source. Merge the
 compiled Eggcel entry and complete `desktopapps/eggcel/` package into an existing
-GungOS v1.32 SD installation. Keep shared `engtools`/`desktopapps` dependencies,
+GungOS v1.33 SD installation. Keep shared `engtools`/`desktopapps` dependencies,
 exit apps and restart after replacement. Keep one `.py` or `.mpy` per module.
 Documents/settings stay on the device. No UF2 change is required for this batch.
 

@@ -9,7 +9,7 @@ a square 238 × 238 pixels, filling its frame without a separate caption strip.
 The Apps category lists **PicoDESK, PicoLAB, Games, Misc**. PicoDESK contains
 Eggcel, PicoWord and PicoPaint. PicoLAB contains Graph, Graph3D and engineering
 tools. Screensavers are under Misc. System menus use the same theme/layout as
-the application launchers. The current v1.32 layout and branding require the
+the application launchers. The current v1.33 layout and branding require the
 matching UF2 and SD app update. Previous local packages can be retained for rollback.
 
 | Area | Position (x, y) | Size (width × height) |
@@ -161,6 +161,6 @@ sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w \
   --network offline --audio silent
 ```
 
-Desktop layout, branding and shared menu changes require rebuilding the v1.32
+Desktop layout, branding and shared menu changes require rebuilding the v1.33
 UF2 for the physical device. An SD app update alone does not update the home
 screen. Previously generated release files retain the source they were built from.

@@ -30,7 +30,7 @@ for _ in range(20000):
     if app.phase!='run':break
 assert app.phase=='done', (app.phase,app.error,app.title)
 rows=[json.loads(s) for s in vm.storage.read(b.RESULT_PATH).splitlines()]
-assert rows[0]['version']=='1.32' and rows[-1]['status']=='complete'
+assert rows[0]['version']=='1.33' and rows[-1]['status']=='complete'
 results=[row for row in rows if 'work_us' in row]
 assert len(results)==len(models.cases(False))*2
 assert sum(row['status']=='expected refusal' for row in results)==6

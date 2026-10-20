@@ -5,7 +5,7 @@ entry on the SD. The old display/CPU suite remains available with F4.
 
 ## Hardware test
 
-Install the matching v1.32 UF2 and complete SD app update. Restart first so the
+Install the matching v1.33 UF2 and complete SD app update. Restart first so the
 run begins with a predictable heap. For a short smoke test, press F2 to choose
 Quick, leave F3 at Both, then Enter. Restart again, leave the default Full stress
 and Both choices, and press Enter for the stress ladder. Full can take several
