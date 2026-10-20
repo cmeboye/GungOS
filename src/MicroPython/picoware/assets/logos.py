@@ -50,7 +50,16 @@ def decode(name, background=0, accent=0xF800, ink=None):
     return out
 
 
+_decoded = {}  # (name, background, accent, ink) -> pixels; a header repaints each draw
+
+
 def paint(draw, name, x, y, background=0, accent=0xF800, ink=None):
     width, height = LOGOS[name][:2]
-    draw._bytearray(x, y, width, height, decode(name, background, accent, ink))
+    key = (name, background, accent, ink)
+    pixels = _decoded.get(key)
+    if pixels is None:
+        if len(_decoded) >= 4:  # colours change only with the theme
+            _decoded.clear()
+        pixels = _decoded[key] = decode(name, background, accent, ink)
+    draw._bytearray(x, y, width, height, pixels)
     return width

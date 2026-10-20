@@ -67,3 +67,39 @@ index b2516fae..6508584f 100644
  }
  
  mp_obj_t mp_obj_new_str_from_cstr(const char *str) {
+diff --git a/py/qstr.c b/py/qstr.c
+index 7902646a..79e9365d 100644
+--- a/py/qstr.c
++++ b/py/qstr.c
+@@ -259,6 +259,15 @@ static qstr qstr_add(mp_uint_t len, const char *q_ptr) {
+     return MP_STATE_VM(last_pool)->total_prev_len + at;
+ }
+ 
++// Whether qstr_find_strn searches the sorted pools (the firmware's own names,
++// found by binary search) before the unsorted ones (names loaded from .mpy
++// files at run time, searched one by one). A string is in at most one pool, so
++// the order only changes how long a lookup of a firmware name takes. (Local
++// GungOS option, see micropython-local.patch.)
++#ifndef MICROPY_QSTR_FIND_SORTED_FIRST
++#define MICROPY_QSTR_FIND_SORTED_FIRST (0)
++#endif
++
+ qstr qstr_find_strn(const char *str, size_t str_len) {
+     if (str_len == 0) {
+         // strncmp behaviour is undefined for str==NULL.
+@@ -271,7 +280,15 @@ qstr qstr_find_strn(const char *str, size_t str_len) {
+     #endif
+ 
+     // search pools for the data
++    #if MICROPY_QSTR_FIND_SORTED_FIRST
++    for (int sorted = 1; sorted >= 0; sorted--)
++    #endif
+     for (const qstr_pool_t *pool = MP_STATE_VM(last_pool); pool != NULL; pool = pool->prev) {
++        #if MICROPY_QSTR_FIND_SORTED_FIRST
++        if (pool->is_sorted != sorted) {
++            continue;
++        }
++        #endif
+         size_t low = 0;
+         size_t high = pool->len - 1;
+ 

@@ -3,6 +3,9 @@ add_compile_definitions(PICOCALC)
 # A new str is not first matched against every interned name loaded from SD
 # apps (a linear scan that cost ~55 us per string); see py/objstr.c.
 add_compile_definitions(MICROPY_STR_REUSE_QSTR=0)
+# Look names up in the firmware's sorted lists before scanning the names
+# loaded from SD apps one by one; see py/qstr.c.
+add_compile_definitions(MICROPY_QSTR_FIND_SORTED_FIRST=1)
 list(APPEND MICROPY_DEF_BOARD PICOCALC)
 
 include(${CMAKE_CURRENT_LIST_DIR}/picoware_keyboard/micropython.cmake)

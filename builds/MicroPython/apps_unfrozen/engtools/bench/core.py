@@ -49,7 +49,7 @@ def _measure(function, repeat):
 
 def _time(label, function, repeat=5, per=1, unit='us'):
     """Record the fastest run divided over per operations, in unit."""
-    scale = {'ns': 0.001, 'us': 1, 'ms': 1000}[unit]
+    scale = {'ns': 0.001, 'us': 1, 'ms': 1000}[unit.split(' ')[0]]
     best, _ = _measure(function, repeat)
     _record(label, best / per / scale, unit)
     return best
@@ -394,7 +394,7 @@ def _stage_imports(vm):
             __import__('gungos_benchmark_missing')
         except ImportError:
             pass
-    _time('Import of a missing module (%d search paths)' % len(sys.path), missing, 3, 1, 'ms')
+    _time('Import of a missing module', missing, 3, 1, 'ms (%d search paths)' % len(sys.path))
 
 
 # Display --------------------------------------------------------------------

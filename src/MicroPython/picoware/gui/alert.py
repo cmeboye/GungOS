@@ -55,7 +55,9 @@ class Alert:
             title (str): The title text to display at the top.
         """
 
-        self.clear()
+        # Fill the background without presenting it: the finished alert is
+        # presented once at the end (an extra full-screen update took 22 ms).
+        self.display._clear(self.background_color)
 
         size = self.display.size
         font = self.display.get_font()

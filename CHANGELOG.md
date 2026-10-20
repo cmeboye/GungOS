@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Looking a name up by its text (imports, loading apps) searches the
+  firmware's sorted names before the names loaded from SD apps; importing
+  a module that is already loaded went from 154 to 65 µs. A local
+  MicroPython option (`MICROPY_QSTR_FIND_SORTED_FIRST`).
+- An alert updates the screen once instead of first sending a blank screen
+  (no flash, 46 → 8 ms), and headers keep the decoded logo instead of
+  decoding it on every draw (menus 26 → 14 ms).
 - New strings (formatting, concatenation, slices) are no longer matched
   against every name loaded from SD apps before being created: `%d`
   formatting went from 57 to 10 µs on the device. A local MicroPython
