@@ -19,6 +19,7 @@ HELP = ('ENGTOOL RENDER BENCHMARK',
         'ENTER: start the selected test ladder',
         'F2: Quick / Full stress', 'F3: Both / PSRAM / SRAM screen',
         'F4: original display / CPU benchmark',
+        'F6: core benchmark (whole firmware)',
         'F5: skip the current case', 'ESC: cancel, keep completed results',
         'F9: show / hide this help', '',
         'Full: real editor limits, then synthetic',
@@ -343,6 +344,9 @@ class Benchmark:
                 elif button==k.BUTTON_F4:
                     from . import display
                     self.legacy=display;display.start(self.vm);return
+                elif button==k.BUTTON_F6:
+                    from . import core
+                    self.legacy=core;core.start(self.vm);return
                 elif button in (k.BUTTON_CENTER,k.BUTTON_ENTER):self.begin()
                 if button!=k.BUTTON_NONE:self.draw()
             elif self.phase=='run':
@@ -373,6 +377,7 @@ class Benchmark:
                         (158,'Checkpoints saved before every case.'),
                         (176,'Expected refusals are reported separately.'),
                         (205,'F4 Display / CPU baseline benchmark'),
+                        (223,'F6 Core benchmark (whole firmware)'),
                         (245,'ENTER Start   F9 Help   ESC Return')):text(y,s)
         else:
             text(31,self.phase.upper(),p.ACCENT)

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- New strings (formatting, concatenation, slices) are no longer matched
+  against every name loaded from SD apps before being created: `%d`
+  formatting went from 57 to 10 µs on the device. A local MicroPython
+  option (`MICROPY_STR_REUSE_QSTR`, see `vendor/micropython-local.patch`).
+- The flash runs at 120 MHz instead of 60 MHz. MicroPython derived its
+  limit from the 150 MHz default clock, so at 240 MHz the flash ran slower
+  than on a stock Pico 2 W. Imports are about 20% faster, menus 16%.
+- A core benchmark (F6 in the EngTool render benchmark) times the whole
+  firmware core: clock (checked against the cycle counter), heap and
+  fragmentation, the Python interpreter, imports, every drawing primitive and
+  swap in both screen modes, the core screens and the home screen, system
+  services, PSRAM and SD throughput. `tools/compare-benchmark.py` compares two
+  reports.
 - The on-screen keyboard no longer offers word suggestions. The
   `auto_complete` native module, its Python wrapper and the SD
   `picoware/keyboard` folder are gone. The last code for the upstream

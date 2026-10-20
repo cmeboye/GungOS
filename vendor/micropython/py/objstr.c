@@ -35,6 +35,15 @@
 #include "py/cstack.h"
 #include "py/objtuple.h"
 
+// Whether a str made at run time is first looked up among the interned strings
+// (qstrs) so that an existing one is returned instead. The lookup scans the
+// qstrs loaded from .mpy files one by one, so every new str costs more as more
+// code is loaded. With 0 the str is always allocated; equality, hashing and
+// dict lookups are unchanged. (Local GungOS option, see micropython-local.patch.)
+#ifndef MICROPY_STR_REUSE_QSTR
+#define MICROPY_STR_REUSE_QSTR (1)
+#endif
+
 #if MICROPY_PY_BUILTINS_STR_OP_MODULO
 static mp_obj_t str_modulo_format(mp_obj_t pattern, size_t n_args, const mp_obj_t *args, mp_obj_t dict);
 #endif
@@ -315,11 +324,13 @@ mp_obj_t mp_obj_str_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_
             }
             #endif // MICROPY_PY_BUILTINS_STR_UNICODE_CHECK
 
+            #if MICROPY_STR_REUSE_QSTR
             // Check if a qstr with this data already exists
             qstr q = qstr_find_strn((const char *)str_data, str_len);
             if (q != MP_QSTRnull) {
                 return MP_OBJ_NEW_QSTR(q);
             }
+            #endif
 
             if (!mp_obj_is_type(args[0], &mp_type_bytes)) {
                 // Source is a mutable buffer: copy the data.
@@ -2410,6 +2421,7 @@ mp_obj_t mp_obj_new_str_via_qstr(const char *data, size_t len) {
 // the exact length required and then reused for the str/bytes object.  The vstr
 // is cleared and can safely be passed to vstr_free if it was heap allocated.
 static mp_obj_t mp_obj_new_str_type_from_vstr(const mp_obj_type_t *type, vstr_t *vstr) {
+    #if MICROPY_STR_REUSE_QSTR
     // if not a bytes object, look if a qstr with this data already exists
     if (type == &mp_type_str) {
         qstr q = qstr_find_strn(vstr->buf, vstr->len);
@@ -2419,6 +2431,7 @@ static mp_obj_t mp_obj_new_str_type_from_vstr(const mp_obj_type_t *type, vstr_t 
             return MP_OBJ_NEW_QSTR(q);
         }
     }
+    #endif
 
     byte *data;
     if (vstr->len + 1 == vstr->alloc) {
@@ -2467,14 +2480,15 @@ mp_obj_t mp_obj_new_str(const char *data, size_t len) {
         mp_raise_msg(&mp_type_UnicodeError, NULL);
     }
     #endif
+    #if MICROPY_STR_REUSE_QSTR
     qstr q = qstr_find_strn(data, len);
     if (q != MP_QSTRnull) {
         // qstr with this data already exists
         return MP_OBJ_NEW_QSTR(q);
-    } else {
-        // no existing qstr, don't make one
-        return mp_obj_new_str_copy(&mp_type_str, (const byte *)data, len);
     }
+    #endif
+    // no existing qstr, don't make one
+    return mp_obj_new_str_copy(&mp_type_str, (const byte *)data, len);
 }
 
 mp_obj_t mp_obj_new_str_from_cstr(const char *str) {

@@ -571,9 +571,166 @@ static void test_remount_and_card_swap(uint8_t *first, uint8_t *second, uint32_t
     CHECK(fat32_open(&f, "/after swap.txt") == FAT32_ERROR_FILE_NOT_FOUND);
 }
 
+/* The two FAT copies differ in this many sectors (a computer's disk check
+ * compares them). */
+static uint32_t fat_copies_differ(void)
+{
+    const fat32_boot_sector_t *bs = (const fat32_boot_sector_t *)card;
+    uint32_t differ = 0;
+    for (uint32_t s = 0; s < bs->fat_size_32; s++)
+        differ += memcmp(sector(bs->reserved_sectors + s),
+                         sector(bs->reserved_sectors + bs->fat_size_32 + s), SD_BLOCK_SIZE) != 0;
+    return differ;
+}
+
+static bool exists(const char *path)
+{
+    fat32_file_t f;
+    if (fat32_open(&f, path) != FAT32_OK)
+        return false;
+    fat32_close(&f);
+    return true;
+}
+
+/* sd_mp.write(path, data, overwrite), call for call. */
+static bool sd_mp_write(const char *path, int id, uint32_t size, bool overwrite)
+{
+    fat32_file_t f;
+    if (fat32_open(&f, path) != FAT32_OK)
+    {
+        if (fat32_create(&f, path) != FAT32_OK)
+            return false;
+    }
+    else if (overwrite)
+    {
+        fat32_close(&f);
+        for (int i = 0; i < 32 && exists(path); i++)
+            if (fat32_delete(path) != FAT32_OK)
+                return false;
+        if (fat32_create(&f, path) != FAT32_OK || fat32_open(&f, path) != FAT32_OK)
+            return false;
+    }
+    else if (fat32_seek(&f, fat32_size(&f)) != FAT32_OK)
+        return false;
+    uint8_t *buf = malloc(size);
+    const uint32_t start = fat32_size(&f);
+    for (uint32_t i = 0; i < size; i++)
+        buf[i] = byte_at(id, start + i);
+    size_t done = 0;
+    const bool ok = fat32_write(&f, buf, size, &done) == FAT32_OK && done == size;
+    fat32_close(&f);
+    free(buf);
+    return ok;
+}
+
+/* sd_mp.remove: a directory's entries first, then the path itself. */
+static bool sd_mp_remove(const char *path)
+{
+    fat32_file_t f;
+    if (fat32_open(&f, path) != FAT32_OK)
+        return true;
+    if (f.attributes & FAT32_ATTR_DIRECTORY)
+    {
+        fat32_entry_t e;
+        char child[300];
+        while (fat32_dir_read(&f, &e) == FAT32_OK && e.filename[0])
+        {
+            if (strcmp(e.filename, ".") == 0 || strcmp(e.filename, "..") == 0)
+                continue;
+            snprintf(child, sizeof(child), "%s/%s", path, e.filename);
+            sd_mp_remove(child);
+        }
+    }
+    fat32_close(&f);
+    return fat32_delete(path) == FAT32_OK;
+}
+
+/* The core benchmark's SD step (engtools/bench/core.py, _stage_sd), the same
+ * driver calls in the same order, run three times as on the device. */
+static void test_core_benchmark_sd_step(void)
+{
+    const char *scratch = "/picoware/core-benchmark-tmp", *data = "/picoware/core-benchmark-tmp/data.bin";
+    mkdir_path("/picoware");
+    CHECK(write_file("/picoware/apps.mpy", 900, 20000, 4096));
+    char names[16][96], path[128];
+    for (int round = 0; round < 3; round++)
+    {
+        /* _clear_scratch, then storage.mkdir */
+        if (exists(scratch))
+            CHECK(sd_mp_remove(scratch));
+        mkdir_path(scratch);
+        for (int i = 0; i < 3; i++) /* SD write 64 KB file in one call */
+            CHECK(sd_mp_write(data, 1, 65536, true));
+        for (int r = 0; r < 2; r++) /* SD append 512 bytes */
+        {
+            CHECK(sd_mp_write(data, 2, 512, true));
+            for (int i = 0; i < 31; i++)
+                CHECK(sd_mp_write(data, 2, 512, false));
+        }
+        CHECK(read_check(data, 2, 0, 16384, 4096) == 0);
+        CHECK(sd_mp_write(data, 1, 65536, true));
+        CHECK(read_check(data, 1, 0, 65536, 4096) == 0);
+        for (int i = 0; i < 2; i++) /* open(path, 'wb'), 128 writes of 512 */
+        {
+            fat32_delete(data);
+            CHECK(write_file(data, 3, 65536, 512));
+        }
+        CHECK(read_check(data, 3, 0, 65536, 4096) == 0);
+        for (int i = 0; i < 16; i++)
+        {
+            snprintf(names[i], sizeof(names[i]), "%s/file-with-a-long-name-%02d.txt", scratch, i);
+            CHECK(sd_mp_write(names[i], 10 + i, 20, true));
+        }
+        CHECK(count_entries(scratch, NULL) == 17);
+        snprintf(path, sizeof(path), "%s/renamed-file-with-a-long-name.txt", scratch);
+        for (int i = 0; i < 3; i++)
+        {
+            CHECK(fat32_rename(names[0], path) == FAT32_OK);
+            CHECK(fat32_rename(path, names[0]) == FAT32_OK);
+        }
+        snprintf(path, sizeof(path), "%s/settings.json", scratch);
+        for (int i = 0; i < 3; i++)
+            CHECK(sd_mp_write(path, 40, 120, true));
+        for (int i = 0; i < 16; i++)
+            CHECK(sd_mp_remove(names[i]));
+        CHECK(count_entries(scratch, NULL) == 2);
+        /* _clear_scratch in the finally block */
+        CHECK(sd_mp_remove(data));
+        CHECK(sd_mp_remove(path));
+        CHECK(sd_mp_remove(scratch));
+        CHECK(!exists(scratch));
+        CHECK(read_check("/picoware/apps.mpy", 900, 0, 20000, 4096) == 0);
+        const int problems = check_card();
+        if (problems)
+            printf("  after round %d: %d card problems\n", round + 1, problems);
+        CHECK(problems == 0);
+    }
+    printf("  FAT copies differ in %u sectors after the benchmark step\n", fat_copies_differ());
+    /* FAT32_TEST_IMAGE=path keeps the card (sparse) for a disk checker. */
+    const char *image = getenv("FAT32_TEST_IMAGE");
+    if (image)
+    {
+        const fat32_boot_sector_t *bs = (const fat32_boot_sector_t *)card;
+        FILE *out = fopen(image, "wb");
+        static const uint8_t zero[SD_BLOCK_SIZE];
+        for (uint32_t b = 0; out && b < bs->total_sectors_32; b++)
+            if (memcmp(sector(b), zero, SD_BLOCK_SIZE) != 0)
+            {
+                fseek(out, (long)b * SD_BLOCK_SIZE, SEEK_SET);
+                fwrite(sector(b), SD_BLOCK_SIZE, 1, out);
+            }
+        if (out)
+        {
+            fseek(out, (long)bs->total_sectors_32 * SD_BLOCK_SIZE - 1, SEEK_SET);
+            fputc(0, out);
+            fclose(out);
+        }
+    }
+}
+
 int main(void)
 {
-    static const uint8_t cluster_sizes[] = {1, 2};
+    static const uint8_t cluster_sizes[] = {1, 2, 64};
     fat32_init();
     for (size_t k = 0; k < sizeof(cluster_sizes) / sizeof(cluster_sizes[0]); k++)
     {
@@ -587,6 +744,7 @@ int main(void)
         test_long_names();
         test_numeric_tails();
         test_sizes_and_seeks();
+        test_core_benchmark_sd_step();
         test_remount_and_card_swap(first, second, blocks);
         printf("  block reads %lu, writes %lu\n", block_reads, block_writes);
         fat32_unmount();

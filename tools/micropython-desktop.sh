@@ -66,7 +66,7 @@ case ${1:-build} in
             USER_C_MODULES="$module_dir" \
             FROZEN_MANIFEST= \
             MICROPY_PY_FFI=0 \
-            CFLAGS_EXTRA="-DDESKTOP -Wno-error" \
+            CFLAGS_EXTRA="-DDESKTOP -DMICROPY_STR_REUSE_QSTR=0 -Wno-error" \
             clean
         exit 0
         ;;
@@ -98,7 +98,7 @@ make -C "$micropython_dir/ports/unix" \
     USER_C_MODULES="$module_dir" \
     FROZEN_MANIFEST= \
     MICROPY_PY_FFI=0 \
-    CFLAGS_EXTRA="-DDESKTOP -Wno-error"
+    CFLAGS_EXTRA="-DDESKTOP -DMICROPY_STR_REUSE_QSTR=0 -Wno-error"
 
 install -m 755 "$staging_build/micropython" "$build_dir/micropython.new"
 mv -f "$build_dir/micropython.new" "$build_dir/micropython"

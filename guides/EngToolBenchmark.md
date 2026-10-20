@@ -18,6 +18,7 @@ settings. Existing cases are neither loaded into the test nor replaced.
 | F2 before starting | Full stress / Quick |
 | F3 before starting | Both / PSRAM / SRAM framebuffer |
 | F4 before starting | Original display/CPU benchmark |
+| F6 before starting | Core benchmark (whole firmware) |
 | F5 during a run | Skip the current case |
 | F9 | Scrollable help; Up/Down scroll |
 | Esc | Close help, or cancel and retain partial results |
@@ -113,3 +114,45 @@ except its report, so it is safe to compare on an older firmware's SD driver.
 On the F4 suite's first screen, F5 runs only the memory and SD stages. A stage that
 runs out of memory is reported as `ran out of memory` with the heap left after
 cleanup, keeping what it had measured, and the later stages still run.
+
+## Core benchmark (F6)
+
+F6 on the first screen opens a suite that times every part of the firmware
+core the same way on each build, so the reports of two UF2s compare line by
+line. Restart first. F2 sets the rounds (10, 3 or 1; ten take about 16
+minutes), F3 turns the SD write tests on, and Enter starts. The report is
+**`picoware/core-benchmark.txt`**, saved after every step. Within a round each
+value is the fastest of several runs. The timing steps repeat every round, and
+each report line gives the mean with its minimum, maximum and spread (standard
+deviation as a percentage of the mean). System runs once at the start and
+Memory afterwards once at the end.
+
+| Step | What it measures |
+| --- | --- |
+| System and memory | Build, reported clock, heap total/free, largest free block, modules, PSRAM free |
+| Processor clock check | The real clock: Cortex-M33 cycle counter against the crystal-driven µs timer |
+| Python interpreter | Cost per operation of loops, arithmetic, calls, attributes, dicts, allocation, formatting, generators, exceptions; full garbage collection |
+| Imports | Frozen and SD module imports, a cached import and a missing-module search |
+| Drawing, SRAM / PSRAM screen | Every C drawing primitive, text in three fonts, the Python `Draw` wrappers, and swaps of a whole screen, a quarter, one text line and nothing |
+| Screens | Menu, list, text box, alert, status bar, on-screen keyboard and the home screen (open, full draw, idle frame) |
+| System services | Input, keyboard and battery reads over I2C, RTC, the home screen's 5 s resource snapshot, settings load, thread manager and Wi-Fi polling |
+| PSRAM | Write, read, fill and copy throughput; 8-bit access; drawing from PSRAM |
+| SD card | Free-space query; 64 KB writes, appends and reads through the driver and `open()`; small-file create, look-up, rename, delete; JSON save/load |
+| Memory afterwards | Heap held after all steps and the largest free block (fragmentation) |
+
+The PSRAM step uses only a block it allocates. The SD write tests are off by
+default; switched on, they run once, after the first round, in
+`picoware/core-benchmark-tmp`, which they remove afterwards. Back up the card
+first. Modules re-imported for timing are put back, so the running system keeps
+its own copies. A step that fails or runs out of memory is recorded and the
+next step still runs.
+
+To compare two reports, for example a baseline and a candidate build:
+
+```sh
+python3 tools/compare-benchmark.py core-baseline.txt core-candidate.txt
+```
+
+It lists the lines that changed by at least 5% and marks each better or worse
+(`--all` lists every line). A change smaller than the spread of either report
+is noise.
