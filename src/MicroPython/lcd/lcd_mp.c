@@ -870,29 +870,33 @@ mp_obj_t lcd_mp_image_bytearray(size_t n_args, const mp_obj_t *args)
     {
         if (invert)
         {
+            // Invert a copy, one row at a time: the buffer may be read-only
+            // (bytes, frozen artwork) and is often drawn again
             if (is_16bit)
             {
-                uint16_t *buf16 = (uint16_t *)bufinfo.buf;
-                for (size_t i = 0; i < width * height; i++)
+                const uint16_t *src = (const uint16_t *)bufinfo.buf;
+                uint16_t *row_buf = m_new(uint16_t, width);
+                for (uint16_t row = 0; row < height; row++)
                 {
-                    if (buf16[i] == 0xFFFF)
-                        buf16[i] = 0x0000;
-                    else if (buf16[i] == 0x0000)
-                        buf16[i] = 0xFFFF;
+                    const uint16_t *line = src + (size_t)row * width;
+                    for (uint16_t i = 0; i < width; i++)
+                        row_buf[i] = line[i] == 0xFFFF ? 0x0000 : line[i] == 0x0000 ? 0xFFFF : line[i];
+                    LCD_MP_BLIT_16BIT(x, y + row, width, 1, row_buf);
                 }
-                LCD_MP_BLIT_16BIT(x, y, width, height, buf16);
+                m_del(uint16_t, row_buf, width);
             }
             else
             {
-                uint8_t *buf = (uint8_t *)bufinfo.buf;
-                for (size_t i = 0; i < width * height; i++)
+                const uint8_t *src = (const uint8_t *)bufinfo.buf;
+                uint8_t *row_buf = m_new(uint8_t, width);
+                for (uint16_t row = 0; row < height; row++)
                 {
-                    if (buf[i] == 0xFF)
-                        buf[i] = 0x00;
-                    else if (buf[i] == 0x00)
-                        buf[i] = 0xFF;
+                    const uint8_t *line = src + (size_t)row * width;
+                    for (uint16_t i = 0; i < width; i++)
+                        row_buf[i] = line[i] == 0xFF ? 0x00 : line[i] == 0x00 ? 0xFF : line[i];
+                    LCD_MP_BLIT(x, y + row, width, 1, row_buf);
                 }
-                LCD_MP_BLIT(x, y, width, height, buf);
+                m_del(uint8_t, row_buf, width);
             }
         }
         else

@@ -846,31 +846,46 @@ static uint32_t GFX_HOT(row_hash)(const uint8_t *p, int n)
     return h ^ (h >> 16);
 }
 
-int gfx_present(gfx_surface *s, uint32_t *hash, bool force, gfx_send_rows send, void *ctx)
+int gfx_present(gfx_surface *s, uint32_t *hash, bool force, const gfx_sink *sink, void *ctx)
 {
-    uint8_t row[GFX_MAX_WIDTH];
-    int sent = 0, run_start = -1;
-    for (int y = 0; y <= s->height; y++)
+    uint8_t copy[GFX_MAX_WIDTH];
+    /* Ordinary memory is hashed and sent in place; other storage is read
+     * into copy once, for both. */
+    const bool in_place = s->storage == &gfx_sram_storage;
+    int sent = 0;
+    bool in_run = false;
+    for (int y = 0; y < s->height; y++)
     {
         bool changed = false;
-        if (y < s->height && (force || s->dirty[y]))
+        const uint8_t *row = copy;
+        if (force || s->dirty[y])
         {
             /* Clear the mark first: drawing that lands after this read marks
              * the row again for the next present. */
             s->dirty[y] = 0;
-            s->storage->read(s->ctx, y, 0, s->width, row);
+            if (in_place)
+                row = sram_at(s->ctx, y, 0);
+            else
+                s->storage->read(s->ctx, y, 0, s->width, copy);
             const uint32_t h = row_hash(row, s->width);
             changed = force || h != hash[y];
             hash[y] = h;
         }
-        if (changed && run_start < 0)
-            run_start = y;
-        if (!changed && run_start >= 0)
+        if (changed)
         {
-            send(ctx, run_start, y - run_start);
-            sent += y - run_start;
-            run_start = -1;
+            if (!in_run)
+                sink->begin(ctx, y);
+            in_run = true;
+            sink->row(ctx, y, row);
+            sent++;
+        }
+        else if (in_run)
+        {
+            sink->end(ctx);
+            in_run = false;
         }
     }
+    if (in_run)
+        sink->end(ctx);
     return sent;
 }

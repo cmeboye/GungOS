@@ -15,6 +15,9 @@
   collisions are found in one directory pass (a measured workload went
   from 5.6 million block reads to 182 thousand). A host test now checks
   the driver against an in-memory card.
+- Presenting the screen reads each changed PSRAM row once instead of twice;
+  the panel's DMA buffers, the 12-bit palette and the SD read buffer are
+  gone (8.9 KB more heap). Key and character lookup uses byte tables.
 - Allow point/moment load offsets from terminal nodes without resetting them
   to zero, including older saved cases. Explain missing member connections
   when adding a load; identify and select orphaned items on evaluation.

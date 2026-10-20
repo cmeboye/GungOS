@@ -56,19 +56,31 @@ void desktop_lcd_register(mp_obj_t lcd)
     notify(MP_QSTR_set_lcd, 1, &lcd);
 }
 
-static void send_rows(void *ctx, int y, int rows)
+static void run_begin(void *ctx, int y)
 {
     (void)ctx;
-    for (int row = y; row < y + rows; row++)
-        for (int x = 0; x < WIDTH; x++)
-            frame[row * WIDTH + x] = gfx_palette[pixels[row * WIDTH + x]];
+    (void)y;
 }
+
+static void send_row(void *ctx, int y, const uint8_t *src)
+{
+    (void)ctx;
+    for (int x = 0; x < WIDTH; x++)
+        frame[y * WIDTH + x] = gfx_palette[src[x]];
+}
+
+static void run_end(void *ctx)
+{
+    (void)ctx;
+}
+
+static const gfx_sink panel_sink = {run_begin, send_row, run_end};
 
 int desktop_lcd_swap(void)
 {
     if (!ready)
         return 0;
-    const int rows = gfx_present(&gfx_screen, gfx_screen_hash, full_refresh, send_rows, NULL);
+    const int rows = gfx_present(&gfx_screen, gfx_screen_hash, full_refresh, &panel_sink, NULL);
     full_refresh = false;
     mp_obj_t args[2] = {mp_obj_new_bytearray_by_ref(sizeof(frame), frame), mp_obj_new_int(rows)};
     notify(MP_QSTR_lcd_present, 2, args);

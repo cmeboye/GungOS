@@ -496,18 +496,47 @@ static void test_blit16_clipping(void)
 typedef struct
 {
     int runs, rows, first_y[16], count[16];
+    const uint8_t *image; /* what each sent row must hold */
+    int next_y, open, wrong;
 } sent_log;
 
-static void record(void *ctx, int y, int rows)
+static void record_begin(void *ctx, int y)
 {
     sent_log *log = ctx;
+    log->wrong += log->open; /* runs never nest */
+    log->open = 1;
     if (log->runs < 16)
     {
         log->first_y[log->runs] = y;
-        log->count[log->runs] = rows;
+        log->count[log->runs] = 0;
     }
+    log->next_y = y;
+}
+
+static void record_row(void *ctx, int y, const uint8_t *pixels)
+{
+    sent_log *log = ctx;
+    log->wrong += !log->open || y != log->next_y || memcmp(pixels, log->image + y * W, W) != 0;
+    log->next_y = y + 1;
+    if (log->runs < 16)
+        log->count[log->runs]++;
+    log->rows++;
+}
+
+static void record_end(void *ctx)
+{
+    sent_log *log = ctx;
+    log->wrong += !log->open;
+    log->open = 0;
     log->runs++;
-    log->rows += rows;
+}
+
+static const gfx_sink record = {record_begin, record_row, record_end};
+
+static void log_reset(sent_log *log, const uint8_t *image)
+{
+    memset(log, 0, sizeof(*log));
+    log->image = image;
 }
 
 static void test_present(void)
@@ -517,41 +546,54 @@ static void test_present(void)
     sent_log log;
 
     gfx_clear(&core, 0);
-    memset(&log, 0, sizeof(log));
-    CHECK(gfx_present(&core, hash, true, record, &log) == H && log.runs == 1);
+    log_reset(&log, sram_pixels);
+    CHECK(gfx_present(&core, hash, true, &record, &log) == H && log.runs == 1 && log.count[0] == H);
 
-    memset(&log, 0, sizeof(log));
-    CHECK(gfx_present(&core, hash, false, record, &log) == 0 && log.runs == 0);
+    log_reset(&log, sram_pixels);
+    CHECK(gfx_present(&core, hash, false, &record, &log) == 0 && log.runs == 0);
 
     /* Redrawing identical content sends nothing. */
     gfx_clear(&core, 0);
     gfx_text(&core, 10, 100, "Same menu", 0xFFFF, &f);
-    memset(&log, 0, sizeof(log));
-    gfx_present(&core, hash, false, record, &log);
+    log_reset(&log, sram_pixels);
+    gfx_present(&core, hash, false, &record, &log);
     CHECK(log.runs == 1 && log.rows > 0 && log.first_y[0] >= 100 && log.first_y[0] + log.rows <= 112);
     gfx_clear(&core, 0);
     gfx_text(&core, 10, 100, "Same menu", 0xFFFF, &f);
-    memset(&log, 0, sizeof(log));
-    CHECK(gfx_present(&core, hash, false, record, &log) == 0);
+    log_reset(&log, sram_pixels);
+    CHECK(gfx_present(&core, hash, false, &record, &log) == 0);
 
     /* Two separate changes: two runs, only their rows. */
     gfx_text(&core, 10, 20, "A", 0xFFFF, &f);
     gfx_fill_rect(&core, 0, 300, 5, 3, 0xF800);
-    memset(&log, 0, sizeof(log));
-    gfx_present(&core, hash, false, record, &log);
+    log_reset(&log, sram_pixels);
+    gfx_present(&core, hash, false, &record, &log);
     CHECK(log.runs == 2 && log.first_y[0] >= 20 && log.first_y[0] + log.count[0] <= 32 &&
           log.first_y[1] == 300 && log.count[1] == 3);
+    /* Every run was closed and every row held the image's pixels. */
+    CHECK(log.wrong == 0 && !log.open);
 
-    /* Only rows drawn on are read back for hashing. */
+    /* A run reaching the bottom row is closed too. */
+    gfx_fill_rect(&core, 0, H - 4, W, 4, 0x07E0);
+    log_reset(&log, sram_pixels);
+    gfx_present(&core, hash, false, &record, &log);
+    CHECK(log.runs == 1 && log.first_y[0] == H - 4 && log.count[0] == 4 && log.wrong == 0 && !log.open);
+
+    /* Only rows drawn on are read back, once each for hash and sink. */
     gfx_surface_init(&ext, W, H, &ext_storage, NULL);
     static uint32_t ext_hash[H];
     gfx_clear(&ext, 0);
-    gfx_present(&ext, ext_hash, true, record, &log);
+    log_reset(&log, ext_pixels);
+    gfx_present(&ext, ext_hash, true, &record, &log);
+    CHECK(log.rows == H && log.wrong == 0);
     gfx_pixel(&ext, 5, 5, 0xFFFF);
+    gfx_text(&ext, 0, 200, "PSRAM", 0xFFE0, &f);
     ext_transfers = 0;
-    memset(&log, 0, sizeof(log));
-    gfx_present(&ext, ext_hash, false, record, &log);
-    CHECK(ext_transfers == 1 && log.rows == 1);
+    log_reset(&log, ext_pixels);
+    gfx_present(&ext, ext_hash, false, &record, &log);
+    /* One read per dirty row: the pixel's row and every row of the text line. */
+    CHECK(log.runs >= 2 && log.first_y[0] == 5 && log.count[0] == 1 && log.wrong == 0 && !log.open &&
+          ext_transfers == 1 + f.height);
 }
 
 /* ---- transfer counts on external memory ---------------------------------- */

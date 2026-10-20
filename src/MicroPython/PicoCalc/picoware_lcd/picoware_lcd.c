@@ -20,8 +20,10 @@
 
 #include "../../log/log_mp.h"
 
-// Rows converted and sent per DMA transfer; two buffers alternate.
-#define LCD_STREAM_LINES 8
+// Rows converted and sent per DMA transfer; two buffers alternate. Sending a
+// row takes the panel longer than reading and converting one, so two rows
+// per buffer keep the DMA busy.
+#define LCD_STREAM_LINES 2
 
 static bool module_initialized = false;
 static uint8_t lcd_mode = LCD_MODE_PSRAM; // requested, and current once initialized
@@ -34,11 +36,10 @@ static gfx_sram sram_image;
 // RGB332 -> RGB565 with the bytes swapped, so memory holds the high byte
 // first, as the panel expects.
 static uint16_t palette_be[256] __attribute__((aligned(4)));
-// RGB332 -> RGB444 for the experimental 12-bit panel format.
-static uint16_t palette_444[256] __attribute__((aligned(4)));
 static uint8_t panel_bits = 16;
 static uint16_t stream_buffer[2][DISPLAY_WIDTH * LCD_STREAM_LINES] __attribute__((aligned(4)));
-static uint8_t row_buffer[DISPLAY_WIDTH] __attribute__((aligned(4)));
+static int stream_which;  // buffer being filled
+static int stream_lines;  // rows in it so far
 
 // ---------------------------------------------------------------------------
 // PSRAM storage
@@ -192,7 +193,6 @@ void picocalc_lcd_init(void)
         {
             uint16_t c = gfx_palette[i];
             palette_be[i] = (uint16_t)((c >> 8) | (c << 8));
-            palette_444[i] = (uint16_t)(((c >> 12) << 8) | (((c >> 7) & 0x0F) << 4) | ((c >> 1) & 0x0F));
         }
         panel_bits = 16;
     }
@@ -241,58 +241,80 @@ void lcd_invalidate(void)
     full_refresh = true;
 }
 
-// Send rows [y, y + rows) as one window, converting the next block while
-// DMA sends the current one.
-static void send_rows(void *ctx, int y, int rows)
+// Presenting: each changed row is converted into the buffer being filled; a
+// full buffer goes out by DMA while the CPU fills the other one.
+
+static size_t panel_row_bytes(void)
+{
+    return panel_bits == 12 ? DISPLAY_WIDTH * 3 / 2 : DISPLAY_WIDTH * 2;
+}
+
+static void stream_flush(void)
+{
+    if (stream_lines == 0)
+        return;
+    lcd_stream_bytes((const uint8_t *)stream_buffer[stream_which], (size_t)stream_lines * panel_row_bytes());
+    stream_which ^= 1;
+    stream_lines = 0;
+}
+
+static void present_begin(void *ctx, int y)
 {
     (void)ctx;
-    lcd_stream_begin(0, (uint16_t)y, DISPLAY_WIDTH - 1, (uint16_t)(y + rows - 1));
-    int which = 0;
-    for (int done = 0; done < rows; done += LCD_STREAM_LINES)
+    // The run's length is not known yet, so the window reaches the bottom;
+    // the panel stops taking pixels when the run ends.
+    lcd_stream_begin(0, (uint16_t)y, DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 1);
+    stream_which = 0; // the last run ended with both buffers sent
+    stream_lines = 0;
+}
+
+// RGB565 -> RGB444 for the experimental 12-bit panel format.
+static inline uint16_t rgb444(uint16_t c)
+{
+    return (uint16_t)(((c >> 12) << 8) | (((c >> 7) & 0x0F) << 4) | ((c >> 1) & 0x0F));
+}
+
+static void present_row(void *ctx, int y, const uint8_t *src)
+{
+    (void)ctx;
+    (void)y;
+    uint8_t *packed = (uint8_t *)stream_buffer[stream_which] + (size_t)stream_lines * panel_row_bytes();
+    if (panel_bits == 12)
     {
-        const int lines = rows - done < LCD_STREAM_LINES ? rows - done : LCD_STREAM_LINES;
-        uint16_t *out = stream_buffer[which];
-        uint8_t *packed = (uint8_t *)out;
-        for (int line = 0; line < lines; line++)
+        // Two pixels in three bytes: R1G1 B1R2 G2B2.
+        uint8_t *dst = packed;
+        for (int col = 0; col < DISPLAY_WIDTH; col += 2)
         {
-            const int row = y + done + line;
-            const uint8_t *src;
-            if (sram_pixels != NULL)
-                src = sram_pixels + row * DISPLAY_WIDTH;
-            else
-            {
-                psram_get(image_addr(row, 0), row_buffer, DISPLAY_WIDTH);
-                src = row_buffer;
-            }
-            if (panel_bits == 12)
-            {
-                // Two pixels in three bytes: R1G1 B1R2 G2B2.
-                uint8_t *dst = packed + line * (DISPLAY_WIDTH * 3 / 2);
-                for (int col = 0; col < DISPLAY_WIDTH; col += 2)
-                {
-                    const uint16_t a = palette_444[src[col]], b = palette_444[src[col + 1]];
-                    *dst++ = (uint8_t)(a >> 4);
-                    *dst++ = (uint8_t)(((a & 0x0F) << 4) | (b >> 8));
-                    *dst++ = (uint8_t)b;
-                }
-                continue;
-            }
-            uint16_t *dst = out + line * DISPLAY_WIDTH;
-            for (int col = 0; col < DISPLAY_WIDTH; col++)
-                dst[col] = palette_be[src[col]];
+            const uint16_t a = rgb444(gfx_palette[src[col]]), b = rgb444(gfx_palette[src[col + 1]]);
+            *dst++ = (uint8_t)(a >> 4);
+            *dst++ = (uint8_t)(((a & 0x0F) << 4) | (b >> 8));
+            *dst++ = (uint8_t)b;
         }
-        const size_t row_bytes = panel_bits == 12 ? DISPLAY_WIDTH * 3 / 2 : DISPLAY_WIDTH * 2;
-        lcd_stream_bytes((const uint8_t *)out, (size_t)lines * row_bytes);
-        which ^= 1;
     }
+    else
+    {
+        uint16_t *dst = (uint16_t *)packed;
+        for (int col = 0; col < DISPLAY_WIDTH; col++)
+            dst[col] = palette_be[src[col]];
+    }
+    if (++stream_lines == LCD_STREAM_LINES)
+        stream_flush();
+}
+
+static void present_end(void *ctx)
+{
+    (void)ctx;
+    stream_flush();
     lcd_stream_end();
 }
+
+static const gfx_sink panel_sink = {present_begin, present_row, present_end};
 
 int lcd_swap(void)
 {
     if (!module_initialized)
         return 0;
-    const int rows = gfx_present(&gfx_screen, gfx_screen_hash, full_refresh, send_rows, NULL);
+    const int rows = gfx_present(&gfx_screen, gfx_screen_hash, full_refresh, &panel_sink, NULL);
     full_refresh = false;
     return rows;
 }

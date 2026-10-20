@@ -117,13 +117,25 @@ void gfx_read_row(gfx_surface *s, int y, uint8_t *dst);
 void gfx_mark_all_dirty(gfx_surface *s);
 
 /*
+ * Where presented rows go. Changed rows arrive in order, grouped in runs of
+ * consecutive rows: begin(y) opens a run at row y, row() then receives each
+ * row's pixels (valid during the call only) and end() closes the run.
+ */
+typedef struct
+{
+    void (*begin)(void *ctx, int y);
+    void (*row)(void *ctx, int y, const uint8_t *pixels);
+    void (*end)(void *ctx);
+} gfx_sink;
+
+/*
  * Send what changed since the last present. Rows drawn on are hashed and
  * compared with the hash of what the display already shows (hash holds one
  * entry per row and persists between calls); only rows that differ are
- * sent, as runs of consecutive rows. force sends everything, e.g. after the
- * display was reset. Returns the number of rows sent.
+ * sent. Each row is read once, for both the hash and the sink. force sends
+ * everything, e.g. after the display was reset. Returns the number of rows
+ * sent.
  */
-typedef void (*gfx_send_rows)(void *ctx, int y, int rows);
-int gfx_present(gfx_surface *s, uint32_t *hash, bool force, gfx_send_rows send, void *ctx);
+int gfx_present(gfx_surface *s, uint32_t *hash, bool force, const gfx_sink *sink, void *ctx);
 
 #endif
