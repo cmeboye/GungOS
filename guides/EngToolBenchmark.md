@@ -110,3 +110,6 @@ told apart. The F4 suite ends with a read-only SD stage: listing the apps folder
 the app-folder scan menus used to run, file lookups, reading the largest app module
 in 512-byte and import-sized pieces, and the saved Wi-Fi lookup. It writes nothing
 except its report, so it is safe to compare on an older firmware's SD driver.
+On the F4 suite's first screen, F5 runs only the memory and SD stages. A stage that
+runs out of memory is reported as `ran out of memory` with the heap left after
+cleanup, keeping what it had measured, and the later stages still run.

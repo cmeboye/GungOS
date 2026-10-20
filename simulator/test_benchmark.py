@@ -116,3 +116,28 @@ assert 'Draw 26 text rows, PSRAM' in report
 vm.draw.set_panel_bits=original
 bench.stop(vm)
 print('PASS: completed measurements survive a failure before the colour prompt')
+
+# A stage that runs out of memory is reported and the rest still run.
+stages=bench.STAGES
+def no_memory(vm):raise MemoryError('simulated')
+bench.STAGES=stages[:4]+(('3-D plot frame',no_memory),)+stages[5:]
+try:
+    assert bench.start(vm)
+    step(k.BUTTON_CENTER);finish()
+finally:
+    bench.STAGES=stages
+report=vm.storage.read(bench.RESULT_PATH)
+assert 'Status: complete' in report and '3-D plot frame: ran out of memory' in report
+assert 'Python loop, 2000 multiply-adds' in report and 'List picoware/apps' in report
+assert vm.draw.mode==vm.draw.MODE_PSRAM
+print('PASS: running out of memory in one stage is recorded and the later stages run')
+
+# F5 runs only the memory and SD card stages.
+assert bench.start(vm)
+step(k.BUTTON_F5)
+for _ in range(5):step()
+report=vm.storage.read(bench.RESULT_PATH)
+assert 'Status: complete' in report and 'Firmware build: ' in report and 'Heap total' in report
+assert 'List picoware/apps' in report and 'Saved Wi-Fi lookup' in report
+assert 'Swap, whole screen' not in report and 'Python loop' not in report
+print('PASS: F5 measures memory and the SD card only')

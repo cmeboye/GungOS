@@ -17,6 +17,7 @@ _saved = ''
 _panel_test = False
 _prompt_started = 0
 _start_mode = None
+_plan = ()      # indices into STAGES for this run
 
 
 def _best(function, repeat):
@@ -643,7 +644,8 @@ def _intro(vm):
         'the picture, press N to restore it.',
         'Y/N answer times out after 20 sec.',
         'Progress is saved between steps.',
-        'Enter: start    Esc: back'))
+        'Enter: start    Esc: back',
+        'F5: memory and SD card steps only'))
 
 
 STAGES = (
@@ -662,21 +664,22 @@ STAGES = (
 
 
 def start(vm):
-    global _stage, _results, _waiting, _saved, _panel_test, _prompt_started, _start_mode
+    global _stage, _results, _waiting, _saved, _panel_test, _prompt_started, _start_mode, _plan
     _stage, _results, _waiting, _saved, _start_mode = -1, [], False, '', None
+    _plan = tuple(range(len(STAGES)))
     _panel_test, _prompt_started = False, 0
     _intro(vm)
     return True
 
 
 def run(vm):
-    global _stage, _waiting
+    global _stage, _waiting, _plan
     button = vm.button
     if button == k.BUTTON_ESCAPE:
         if _waiting:
             _stage_panel_answer(vm, False)
             _waiting = False
-        if 0 <= _stage < len(STAGES):
+        if 0 <= _stage < len(_plan):
             _restore_mode(vm)
             _checkpoint(vm, 'cancelled')
         vm.back()
@@ -698,16 +701,26 @@ def run(vm):
             _intro(vm)
         elif button == k.BUTTON_CENTER:
             _stage = 0
+        elif button == k.BUTTON_F5:
+            _plan = (0, len(STAGES) - 1)  # memory, then the SD card
+            _stage = 0
         return
-    if _stage < len(STAGES):
-        title, function = STAGES[_stage]
-        _status(vm.draw, 'Step %d of %d: %s' % (_stage + 1, len(STAGES), title))
+    if _stage < len(_plan):
+        title, function = STAGES[_plan[_stage]]
+        _status(vm.draw, 'Step %d of %d: %s' % (_stage + 1, len(_plan), title))
         _checkpoint(vm, 'running step %d: %s' % (_stage + 1, title))
-        function(vm)
+        try:
+            function(vm)
+        except MemoryError:
+            # A result like any other: the stages after it still run, and
+            # what this stage measured before failing is kept
+            import gc
+            gc.collect()
+            _record(title, 'ran out of memory (%d KB free afterwards)' % (gc.mem_free() // 1024), '')
         _checkpoint(vm, 'waiting for Y/N' if _waiting else 'finished step %d: %s' % (_stage + 1, title))
         if not _waiting:
             _stage += 1
-        if _stage == len(STAGES):
+        if _stage == len(_plan):
             _report(vm)
             _stage += 1
 
