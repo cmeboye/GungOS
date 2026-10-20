@@ -56,24 +56,8 @@ static void sd_spi_write_buf(const uint8_t *src, size_t len)
 
 static void sd_spi_read_buf(uint8_t *dst, size_t len)
 {
-    // Use a static buffer for 0xFF bytes to avoid stack allocation
-    static uint8_t ff_buf[512];
-    static bool ff_buf_initialized = false;
-
-    if (!ff_buf_initialized)
-    {
-        memset(ff_buf, 0xFF, sizeof(ff_buf));
-        ff_buf_initialized = true;
-    }
-
-    // Read in chunks if larger than our buffer
-    while (len > 0)
-    {
-        size_t chunk = (len > sizeof(ff_buf)) ? sizeof(ff_buf) : len;
-        spi_write_read_blocking(SD_SPI, ff_buf, dst, chunk);
-        dst += chunk;
-        len -= chunk;
-    }
+    // Clock out 0xFF while reading, without a buffer of 0xFF bytes
+    spi_read_blocking(SD_SPI, 0xFF, dst, len);
 }
 
 static bool sd_wait_ready(void)

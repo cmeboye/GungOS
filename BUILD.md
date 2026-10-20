@@ -93,6 +93,7 @@ real pico-sdk headers without the Arm toolchain:
 ```sh
 sh src/MicroPython/gfx/tests/run-tests.sh
 sh src/MicroPython/picosolve/tests/run-tests.sh
+sh src/MicroPython/sd/tests/run-tests.sh
 sh tools/check-device-syntax.sh
 ```
 

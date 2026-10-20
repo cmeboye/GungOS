@@ -91,6 +91,11 @@ extern "C"
         uint8_t attr;
         uint32_t sector;
         uint32_t offset;
+        // First long-name slot of the entry, or lfn_sector 0 when it has none.
+        // The slots run forward from here to the 8.3 entry, possibly across a
+        // cluster boundary.
+        uint32_t lfn_sector;
+        uint32_t lfn_offset;
     } fat32_entry_t;
 
     // Partition entry structure
