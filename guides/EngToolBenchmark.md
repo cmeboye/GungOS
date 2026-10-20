@@ -103,3 +103,10 @@ and recovery paths; only the physical run establishes Pico performance.
 
 The normal 16-bit panel transfer format is retained. F4's separate display suite
 still offers its explicitly enabled experimental 12-bit test.
+
+Both reports name the firmware build (`build` in the render report, `Firmware
+build` in `benchmark.txt`), so runs on different UF2s of the same version can be
+told apart. The F4 suite ends with a read-only SD stage: listing the apps folder,
+the app-folder scan menus used to run, file lookups, reading the largest app module
+in 512-byte and import-sized pieces, and the saved Wi-Fi lookup. It writes nothing
+except its report, so it is safe to compare on an older firmware's SD driver.

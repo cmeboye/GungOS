@@ -63,6 +63,9 @@ assert 'Implicit sphere mesh, C' in report
 assert 'Beam solve, single' in report and 'Moment diagrams' in report
 assert '3-D frame, C, ' in report and '3-D frame speed-up' in report and '3-D frame screen: SRAM' in report
 assert vm.draw.mode==vm.draw.MODE_PSRAM, 'The 3-D stage must restore the screen mode'
+assert 'Firmware build: ' in report and 'List picoware/apps: ' in report
+assert 'Scan of the SD app folders' in report and 'Look up 8 missing files' in report
+assert ' in 512-byte pieces: ' in report and 'Saved Wi-Fi lookup' in report
 print('PASS: default run skips experimental format and saves complete memory/timing results')
 
 assert bench.start(vm)

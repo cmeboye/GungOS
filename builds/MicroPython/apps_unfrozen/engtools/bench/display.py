@@ -100,8 +100,18 @@ def _restore_mode(vm):
         _use_mode(vm, _start_mode == 'SRAM')
 
 
+def _firmware_build():
+    """MicroPython's build string, which names the firmware build."""
+    try:
+        import os
+        return os.uname().version
+    except (ImportError, AttributeError):
+        return 'unknown'
+
+
 def _stage_memory(vm):
     global _start_mode
+    _record('Firmware build', _firmware_build(), '')
     _start_mode = _mode_name(vm.draw)
     _record('Screen mode at start', _start_mode, '')
     try:
@@ -518,6 +528,79 @@ def _stage_compute(vm):
         _record('ulab', 'not available', '')
 
 
+APPS = 'picoware/apps'
+
+
+def _app_modules(storage, limit=60):
+    """(path, size) of compiled app modules, two folder levels deep."""
+    found, folders = [], [APPS]
+    while folders and len(found) < limit:
+        folder = folders.pop(0)
+        for name in storage.listdir(folder):
+            path = folder + '/' + name
+            if name.endswith('.mpy') or name.endswith('.py'):  # .py: simulator sources
+                found.append((path, storage.size(path)))
+            elif '.' not in name and folder.count('/') < 3 and storage.is_directory(path):
+                folders.append(path)
+    return found
+
+
+def _stage_storage(vm):
+    """SD card, reading only: what menus, the file browser and imports do.
+
+    Nothing is written, so the same stage is safe to compare on an older
+    firmware's SD driver."""
+    storage = vm.storage
+    if not storage.active:
+        _record('SD card', 'not available', '')
+        return
+    try:
+        names = storage.listdir(APPS)
+    except Exception as e:
+        _record('SD card', 'cannot list %s: %s' % (APPS, e), '')
+        return
+    _record('List ' + APPS, _best(lambda: storage.listdir(APPS), 3) / 1000,
+            'ms (%d entries)' % len(names))
+    loader = vm.app_loader
+    if hasattr(loader, '_app_tops'):
+        tops = loader._app_tops()
+        _record('Scan of the SD app folders (v1.32: at every menu start)',
+                _best(loader._app_tops, 2) / 1000, 'ms (%d apps)' % len(tops))
+    modules = _app_modules(storage)
+    if not modules:
+        _record('App modules', 'none found under ' + APPS, '')
+        return
+    paths = [path for path, _ in modules[:8]]
+    _record('Look up %d app files' % len(paths),
+            _best(lambda: [storage.exists(p) for p in paths], 3) / 1000, 'ms')
+    missing = [APPS + '/missing-%d.mpy' % i for i in range(8)]
+    _record('Look up 8 missing files (as an import search does)',
+            _best(lambda: [storage.exists(p) for p in missing], 3) / 1000, 'ms')
+    path, size = max(modules, key=lambda item: item[1])
+
+    def pieces():
+        handle = storage.file_open(path)
+        try:
+            for offset in range(0, size, 512):
+                storage.file_read(handle, offset, 512, decode=False)
+        finally:
+            storage.file_close(handle)
+    _record('Read %s in 512-byte pieces' % path.split('/')[-1], _best(pieces, 2) / 1000,
+            'ms (%d KB)' % (size // 1024))
+    if storage.vfs_mounted:
+        def imported():
+            with open(storage.vfs_prefix + '/' + path, 'rb') as handle:
+                while handle.read(128):
+                    pass
+        _record('Read it as an import does (128-byte reads)', _best(imported, 2) / 1000, 'ms')
+    try:
+        from picoware.applications.wifi.utils import load_wifi_settings
+        _record('Saved Wi-Fi lookup (v1.32: every home-screen frame without Wi-Fi)',
+                _best(lambda: load_wifi_settings(vm), 3) / 1000, 'ms')
+    except ImportError:
+        pass
+
+
 def _format(value):
     return ('%.2f' % value) if isinstance(value, float) else str(value)
 
@@ -574,6 +657,7 @@ STAGES = (
     ('Graph drawing', _stage_graph),
     ('Calculator', _stage_calculator),
     ('Python versus C', _stage_compute),
+    ('SD card (read only)', _stage_storage),
 )
 
 

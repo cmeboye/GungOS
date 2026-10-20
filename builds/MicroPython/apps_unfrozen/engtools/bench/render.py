@@ -250,9 +250,10 @@ class Benchmark:
         modes=('PSRAM','SRAM') if self.mode==0 else (MODES[self.mode],)
         self.queue=[(mode,case) for mode in modes for case in models.cases(self.full)]
         self.index=0;self.blocked=set();self.last=[];self.counts={};self.total_work=0
-        import machine
+        import machine,os
+        build=os.uname().version if hasattr(os,'uname') else 'unknown'
         self.log(dict(clock_hz=machine.freq(),benchmark='EngTool render benchmark',version=FIRMWARE_VERSION,
-                      status='started',machine=sys.implementation._machine,
+                      build=build,status='started',machine=sys.implementation._machine,
                       profile='Full' if self.full else 'Quick',modes=modes,
                       reserve_bytes=RESERVE,work_limit_us=WORK_LIMIT_US,
                       memory='GC heap; sampled after yields, not a true transient/native peak',
