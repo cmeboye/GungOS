@@ -13,8 +13,30 @@ class Problem(ValueError):
         self.where, self.pair, self.item = where, pair, item
 
 
-def attached(model, node):
+def ends(model, node):
     return [i for i,m in enumerate(model['members']) if node in (m['a'],m['b'])]
+
+
+def attached(model, node):
+    """Members ending at the node, then members it lies inside: a node
+    inside a member connects to it, and the member stays continuous."""
+    out=ends(model,node)
+    return out+[i for i in range(len(model['members'])) if i not in out and point_on(model,node,i) is not None]
+
+
+def passing(model):
+    """(member, x, node) for every node lying inside a member."""
+    return [(i,x,j) for i in range(len(model['members'])) for j in range(len(model['joints']))
+            for x in (point_on(model,j,i),) if x is not None]
+
+
+def place(model, m, node):
+    """(x of the node along m, +1 or -1): offsets from the node run toward
+    end b, or from end b back toward end a."""
+    edge=model['members'][m]
+    if node==edge['a']:return 0.0,1
+    if node==edge['b']:return axis(model,m,edge['a'])[2],-1
+    return point_on(model,node,m),1
 
 
 def ensure(model):
@@ -61,8 +83,10 @@ def ensure(model):
 
 
 def axis(model, m, node):
+    """Unit vector and distance from the node to the member's far end (end b
+    from a node inside the member)."""
     edge=model['members'][m]
-    other=edge['b'] if edge['a']==node else edge['a']
+    other=edge['a'] if edge['b']==node else edge['b']
     a,b=model['joints'][node],model['joints'][other]
     dx,dy=b[0]-a[0],b[1]-a[1];length=sqrt(dx*dx+dy*dy)
     return (dx/length,dy/length,length) if length>EPS else (1.0,0.0,length)
@@ -78,10 +102,10 @@ def bind(model, obj, node, member=None, lock=True):
         obj['offset']=0.0
         if 'x2' in obj:obj['offset2']=0.0
     else:
-        length=axis(model,m,node)[2];reverse=model['members'][m]['b']==node
-        obj['offset']=length-obj.get('x',0.0) if reverse else obj.get('x',0.0)
+        base,sign=place(model,m,node)
+        obj['offset']=sign*(obj.get('x',0.0)-base)
         if 'x2' in obj:
-            d=length-obj['x2'] if reverse else obj['x2']
+            d=sign*(obj['x2']-base)
             obj['offset'],obj['offset2']=min(obj['offset'],d),max(obj['offset'],d)
     sync_item(model,obj)
 
@@ -94,11 +118,11 @@ def sync_item(model,obj):
     if m not in choices:m=choices[0] if choices else -1
     obj['m']=m
     if m<0:return
-    length=axis(model,m,node)[2];reverse=model['members'][m]['b']==node
+    base,sign=place(model,m,node)
     if obj.get('at_node') and obj.get('kind') not in ('point','moment') and len(choices)==1 and 'offset2' not in obj:obj['offset']=0.0
-    d=obj.get('offset',0.0);obj['x']=length-d if reverse else d
+    obj['x']=base+sign*obj.get('offset',0.0)
     if 'offset2' in obj:
-        e=obj['offset2'];p=length-e if reverse else e
+        p=base+sign*obj['offset2']
         obj['x'],obj['x2']=min(obj['x'],p),max(obj['x'],p)
 
 
@@ -167,11 +191,6 @@ def validate(model):
     if overlap:
         i,j,a,b=overlap[0]
         raise Problem('L%d overlaps L%d: F3 Resolve overlaps'%(i+1,j+1),((a[0]+b[0])/2,(a[1]+b[1])/2),(i,j))
-    used=set(j for m in members for j in (m['a'],m['b']))
-    for j in used:
-        for i,m in enumerate(members):
-            if j not in (m['a'],m['b']) and point_on(model,j,i) is not None:
-                raise Problem('J%d lies inside L%d: F3 Split at node'%(j+1,i+1),tuple(joints[j]))
     for group in ('supports','hinges','loads'):
         for index,obj in enumerate(model[group]):
             m=obj.get('m',-1)
@@ -190,10 +209,11 @@ def validate(model):
                     raise Problem('%s %d needs finite %s'%(group[:-1],index+1,key))
             if 'node' in obj:
                 node=obj['node']
-                if type(node) is not int or node not in (members[m]['a'],members[m]['b']):raise Problem('Item references an unconnected node')
-                length=axis(model,m,node)[2]
+                if type(node) is not int or m not in attached(model,node):raise Problem('Item references an unconnected node')
+                base,sign=place(model,m,node)
+                lo,hi=sorted((-sign*base,sign*(axis(model,m,members[m]['a'])[2]-base)))
                 for key in ('offset','offset2'):
-                    if key in obj and (not isfinite(obj[key]) or not -EPS<=obj[key]<=length+EPS):
+                    if key in obj and (not isfinite(obj[key]) or not lo-EPS<=obj[key]<=hi+EPS):
                         raise Problem('Position must stay within L%d'%(m+1),tuple(joints[node]))
                 if 'offset2' in obj and not obj['offset']<obj['offset2']-EPS:raise Problem('Distributed start must be before end')
     from . import model as bm
@@ -258,11 +278,16 @@ def normalize(model):
         for obj in out[group]:
             if 0<=obj.get('m',-1)<len(out['members']):
                 for key in ('node','offset','offset2','at_node'):obj.pop(key,None)
+    def collinear(k,i):
+        a=out['joints'][out['members'][i]['a']];ux,uy=axis(out,i,out['members'][i]['a'])[:2]
+        return all(abs(-(p[0]-a[0])*uy+(p[1]-a[1])*ux)<=EPS for p in (out['joints'][out['members'][k][e]] for e in ('a','b')))
+    # Split only where an overlapping member ends: other nodes inside a
+    # member connect without one, and keep it continuous.
     used=sorted(set(j for m in out['members'] for j in (m['a'],m['b'])))
     i=0
     while i<len(out['members']):
         for j in used:
-            if j not in (out['members'][i]['a'],out['members'][i]['b']) and point_on(out,j,i) is not None:
+            if point_on(out,j,i) is not None and any(k!=i and j in (e['a'],e['b']) and collinear(k,i) for k,e in enumerate(out['members'])):
                 split_at(out,i,j)
         i+=1
     i=0

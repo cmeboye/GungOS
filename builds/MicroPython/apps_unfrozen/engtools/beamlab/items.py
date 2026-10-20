@@ -320,7 +320,7 @@ def split(model,m,x,node=None):
             # An orphan stays at its own node until the user reconnects it.
             if 'node' not in obj or not 0<=obj['m']<len(model['members']):continue
             edge=model['members'][obj['m']];j=obj['node']
-            if j not in (edge['a'],edge['b']):j=edge['a']
+            if obj['m'] not in st.attached(model,j):j=edge['a']
             lock=obj.get('at_node',False)
             st.bind(model,obj,j,obj['m'],lock)
     return result
@@ -329,7 +329,7 @@ def split(model,m,x,node=None):
 def delete(model,ref):
     kind,obj=ref
     if kind=='joint':
-        if st.attached(model,obj):raise ValueError('Remove connected members before deleting this node')
+        if st.ends(model,obj):raise ValueError('Remove connected members before deleting this node')
         if any(t.get('node')==obj for group in ('supports','hinges','loads') for t in model[group]):raise ValueError("Remove this node's supports/loads first")
         del model['joints'][obj];del model['joint_types'][obj]
         for m in model['members']:

@@ -158,13 +158,16 @@ else:raise AssertionError('Ambiguous loads were merged')
 # Distributed loading is split with interpolated endpoints, preserving resultant.
 m=overlap();m['loads']=[bm.dist_load(1,0,2,1000,3000)]
 out=st.normalize(m);sol=bm.Solution(out);near(sol.applied(0)[1],-4000);sol.free()
-# Touching endpoints are valid; an unsplit used T-junction needs explicit joining.
+# Touching endpoints are valid; a node inside a member joins it unsplit, and
+# a rigid T-junction solves the same before and after an explicit split.
 m=bm.empty_model(((0,0),(1,0),(2,0)),((0,1),(1,2)))
 m['supports']=[bm.support(0,0,'Fixed')];bm.Solution(m).free()
 m=bm.empty_model(((0,0),(2,0),(1,0),(1,1)),((0,1),(2,3)))
-m['supports']=[bm.support(0,0,'Fixed')];rejects(m,'inside L1')
+m['supports']=[bm.support(0,0,'Fixed')];m['loads']=[bm.point_load(1,1,1000,direction='right')]
+sol=bm.Solution(m);whole=sol.reactions(0)[0];sol.free()
+near(whole[1],-1000);near(whole[3],1000)
 st.split_at(m,0,2);assert len(m['joints'])==4 and len(m['members'])==3
-bm.Solution(m).free()
+sol=bm.Solution(m);near(sol.reactions(0)[0][3],whole[3]);sol.free()
 # Duplicate nodes do not become silently welded; explicit merge remaps attachments.
 m=bm.empty_model(((0,0),(1,0),(1,0),(1,1)),((0,1),(2,3)))
 m['supports']=[bm.support(0,0,'Fixed')];rejects(m,'coincide')
@@ -206,7 +209,7 @@ print('PASS: signed global XY settlement, old downward settlement migration and 
 a.replace_model(bm.empty_model(((0,0),(2,0),(4,0)),((0,1),)))
 a.focus(('joint',2));a.model_tab=3
 n=len(a.undo);key(k.BUTTON_F1);key(k.BUTTON_CENTER)
-assert a.error and 'J3 has no member' in a.message and 'Split at node' in a.message
+assert a.error and 'J3 has no member' in a.message and 'place it on one' in a.message
 assert not a.model['loads'] and len(a.undo)==n
 # Point/moment offsets at both ends (including old locked metadata) preserve
 # native positions, drawn positions and correct closed-form cantilever reactions.
@@ -240,7 +243,8 @@ for node in (0,1):
         char('z');near(a.model['loads'][0]['offset'],.5)
 # A member endpoint edit can orphan an existing load. F6 points to that load;
 # choosing a connected reference node restores it without another load or solve.
-m=bm.empty_model(((0,0),(2,0),(4,0),(6,0)),((0,1),(1,2)))
+# (J3 sits off the new L2: a node inside it would stay connected.)
+m=bm.empty_model(((0,0),(2,0),(4,1),(6,0)),((0,1),(1,2)))
 m['supports']=[bm.support(0,0,'Fixed')]
 a.replace_model(m);a.focus(('joint',2));a.add_attachment('point')
 load=a.model['loads'][0];value(('load',load),'x','.25')
@@ -258,20 +262,22 @@ a.model['loads'].append(load);a.resolve();a.focus(('joint',2));a.add_member()
 assert load['m']==1 and load['offset']==.25 and a.solution is None
 print('PASS: endpoint point/moment offsets, old lock migration, reaction/drawing/save parity, bounds/undo, isolated-node Add guard and targeted orphan repair')
 
-# Reproduce the reported workflow: add an interior draft node, explicitly
-# split/join it into the beam, then add and offset its load using the UI.
+# A draft node inside the beam takes a load directly; offsets run toward
+# end b and may be negative. An explicit split keeps the same answer.
 m=bm.empty_model(((0,0),(3,0),(1,0)),((0,1),))
 m['supports']=[bm.support(0,0,'Fixed')]
 a.replace_model(m);a.focus(('joint',2));a.model_tab=3
-key(k.BUTTON_F1);key(k.BUTTON_CENTER);assert not a.model['loads'] and a.error
-a.split_menu();key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)
-assert len(a.model['members'])==2 and len(a.model['joints'])==3
-assert a.node_cursor==2 and a.solution is None
-a.model_tab=3;key(k.BUTTON_F1);key(k.BUTTON_CENTER)
-load=a.model['loads'][0];assert load['node']==2 and load['m']==1
-value(('load',load),'x','.5');assert a.evaluate()
-near(a.solution.reactions(a.view)[0][3],15000)
-print('PASS: new interior node -> explicit split/join -> offset load -> correct cantilever reaction')
+key(k.BUTTON_F1);key(k.BUTTON_CENTER)
+load=a.model['loads'][0];assert load['node']==2 and load['m']==0 and load['x']==1,load
+value(('load',load),'x','.5');near(load['x'],1.5);near(st.item_point(a.model,load)[0],1.5)
+assert a.evaluate();near(a.solution.reactions(a.view)[0][3],15000)
+value(('load',load),'x','-.5');near(load['x'],.5);near(st.item_point(a.model,load)[0],.5)
+assert a.evaluate();near(a.solution.reactions(a.view)[0][3],5000)
+value(('load',load),'x','-1.5');assert not a.evaluate() and 'Position must stay within L1' in str(a.problem)
+char('z');a.split_menu();key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)
+assert len(a.model['members'])==2 and a.node_cursor==2 and a.solution is None
+assert a.model['loads'][0]['node']==2;assert a.evaluate();near(a.solution.reactions(a.view)[0][3],5000)
+print('PASS: interior node attachment, signed offsets toward end b, bounds, split keeps the answer')
 
 # Section edits share the 12-step undo limit with every other edit.
 a.replace_model(bm.template(0));a.undo=[]
@@ -315,3 +321,53 @@ rows=a.result_rows();assert a.result_rows() is rows and rows[0][1]=='Dead'
 a.rename_case(0);a.prompt['apply']('Permanent');a.prompt=None
 assert a.solution is not None and a.result_rows()[0][1]=='Permanent'
 print('PASS: section undo limit, settlement case guard, orphans kept through split/resolve, orphaned hinge drawing, cached results follow renames')
+
+# The reported model: posts pinned to a beam that stays continuous through
+# J5/J6. It matches the beam on axial springs EA/L at those points.
+def posts(kind='pin'):
+    m=bm.empty_model(((0,0),(15,0),(5,-2),(10,-2),(5,0),(10,0)),((0,1),(4,2),(5,3)))
+    m['joint_types'][4]=m['joint_types'][5]=kind
+    m['supports']=[bm.support(0,0,'Pin'),bm.support(0,15,'Roller'),bm.support(1,2,'Pin'),bm.support(2,2,'Pin')]
+    m['loads']=[bm.point_load(0,5+5/4,10000),bm.point_load(0,10-5/4,10000)]
+    return st.ensure(m)
+values=bm.section_values(posts()['sections'][0])
+springs=bm.empty_model(((0,0),(15,0)),((0,1),))
+springs['supports']=[bm.support(0,0,'Pin'),bm.support(0,15,'Roller')]
+for x in (5,10):
+    s=bm.support(0,x,'Spring');s.update(kx=0.0,ky=values['E']*values['A']/2);springs['supports'].append(s)
+springs['loads']=posts()['loads']
+want=bm.Solution(springs);sol=bm.Solution(posts())
+for x in (0,5,6.25,7.5,10,15):near(sol.at(0,x,0)[1],want.at(0,x,0)[1])
+for r,w in zip(sol.reactions(0),want.reactions(0)):near(r[2],w[2])
+assert abs(sol.at(0,5,0)[1])>1000
+for m in (1,2):near(sol.at(m,0,0)[1],0);near(sol.at(m,2,0)[1],0)
+sol.free();want.free()
+# Rigid J5/J6 make portal-like posts that carry moment.
+sol=bm.Solution(posts('rigid'));assert abs(sol.at(1,0,0)[1])>100;sol.free()
+# A Gerber hinge: split L1 at pinned J5, and its moment there is zero.
+m=posts();st.split_at(m,0,4);sol=bm.Solution(m)
+near(sol.at(0,5,0)[1],0);near(sol.at(3,0,0)[1],0);sol.free()
+# Resolve overlaps elsewhere must not split L1 at its pinned interior nodes.
+m=posts();m['joints'].append([20,0]);m['joint_types'].append('rigid')
+m['members']+=[{'a':1,'b':6,'section':0},{'a':6,'b':1,'section':0}]
+out=st.normalize(m);assert len(out['members'])==4 and out['members'][0]=={'a':0,'b':1,'section':0}
+# A pinned crossing: members pass through J5 and turn freely, unless a
+# support there holds rotation, which then holds both.
+def cross(kind):
+    m=bm.empty_model(((-1,0),(1,0),(0,-1),(0,1),(0,0)),((0,1),(2,3)))
+    m['joint_types'][4]='pin'
+    m['supports']=[bm.support(0,1,kind)];m['loads']=[bm.point_load(0,2,1000)]
+    return st.ensure(m)
+rejects(cross('Pin'),'pinned node inside two members')
+sol=bm.Solution(cross('Fixed'));r=sol.reactions(0)[0]
+near(r[2],1000);near(r[3],1000);near(sol.at(1,1,0)[1],0);sol.free()
+# Where one member meets a pinned node, the type is ignored: a fixed support holds it.
+m=bm.template(1);m['joint_types'][0]='pin'
+sol=bm.Solution(m);near(sol.reactions(0)[0][3],30000);sol.free()
+# A node inside a member, with only a support, is an intermediate support.
+m=bm.empty_model(((0,0),(6,0),(3,0)),((0,1),))
+m['supports']=[bm.support(0,0,'Pin'),bm.support(0,6,'Roller')];m['loads']=[bm.dist_load(0,0,6)]
+a.replace_model(m);a.focus(('joint',2));a.model_tab=2;key(k.BUTTON_F1);key(k.BUTTON_CENTER)
+support=a.model['supports'][-1];assert support['node']==2 and support['m']==0 and support['x']==3
+assert a.evaluate();near(a.solution.reactions(a.view)[2][2],1.25*5000*3)
+print('PASS: posts pinned to a continuous beam, rigid posts, Gerber hinge, overlap split restraint, pinned crossings, support overrides and interior supports')

@@ -2,7 +2,7 @@
 
 A model is a plain dict that saves as JSON (schema 3):
   joints   [[X, Y], ...]                    explicit nodes, m
-  joint_types ['rigid' | 'pin', ...]        incident-end rotation sharing
+  joint_types ['rigid' | 'pin', ...]        rotation sharing between members
   members  [{'a', 'b', 'section'}]          joint indices, section index
   sections [{'name', 'material', 'E', 'rho', 'shape', 'dims', 'I', 'A', 'W'}]
   supports [{'m', 'x', 'kind', 'kx', 'ky', 'kr', 'settle_x', 'settle_y', 'case'}]
@@ -546,9 +546,11 @@ class Solution:
 
     def __init__(self, model):
         import picosolve as ps
+        from .structure import passing
         self.model = model
         check(model)
-        members = model['members']
+        members, joints = model['members'], model['joints']
+        through = passing(model)
         # Positions along each member where something starts or acts.
         stations = [dict() for _ in members]
         for m in range(len(members)):
@@ -560,23 +562,49 @@ class Solution:
                 stations[item['m']][key(item['x'])] = item['x']
                 if item.get('kind') == 'dist':
                     stations[item['m']][key(item['x2'])] = item['x2']
+        inside = {}
+        for m, x, j in through:
+            stations[m][key(x)] = x
+            inside[(m, key(x))] = j
         nodes, node_at = [], {}
 
+        def joint(m, x):
+            edge=members[m]
+            if key(x)==0:return edge['a']
+            if key(x)==key(member_length(model,m)):return edge['b']
+            return inside.get((m,key(x)))
+
         def node(m, x):
-            edge=members[m];L=member_length(model,m)
-            # Only shared endpoint IDs connect members. Interior sampling/load
-            # stations at a geometric crossing belong to their own member.
-            k=('j',edge['a']) if key(x)==0 else ('j',edge['b']) if key(x)==key(L) else ('m',m,key(x))
+            # Shared node IDs connect members: their ends, or a node lying
+            # inside a member. Other stations at a geometric crossing belong
+            # to their own member.
+            j=joint(m,x);k=('j',j) if j is not None else ('m',m,key(x))
             X,Y=point(model,m,x)
             if k not in node_at:
                 node_at[k] = len(nodes)
                 nodes.append((X, Y))
             return node_at[k]
         hinges = set((h['m'], key(h['x'])) for h in model['hinges'])
-        node_types=model.get('joint_types',[])
-        for m,edge in enumerate(members):
-            if edge['a']<len(node_types) and node_types[edge['a']]=='pin':hinges.add((m,0))
-            if edge['b']<len(node_types) and node_types[edge['b']]=='pin':hinges.add((m,key(member_length(model,m))))
+        # A pinned node lets each member meeting there rotate on its own; a
+        # member passing through stays continuous and keeps the node's
+        # rotation. The type has no effect where only one member meets the
+        # node, or where a support holds its rotation (then every member is held).
+        held = set()
+        for s in model['supports']:
+            if 'r' in SUPPORT_FLAGS.get(s['kind'], '') or s['kind'] == 'Spring' and s['kr'] > 0:
+                held.add(joint(s['m'], s['x']))
+        for j, kind in enumerate(model.get('joint_types', [])):
+            if kind != 'pin' or j in held:
+                continue
+            ends = [(m, 0 if edge['a'] == j else key(member_length(model, m)))
+                    for m, edge in enumerate(members) if j in (edge['a'], edge['b'])]
+            crossing = [m for m, x, k in through if k == j]
+            if len(ends) + len(crossing) < 2:
+                continue
+            if len(crossing) > 1:
+                raise ModelError('J%d: pinned node inside two members is not supported yet; make it Rigid' % (j + 1),
+                                 tuple(joints[j]))
+            hinges.update(ends)
         elements = []  # (node a, node b, member, x start, x end, releases)
         self.member_elements = []
         for m in range(len(members)):

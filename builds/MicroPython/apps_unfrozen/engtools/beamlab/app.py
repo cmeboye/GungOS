@@ -51,6 +51,10 @@ HELP = (
     'Nodes can exist before their members',
     'Pinned: member ends rotate independently',
     'Rigid: attached members share rotation',
+    'A node inside a member connects to it;',
+    'that member stays continuous through it',
+    'Type only matters where members meet',
+    'Fixed/rotation support holds all members',
     '', 'Members:',
     'Start J#, End J#, Section',
     'F1 needs at least two existing nodes',
@@ -65,7 +69,7 @@ HELP = (
     'Load offset is editable at endpoints too',
     'Positive offset points into the member',
     'Connect new nodes before adding loads',
-    'Interior node? F3 Split at node joins it',
+    'Inside a member: offset + toward its end',
     'Distributed loads use Start/End distances',
     'Settlement X/Y in mm, right/up positive',
     'Only restrained directions allow movement',
@@ -77,7 +81,7 @@ HELP = (
     'No background solves, including on Open',
     'F6 checks overlap and connectivity first',
     'Coincident nodes: F3 Merge nodes',
-    'Node inside a member: F3 Split at node',
+    'Member hinge: F3 Split at a Pinned node',
     'Crossing lines need an explicit node/join',
     'Overlapping lengths cannot be evaluated',
     'F3 Resolve overlaps previews normalization',
@@ -206,9 +210,9 @@ class BeamLab:
         if node is None or not self.model['joints']:raise ValueError('Select a reference node first')
         if bm.item_count(self.model)>=bm.MAX_ITEMS:raise ValueError('Item limit reached')
         connected=st.attached(self.model,node)
-        if not connected:raise ValueError('J%d has no member: connect it in Member, or F3 Split at node'%(node+1))
+        if not connected:raise ValueError('J%d has no member: connect it in Member, or place it on one'%(node+1))
         m=next((i for i in connected if self.model['members'][i]['a']==node),self.member if self.member in connected else connected[0] if connected else -1)
-        x=0.0 if m<0 or self.model['members'][m]['a']==node else bm.member_length(self.model,m)
+        x=st.place(self.model,m,node)[0] if m>=0 else 0.0
         before=items.copy(self.model)
         if kind=='support':obj=bm.support(m,x,bm.SUPPORTS[support_type] if support_type is not None else 'Pin');group='supports'
         elif kind=='dist':
@@ -469,7 +473,7 @@ class BeamLab:
             self.node_cursor=obj;connected=st.attached(self.model,obj)
             if not connected:return
             m=self.member if self.member in connected else connected[0]
-            edge=self.model['members'][m];x=0.0 if edge['a']==obj else bm.member_length(self.model,m)
+            x=st.place(self.model,m,obj)[0]
         elif kind=='member':
             m=obj;edge=self.model['members'][m];self.node_cursor=edge['b'] if field=='b' else edge['a']
             x=bm.member_length(self.model,m) if field=='b' else 0.0
