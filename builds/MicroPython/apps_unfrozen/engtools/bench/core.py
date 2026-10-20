@@ -614,6 +614,20 @@ def _stage_services(vm):
     _time('Resource snapshot (home screen, every 5 s)', lambda: snapshot(vm), 3, 1, 'ms')
     info = snapshot(vm)
     _time('Resource snapshot, text lines', lambda: lines(info), 5, 1, 'us')
+    # Its parts: the heap counters, the flash filesystem's free space, the SD
+    # card's, and PSRAM's.
+    import gc
+    _time('Heap free space (gc.mem_free walks the heap)', gc.mem_free, 3, 1, 'ms')
+    try:
+        from os import statvfs
+        _time('Flash filesystem free space (statvfs)', lambda: statvfs('/'), 3, 1, 'ms')
+    except ImportError:
+        pass
+    if vm.storage.active:
+        _time('SD card total and free space', lambda: (vm.storage.total_space, vm.storage.free_space), 3, 1, 'ms')
+    from picoware.system.system import System
+    system = System()
+    _time('PSRAM total and free space', lambda: (system.total_psram, system.free_psram), 3, 1, 'ms')
     _time('Settings load from SD', lambda: Settings(vm.storage), 3, 1, 'ms')
     manager = vm.thread_manager
 

@@ -1,12 +1,20 @@
 """Measured resource counters; unknown whole-chip usage is never inferred."""
 
+_heap_total=None
+
+
 def snapshot(vm):
+    global _heap_total
     from gc import mem_free,mem_alloc
     from picoware.system.system import System
     from sys import platform
     system=System()
-    free,used=mem_free(),mem_alloc()
-    rows=[('Heap',free,used,free+used)]
+    # mem_free() and mem_alloc() each walk the whole heap (~4 ms on the device);
+    # the total never changes, so one walk per snapshot gives both.
+    free=mem_free()
+    if _heap_total is None: _heap_total=free+mem_alloc()
+    used=_heap_total-free
+    rows=[('Heap',free,used,_heap_total)]
     try:
         from os import statvfs
         stat=statvfs('/')

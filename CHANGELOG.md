@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The home screen's resource snapshot (every 5 s) walks the heap once
+  instead of twice: `gc.mem_free()` and `gc.mem_alloc()` each walk the whole
+  heap (5 ms on the device), and the heap total never changes. 11.1 → 6.3 ms.
+  The core benchmark also times the snapshot's parts.
 - The PSRAM screen image is written in 120-byte transfers instead of 64, each
   as one DMA transfer instead of two (command, then data). Clearing the
   screen went from 2.85 to 2.22 ms, lines and circles 17–29% faster, menus
