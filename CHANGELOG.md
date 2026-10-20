@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The PSRAM screen image is written in 120-byte transfers instead of 64, each
+  as one DMA transfer instead of two (command, then data). Clearing the
+  screen went from 2.85 to 2.22 ms, lines and circles 17–29% faster, menus
+  and the home screen about 10%. 128 bytes more RAM.
 - Looking a name up by its text (imports, loading apps) searches the
   firmware's sorted names before the names loaded from SD apps; importing
   a module that is already loaded went from 154 to 65 µs. A local

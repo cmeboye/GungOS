@@ -47,6 +47,17 @@ static int stream_lines;  // rows in it so far
 
 static uint8_t psram_scratch[DISPLAY_WIDTH] __attribute__((aligned(4)));
 
+// Image bytes per PSRAM transfer. The PIO receives a transfer's length as a
+// nibble count in one byte, so a write carries at most 123 bytes ((4 + n) * 2
+// <= 255). At the 120 MHz PSRAM clock a 120-byte write holds the chip for about
+// 2 us, inside its 8 us refresh limit, and a 320-pixel row takes 3 transfers
+// instead of 5. (PSRAM_CHUNK_SIZE stays 64 for the module's other users.)
+#define IMAGE_CHUNK 120
+
+// A write's command and data leave in one DMA transfer instead of two:
+// [nibbles to write, nibbles to read, quad write, address (3 bytes), data].
+static uint8_t psram_tx[6 + IMAGE_CHUNK] __attribute__((aligned(4)));
+
 static void psram_ready(void)
 {
     if (!psram_initialized)
@@ -61,12 +72,25 @@ static inline uint32_t image_addr(int y, int x)
     return PSRAM_FRAMEBUFFER_ADDR + (uint32_t)y * PSRAM_ROW_SIZE + (uint32_t)x;
 }
 
+// Send the n data bytes already in psram_tx to addr.
+static void psram_send(uint32_t addr, int n)
+{
+    psram_tx[0] = (uint8_t)((4 + n) * 2);
+    psram_tx[1] = 0;
+    psram_tx[2] = 0x38u;
+    psram_tx[3] = (uint8_t)(addr >> 16);
+    psram_tx[4] = (uint8_t)(addr >> 8);
+    psram_tx[5] = (uint8_t)addr;
+    qspi_write_dma_blocking(&psram_instance, psram_tx, (size_t)(6 + n));
+}
+
 static void psram_put(uint32_t addr, const uint8_t *src, int len)
 {
     while (len > 0)
     {
-        int n = len > PSRAM_CHUNK_SIZE ? PSRAM_CHUNK_SIZE : len;
-        psram_qspi_write(&psram_instance, addr, src, (size_t)n);
+        int n = len > IMAGE_CHUNK ? IMAGE_CHUNK : len;
+        memcpy(psram_tx + 6, src, (size_t)n);
+        psram_send(addr, n);
         addr += (uint32_t)n;
         src += n;
         len -= n;
@@ -77,7 +101,7 @@ static void psram_get(uint32_t addr, uint8_t *dst, int len)
 {
     while (len > 0)
     {
-        int n = len > PSRAM_CHUNK_SIZE ? PSRAM_CHUNK_SIZE : len;
+        int n = len > IMAGE_CHUNK ? IMAGE_CHUNK : len;
         psram_qspi_read(&psram_instance, addr, dst, (size_t)n);
         addr += (uint32_t)n;
         dst += n;
@@ -88,8 +112,16 @@ static void psram_get(uint32_t addr, uint8_t *dst, int len)
 static void psram_fill(void *ctx, int y, int x, int len, uint8_t color)
 {
     (void)ctx;
-    memset(psram_scratch, color, (size_t)len);
-    psram_put(image_addr(y, x), psram_scratch, len);
+    // Every transfer of a fill sends the same bytes: set them once.
+    memset(psram_tx + 6, color, (size_t)(len > IMAGE_CHUNK ? IMAGE_CHUNK : len));
+    uint32_t addr = image_addr(y, x);
+    while (len > 0)
+    {
+        int n = len > IMAGE_CHUNK ? IMAGE_CHUNK : len;
+        psram_send(addr, n);
+        addr += (uint32_t)n;
+        len -= n;
+    }
 }
 
 static void psram_write(void *ctx, int y, int x, int len, const uint8_t *src)
