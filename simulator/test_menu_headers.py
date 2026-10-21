@@ -23,7 +23,7 @@ original_text=vm.draw._text
 def logo(draw,name,*args):
     events.append(('logo',name,args));return original_logo(draw,name,*args)
 def text(x,y,value,colour,font=-1):
-    if y<18:events.append(('text',value,x,font))
+    if y<34:events.append(('text',value,x,font))  # header, below the status strip on PicoDESK
     return original_text(x,y,value,colour,font)
 logos.paint=logo
 vm.draw._text=text
@@ -70,25 +70,28 @@ try:
     check('csv-confirm','picodesk','Eggcel / Import CSV / Confirm',context.draw)
     from desktopapps.launcher import Launcher
     desk=Launcher()
-    check('desk','picodesk','Productivity',lambda:desk.start(vm))
+    # The PicoDESK launcher shows only its logo: the brand already says where you are.
+    events.clear();desk.start(vm)
+    assert [item[1] for item in events if item[0]=='logo'][-1:]==['picodesk']
+    assert not [item for item in events if item[0]=='text' and str(item[1]).startswith('/')]
     from desktopapps.word import Word
     word=Word();word.start(vm);word.menu('file')
-    check('word-file','picodesk','PicoWord / FILE',word.draw)
+    check('word-file','picodesk','PicoWord / Untitled / File',word.draw)
     from desktopapps.paint import Paint
     paint=Paint();paint.start(vm);paint.menu('color')
-    check('paint-colours','picodesk','PicoPaint / COLOR',paint.draw)
+    check('paint-colours','picodesk','PicoPaint / Untitled / Color',paint.draw)
     from desktopapps.eggcel.app import Spreadsheet
     egg=Spreadsheet();egg.start(vm);egg.page='actions'
-    check('eggcel-actions','picodesk','Eggcel / ACTIONS',egg.draw)
+    check('eggcel-actions','picodesk','Eggcel / Untitled / Actions',egg.draw)
     from engtools.ui import breadcrumbs
     check('lab','picolab','modules / structural / Beam view',lambda:breadcrumbs.paint(vm.draw,style.system_palette(vm),fallback=('modules','structural','Beam view')))
-    check('eggcel-plot','picodesk','Eggcel / Settings',lambda:style.chrome(vm.draw,'Settings','','','Eggcel',style.system_palette(vm)))
+    check('eggcel-plot','picodesk','Eggcel / Settings',lambda:style.chrome(vm.draw,'Settings','','Eggcel',style.system_palette(vm)))
     check('long-path','gungOS_small','Current selection',lambda:style.header(vm.draw,'A very long parent name / another long parent / Current selection',palette=style.system_palette(vm)))
     # An SD update before the next UF2 must keep the apps usable.
     native_header=style.header
     del style.header
     try:
-        check('old-uf2-word','picodesk','PicoWord / FILE',word.draw)
+        check('old-uf2-word','picodesk','PicoWord / Untitled / File',word.draw)
         check('old-uf2-lab','picolab','Scientific calculator',lambda:breadcrumbs.paint(vm.draw,style.system_palette(vm),fallback=('tools','Scientific calculator')))
     finally:
         style.header=native_header

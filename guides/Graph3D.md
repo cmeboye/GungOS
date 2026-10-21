@@ -18,7 +18,7 @@ available. 2D slices remain available for heightfield functions.
 - S: style: solid, wireframe, heat map. G: type the mesh resolution.
 - Z: next symmetric range preset (±2 … ±10), replacing typed ranges.
 - Enter: edit the main surface in an editor panel. Back: plot menu.
-- C: 2D slice. P: screenshot to SD. A: auto-spin. F9, H or ?: help.
+- C: 2D slice. P: screenshot to SD. A: auto-spin. F9: help.
 
 ## Ranges
 

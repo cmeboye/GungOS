@@ -1,6 +1,14 @@
 """ViewManager - Manage views and navigation."""
 
-from picoware.system.buttons import BUTTON_ALT_S, BUTTON_HOME
+from picoware.system.buttons import BUTTON_ALT_S, BUTTON_F9, BUTTON_HOME
+
+# Every F9 help ends with the keys the system answers on any screen.
+SYSTEM_HELP = (
+    "System:",
+    "HOME\treturn to the desktop",
+    "Alt+S\tsave a screenshot to the SD card",
+    "F9 / ESC\tclose this help",
+)
 
 class ViewManager:
     """Manage multiple views and provide navigation capabilities."""
@@ -38,6 +46,11 @@ class ViewManager:
         "_uart",
         "_fast_drawing",
         "_fast_owner",
+        "_overlay",
+        "_status",
+        "_status_view",
+        "_status_state",
+        "_status_at",
     )
 
     def __init__(self):
@@ -59,6 +72,11 @@ class ViewManager:
         self._view_count = 0
         self._selected_color = TFT_BLUE
         self._stack_depth = 0
+        self._overlay = None
+        self._status = None  # status strip drawn by style.status, made on first use
+        self._status_view = None
+        self._status_state = None
+        self._status_at = 0
 
         self._current_board_id = System().board_id
 
@@ -266,6 +284,16 @@ class ViewManager:
         return self._current_view
 
     @property
+    def help(self):
+        """Lines F9 shows over the current view; None lets the view answer F9."""
+        return self._current_view.help if self._current_view is not None else None
+
+    @help.setter
+    def help(self, lines):
+        if self._current_view is not None:
+            self._current_view.help = lines
+
+    @property
     def draw(self):
         """Return the Draw instance."""
         return self._draw
@@ -420,40 +448,47 @@ class ViewManager:
             bool: True if the user confirmed the alert, False otherwise.
         """
 
-        from picoware.gui.alert import Alert
-        from picoware.system.buttons import BUTTON_BACK, BUTTON_ESCAPE
+        from picoware.gui.overlay import fitted, modal
+        from picoware.system.buttons import BUTTON_ESCAPE
 
-        self._draw.clear()
-        _alert = Alert(
-            self._draw,
-            message,
-            self._foreground_color,
-            self._background_color,
-        )
-        _alert.draw(title)
         self.log(f"Alert: {message}", 2)
-
-        _denied: bool = False
-
-        # Wait for user to acknowledge
-        inp = self._input_manager
-        inp.reset()
-        from time import sleep_ms
-
-        while True:
-            button = inp.button
-            if button == -1:
-                sleep_ms(10)  # wait without spinning the CPU
-                continue
-            _denied = button == BUTTON_ESCAPE
-            inp.reset()
-            break
+        lines = str(message)[-400:].split("\n")
+        _denied: bool = modal(self, title, lines, fitted(lines), "Any key continues", True) == BUTTON_ESCAPE
 
         if back:
             self.back()
 
         # back/escape button returns false, any other button returns true
         return not _denied
+
+    def choose(self, title: str, options, selected: int = 0) -> int:
+        """Ask the user to pick one option in a box over the current screen.
+
+        Args:
+            title (str): The question, such as "Shutdown?".
+            options (tuple): The option labels.
+            selected (int): The option highlighted first. Defaults to 0.
+
+        Returns:
+            int: The chosen index, or -1 when ESC cancelled.
+        """
+        from picoware.gui.overlay import Popup
+        from time import sleep_ms
+
+        box = Popup(self, title, options, selected)
+        box.open()
+        inp = self._input_manager
+        inp.reset()
+        result = None
+        while result is None:
+            button = inp.button
+            if button == -1:
+                sleep_ms(10)  # wait without spinning the CPU
+                continue
+            inp.reset()
+            result = box.key(inp.normalize_button(button))
+        box.close()
+        return result
 
     def back(
         self,
@@ -671,7 +706,15 @@ class ViewManager:
         """Run the current view."""
         button = self._input_manager.normalize_button(self._input_manager.button)
         self._button = button
+        if self._overlay is not None and button not in (-1, BUTTON_HOME, BUTTON_ALT_S):
+            # The box takes the keys; the view waits behind it, unchanged.
+            if not self._overlay.key(button):
+                self.__close_overlay()
+            self._input_manager.reset()
+            button = self._button = -1
         if button == BUTTON_HOME:
+            if self._overlay is not None:
+                self.__close_overlay()
             while self._stack_depth > 0:
                 if self._stack_depth == 1:
                     self.back(should_clear=True, should_start=True)
@@ -682,6 +725,10 @@ class ViewManager:
             self._draw.screenshot("screenshot.bmp")
             self._input_manager.reset()
             button = self._button = -1
+        elif button == BUTTON_F9 and self.help:
+            self.show("KEYBINDINGS", tuple(self.help) + SYSTEM_HELP)
+            self._input_manager.reset()
+            button = self._button = -1
 
         if self._wifi is not None:
             self._wifi.poll()
@@ -689,14 +736,68 @@ class ViewManager:
         if self._thread_manager.run():
             self.log(self._thread_manager._outgoing)
 
-        if self._current_view is not None:
+        if self._current_view is not None and self._overlay is None:
             self._current_view.run(self)
+        if self._overlay is not None and not self._overlay.shown:
+            self._overlay.open()  # over what the view drew this frame
+        if self._status_view is not None:
+            self.__refresh_status()
 
         if button != -1:
             self._input_manager.reset()
             self._button = -1
 
         return self._active
+
+    def show_status(self) -> None:
+        """Draw the status strip for the current view; see style.status."""
+        from time import ticks_ms
+        from picoware.gui.status_bar import StatusBar
+
+        if self._status is None:
+            self._status = StatusBar(self)
+        self._status_view = self._current_view
+        self._status_state = self._status.sample()
+        self._status_at = ticks_ms()
+        self._status.draw(self._status_state)
+
+    def __refresh_status(self) -> None:
+        """Keep the clock, connections and battery current, once a second."""
+        from time import ticks_ms, ticks_diff
+        from picoware.gui import style
+
+        if self._status_view is not self._current_view or not style._strip:
+            self._status_view = None  # the view changed or drew its own top
+            return
+        now = ticks_ms()
+        if ticks_diff(now, self._status_at) < 1000:
+            return
+        self._status_at = now
+        state = self._status.sample()
+        if state != self._status_state:
+            self._status_state = state
+            self._status.draw(state)
+            self._draw.swap()
+
+    def show(self, title: str, lines) -> None:
+        """Open a scrollable box over the current view until F9 or ESC.
+
+        The box opens once the view's current frame is drawn.
+
+        Args:
+            title (str): The heading in the box.
+            lines (tuple): Lines in the format of picoware.gui.overlay.
+        """
+        from picoware.gui.overlay import Overlay
+
+        self._overlay = Overlay(self, title, lines)
+
+    def __close_overlay(self) -> None:
+        """Close the box; a view whose screen was not kept starts again."""
+        box, self._overlay = self._overlay, None
+        if not box.close() and self._current_view is not None:
+            self._current_view.stop(self)
+            self._current_view.start(self)
 
     def set(self, view_name: str):
         """Set the current view by name, clearing the stack.

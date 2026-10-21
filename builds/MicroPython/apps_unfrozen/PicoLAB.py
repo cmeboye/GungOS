@@ -1,5 +1,8 @@
 """PicoLAB: organised checks, tools and engineering modules."""
 
+HELP = ('PicoLAB:', 'UP/DOWN\tchoose an entry', 'ENTER\topen it', 'ESC\tback one level',
+        'Numerics check:', 'ENTER\trun the checks again')
+
 # Keys are stable route IDs; labels are the visible names.
 MENUS = {
     'root': (('checks','Checks','Numerics validation and plot previews'),
@@ -92,10 +95,10 @@ def _draw(view_manager):
     if _page in MENUS:
         entries=MENUS[_page]
         rows=[(label,detail) for _,label,detail in entries] if entries else [('No tools yet','This module is planned; ESC returns')]
-        theme.menu(view_manager.draw,rows,_selected if entries else -1,'',hint2=_error or 'ESC returns',palette=palette)
+        theme.menu(view_manager.draw,rows,_selected if entries else -1,'',message=_error,palette=palette,error=bool(_error))
     elif _page == 'gallery':
         from engtools.plots.gallery import CHOICES
-        theme.menu(view_manager.draw,CHOICES,_gallery_selected,'',hint2=_error or 'ESC returns to checks',palette=palette)
+        theme.menu(view_manager.draw,CHOICES,_gallery_selected,'',message=_error,palette=palette,error=bool(_error))
     elif _page == 'bench':
         from engtools.numerics.bench import CASES
         rows,colors=[],[]
@@ -107,8 +110,8 @@ def _draw(view_manager):
                 color=palette.ACCENT if record['passed'] else palette.ERROR
             else:status,detail,color='WAIT ','Pending',palette.MUTED
             rows.append((status+name,detail));colors.append((color,palette.MUTED))
-        theme.menu(view_manager.draw,rows,-1,'',hint1='ENTER rerun  ESC returns',
-                   hint2=_error or _bench_info,row_colors=colors,palette=palette)
+        theme.menu(view_manager.draw,rows,-1,'',message=_error or _bench_info,row_colors=colors,
+                   palette=palette,error=bool(_error))
     _dirty=False
 
 

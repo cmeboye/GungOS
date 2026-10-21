@@ -49,7 +49,7 @@ HELP = (
     'A next rotation axis (3D)',
     'M switch 2D / 3D',
     'Other keys:',
-    'F3 examples  F9 or ? help',
+    'F3 examples  F9 help',
     'ESC leaves Mohr circle',
     'The circle:',
     'tau is drawn positive DOWN, so the',
@@ -317,8 +317,6 @@ class Mohr:
             self.begin_edit()
         elif button == keys.BUTTON_F3:
             self.popup = ['Examples', tuple(name for name, _ in EXAMPLES), 0, self.example]
-        elif c == '?':
-            self.help_open, self.help_first = True, 0
         elif c in ('[', ']'):
             self.turn(15.0 if c == ']' else -15.0)
         elif c in ('p', 's'):

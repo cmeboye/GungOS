@@ -30,7 +30,7 @@ in place on the PicoCalc keyboard; there is no on-screen keyboard.
   edit it, Up/Down while typing to apply and move on. Enter on Grid toggles it.
 - F: Fit Y, Fit visible curves, Equal axis scale or Default window.
 - R: reset to the default -10 to 10 window.
-- G: toggle grid. F9, H or ?: help.
+- G: toggle grid. F9: help.
 - In Expressions: Space toggles visibility; D or Delete removes a row.
 
 ## Expressions

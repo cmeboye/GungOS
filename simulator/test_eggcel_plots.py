@@ -69,7 +69,7 @@ vm=ViewManager()
 vm.add(View('parent',lambda vm:None,lambda vm:True,lambda vm:None));vm.switch_to('parent')
 app.show(vm);ui=app._active
 ui.sheet=sheet;ui.row,ui.col,ui.top,ui.left=4,3,0,0;ui.anchor=(0,0)
-ui.filename='unsaved-test.egg';ui.clipboard=sheet.copied((1,1,2,1));ui.help=True
+ui.filename='unsaved-test.egg';ui.clipboard=sheet.copied((1,1,2,1))
 captured=[];real_open=__import__('engtools.plots.view',None,None,('open_view',)).open_view
 from engtools.plots import view
 def capture(vm,name,owner):
@@ -104,7 +104,7 @@ assert ui.page=='dialog' and ui.error
 key(vm.input_manager._key_esc)
 assert ui.page=='plot_setup' and ui.plot_options['ys'][2]=='D1:D5'
 ui.selected=6
-state=(ui.sheet,ui.sheet.document(),ui.sheet.dirty,ui.position,ui.top,ui.left,ui.anchor,ui.filename,ui.clipboard,ui.help)
+state=(ui.sheet,ui.sheet.document(),ui.sheet.dirty,ui.position,ui.top,ui.left,ui.anchor,ui.filename,ui.clipboard)
 count=vm._view_count
 key(k.BUTTON_CENTER)
 for _ in range(100):
@@ -126,12 +126,12 @@ chart.refine=None;chart.dirty=True;finish()
 key(k.BUTTON_CENTER);assert chart.state=='expressions'
 key(k.BUTTON_SPACE);assert not chart.items[0].visible
 key(k.BUTTON_SPACE);key(vm.input_manager._key_esc);finish()
-key(k.BUTTON_H);assert chart.state=='help'
+key(k.BUTTON_F9);assert chart.state=='help'
 key(vm.input_manager._key_esc);finish()
 key(vm.input_manager._key_esc)
 assert vm.current_view.name=='eggcel' and vm._view_count==count
 assert not ui.suspended and app._active is ui
-assert (ui.sheet,ui.sheet.document(),ui.sheet.dirty,ui.position,ui.top,ui.left,ui.anchor,ui.filename,ui.clipboard,ui.help)==state
+assert (ui.sheet,ui.sheet.document(),ui.sheet.dirty,ui.position,ui.top,ui.left,ui.anchor,ui.filename,ui.clipboard)==state
 assert vm.storage.read(plot2d.SAVE_PATH)==baseline
 assert captured[0].app is None and captured[0].spec is None
 vm.draw.screenshot('/private/tmp/eggcel-plot-return.bmp')

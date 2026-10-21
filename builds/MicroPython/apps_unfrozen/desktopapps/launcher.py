@@ -3,10 +3,11 @@ from picoware.system import buttons as k
 from engtools.ui import theme
 
 ROWS=(('Eggcel','Spreadsheet and XY plots'),('PicoWord','Formatted notes and equations'),
-      ('PicoPaint','Pixel canvas, tools and patterned fills'))
+      ('PicoPaint','Pixel canvas, tools and pattern fills'))
 
 
 class Launcher:
+    HELP=('PicoDESK:','UP/DOWN\tchoose an app','ENTER\topen it','ESC\treturn')
     def __init__(self,from_lab=False):
         self.vm=None;self.selected=0;self.keep=False;self.suspended=False
     def start(self,vm):
@@ -15,8 +16,7 @@ class Launcher:
         if self.keep:self.keep=False;self.suspended=True;return
         self.suspended=False;self.vm=None
     def draw(self):
-        theme.menu(self.vm.draw,ROWS,self.selected,'Productivity','PicoDESK',
-                   'UP/DOWN choose  ENTER open','ESC returns',palette=theme.system_palette(self.vm))
+        theme.menu(self.vm.draw,ROWS,self.selected,'','PicoDESK',palette=theme.system_palette(self.vm),vm=self.vm)
     def run(self,vm):
         button=vm.button
         if button==k.BUTTON_NONE:return

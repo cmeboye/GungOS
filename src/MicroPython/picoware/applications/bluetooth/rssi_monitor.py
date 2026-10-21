@@ -66,6 +66,14 @@ def start(view_manager) -> bool:
     return True
 
 
+HELP = (
+    "RSSI monitor:",
+    "Nearby devices, strongest first; unseen for 10 s drop off.",
+    "ENTER\tclear the list",
+    "ESC\treturn",
+)
+
+
 def run(view_manager) -> None:
     """Run the app and update the RSSI display.
 
@@ -107,19 +115,20 @@ def run(view_manager) -> None:
     }
 
 
+    from picoware.gui import style
+
     draw = view_manager.draw
-    draw.erase()
+    palette = style.system_palette(view_manager)
+    draw.fill_screen(palette.BG)
 
     text_vec = Vector(5, 2)
-    height = draw.size.y
-
-    draw.text(text_vec, "RSSI Monitor")
+    height = draw.size.y - style.FOOT_HEIGHT
 
     # Sort devices by RSSI (strongest first)
     sorted_devices = sorted(_devices.items(), key=lambda x: x[1][1], reverse=True)
 
-    y = 22
-    max_devices = (height - 60) // 16
+    y = style.HEAD_HEIGHT + 8
+    max_devices = (height - y - 4) // 16
 
     if not sorted_devices:
         text_vec.x, text_vec.y = 5, y
@@ -128,7 +137,7 @@ def run(view_manager) -> None:
         for i, (addr, (name, rssi, last_seen)) in enumerate(
             sorted_devices[:max_devices]
         ):
-            if y > height - 40:
+            if y > height - 20:
                 break
 
             # Display name or shortened address
@@ -148,12 +157,7 @@ def run(view_manager) -> None:
             draw.text(text_vec, f"{rssi}dB")
             y += 16
 
-    # Status bar
-    text_vec.x, text_vec.y = 5, height - 35
-    draw.text(text_vec, f"Devices: {len(_devices)}")
-    text_vec.x, text_vec.y = 5, height - 20
-    draw.text(text_vec, "CENTER: Clear | ESC: Exit")
-
+    style.chrome(draw, "Bluetooth / RSSI Monitor", f"Devices: {len(_devices)}", palette=palette)
     draw.swap()
 
 

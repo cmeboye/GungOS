@@ -176,7 +176,7 @@ In the plot: arrows pan, +/- zoom, **F fits all data** (including offscreen
 points), G toggles the grid, W opens bounds/grid controls, and Enter opens
 series visibility. Square/cross/diamond markers and separate colours identify
 the three series. Graph labels, backgrounds and controls follow the system
-theme; the first curve uses the theme colour. H opens plot help.
+theme; the first curve uses the theme colour. F9 opens plot help.
 
 Esc from the plot restores the same sheet, selection, scroll, clipboard,
 filename and unsaved state. Plotting does not save the workbook or change the

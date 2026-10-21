@@ -1,4 +1,5 @@
 """Miscellaneous SD utilities and demonstrations."""
+from picoware.gui.style import MENU_HELP as HELP
 _menu=None
 _selected=0
 
@@ -36,7 +37,7 @@ def _open_sd_app(vm,name,folder):
     if module is None:
         vm.alert('Could not load '+name+': '+str(vm.app_loader.error));return
     view='app_'+folder+'_'+name
-    if vm.get_view(view) is None:vm.add(View(view,module.run,module.start,module.stop))
+    if vm.get_view(view) is None:vm.add(View(view,module.run,module.start,module.stop, getattr(module, "HELP", None)))
     vm.switch_to(view)
 
 

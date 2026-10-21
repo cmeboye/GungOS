@@ -19,10 +19,10 @@ saved_case={'model':{'benchmark_must_not_touch':'user model'},'view':0}
 session.kept['beam']=saved_case
 app=b.Benchmark(vm)
 app.full=False
-app.run(k.BUTTON_F9);assert app.help
-for _ in range(40):app.run(k.BUTTON_DOWN)
-assert app.help_first>0
-app.run(k.BUTTON_F9);assert not app.help
+# F9 help is the firmware's box; the module hands it the lines.
+from picoware.gui import overlay
+assert b.HELP[0].endswith(':') and any('\t' in line for line in b.HELP)
+assert len(overlay.layout(b.HELP,overlay.RECT[2]))>overlay.capacity(overlay.RECT[3])
 app.run(k.BUTTON_CENTER)
 assert app.phase=='run'
 for _ in range(20000):

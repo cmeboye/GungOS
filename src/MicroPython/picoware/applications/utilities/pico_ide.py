@@ -1,4 +1,16 @@
 """PicoIDE - Create, edit, and run source files."""
+from picoware.gui.style import MENU_HELP
+
+HELP = MENU_HELP + (
+    "Editor:",
+    "Arrows\tmove the cursor",
+    "HOME\tstart of the line",
+    "ENTER\tnew line",
+    "TAB\tindent",
+    "BACK / DEL\terase",
+    "F5\tsave, close and run the file",
+    "ESC\tclose; asks to save changes",
+)
 
 from micropython import const
 from picoware.system.decorator import keyboard_required, storage_required
@@ -134,7 +146,7 @@ def _run_file(view_manager, filename) -> bool:
                 # Check if view already exists
                 if view_manager.get_view(app_view_name) is None:
                     app_view = View(
-                        app_view_name, _app.run, _app.start, _app.stop
+                        app_view_name, _app.run, _app.start, _app.stop, getattr(_app, "HELP", None)
                     )
                     view_manager.add(app_view)
                 view_manager.switch_to(app_view_name)

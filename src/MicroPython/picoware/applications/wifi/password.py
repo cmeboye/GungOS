@@ -1,4 +1,5 @@
 """WiFi Password - Enter a WiFi password."""
+from picoware.gui.style import KEYBOARD_HELP as HELP
 
 _password_is_running = False
 _password_save_requested = False
@@ -105,7 +106,7 @@ def run(view_manager) -> None:
         from picoware.system.view import View
 
         view_manager.add(
-            View("wifi_connect", connect.run, connect.start, connect.stop)
+            View("wifi_connect", connect.run, connect.start, connect.stop, getattr(connect, "HELP", None))
         )
         view_manager.switch_to("wifi_connect", push_view=False)
         connect.start_connection(view_manager)

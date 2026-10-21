@@ -1,4 +1,10 @@
 """USB Payload - Execute payload over USB."""
+from picoware.gui.file_browser import HELP as BROWSER_HELP
+
+HELP = (
+    "Payload:",
+    "Choose a .txt or .duck script to type it over USB.",
+) + BROWSER_HELP[:11]
 from micropython import const
 from picoware.system.decorator import storage_required
 

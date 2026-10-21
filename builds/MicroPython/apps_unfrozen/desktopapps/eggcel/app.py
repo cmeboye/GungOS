@@ -23,13 +23,21 @@ def blend(first,second,numerator,denominator):
 
 
 class Spreadsheet:
+    HELP=('Sheet:','Arrows / TAB\tmove between cells','ENTER\tedit the cell; type to replace it',
+          'BACK / DEL\tclear the cell or range','F1\tfile menu: new, open, save, CSV',
+          'F2\tactions: fill, sort, convert','F3\tstart / drop a range','F4 / F5\tcopy / paste',
+          'F6\tplot or chart the range','F7\tgo to a cell','F8\tcolumn width',
+          'ESC\tclose; asks to save changes','Editing a cell:','LEFT/RIGHT\tmove the cursor',
+          'ENTER\tset the value; TAB sets and moves right','F4 / F5\tcopy / paste text',
+          'ESC\tdiscard the edit','A running job:','ESC\tcancel it; cells are kept',
+          'Menus:','UP/DOWN\tchoose','ENTER\tconfirm','ESC\tclose the menu')
     def __init__(self):
         self.vm=None
         self.sheet=Sheet()
         self.row=self.col=self.top=self.left=0
         self.anchor=None
         self.page,self.selected='grid',0
-        self.editing,self.help=False,False
+        self.editing=False
         self.buffer,self.cursor,self.offset='',0,0
         self.filename,self.message,self.error='','',''
         self.clipboard=None
@@ -167,13 +175,14 @@ class Spreadsheet:
         r,c=self.anchor if self.anchor is not None else self.position
         return min(r,self.row),min(c,self.col),max(r,self.row),max(c,self.col)
     @property
-    def bottom(self): return int(self.vm.draw.size.y)-(36 if self.help else 13)
+    def bottom(self): return int(self.vm.draw.size.y)-12
     @property
-    def visible_rows(self): return max(1,(self.bottom-127-(52 if self.error else 0))//22)
+    def visible_rows(self): return max(1,(self.bottom-120-(52 if self.error else 0))//22)
 
     def renderer(self,clip=None):
         d=self.vm.draw
-        return Renderer(d,clip or (0,18,int(d.size.x),int(d.size.y)),self.vm.selected_color)
+        from ..icons import TOP
+        return Renderer(d,clip or (0,TOP,int(d.size.x),int(d.size.y)),self.vm.selected_color)
 
     def visible_columns(self):
         width=int(self.vm.draw.size.x)
@@ -442,8 +451,7 @@ class Spreadsheet:
                 if self.job_kind=='Converting':return
                 self.cancel_job()
             if button==k.BUTTON_NONE:return
-            if button==k.BUTTON_F9:self.help=not self.help;self.reveal()
-            elif button==k.BUTTON_F1:
+            if button==k.BUTTON_F1:
                 if self.editing:self.commit()
                 self.page,self.selected='file',0
             elif button==k.BUTTON_F2 and self.error:self.page,self.selected='recovery',0
@@ -532,46 +540,43 @@ class Spreadsheet:
         contrast=foreground(accent)
         d.fill_screen(bg)
         from engtools.ui import theme
-        path='Eggcel'+(' / '+self.page.replace('_',' ').upper() if self.page!='grid' else '')
-        theme.header(d,path,'PicoDESK',theme.system_palette(vm),height=18)
-        r=self.renderer()
-        r.fill(0,18,width,23,panel)
-        r.fill(6,23,13,13,accent)
-        for n in (1,2):
-            r.line(6+n*4,23,6+n*4,35,contrast)
-            r.line(6,23+n*4,18,23+n*4,contrast)
-        r.text(25,24,'Eggcel',fg,SMALL)
+        from ..icons import EGGCEL,page_name
+        palette=theme.system_palette(vm)
+        theme.status(vm,palette)
+        # Eggcel / workbook / page: the header names the open file.
         title=(self.filename.rsplit('/',1)[-1][:-4] if self.filename else 'Untitled')+(' *' if self.sheet.dirty else '')
-        r.text(max(91,width-8-min(len(title),26)*6),26,title[-26:],muted,TINY)
+        path='Eggcel / '+title+(' / '+page_name(self.page) if self.page!='grid' else '')
+        theme.header(d,path,'PicoDESK',palette,height=18,top=theme.STRIP,rows=EGGCEL)
+        r=self.renderer()
         if self.page!='grid':
             self.draw_page(r,width,height,fg,bg,accent,panel,muted,selected)
             d.swap();return
         self.reveal()
-        r.fill(4,46,width-8,43,panel)
-        r.rect(4,46,width-8,43,accent if self.editing else grid)
-        r.text(11,54,address(*self.position),accent,SMALL)
-        r.line(51,48,51,85,grid)
-        r.text(59,54,'fx',muted,SMALL)
+        r.fill(4,39,width-8,43,panel)
+        r.rect(4,39,width-8,43,accent if self.editing else grid)
+        r.text(11,47,address(*self.position),accent,SMALL)
+        r.line(51,41,51,78,grid)
+        r.text(59,47,'fx',muted,SMALL)
         if self.editing:
-            entry=self.renderer((80,49,width-10,70))
-            self.entry_text(entry,81,54,width-94)
+            entry=self.renderer((80,42,width-10,63))
+            self.entry_text(entry,81,47,width-94)
             detail='EDIT CELL'
         else:
             raw=self.sheet.cells.get(self.position,'')
-            r.text(81,54,raw[:max(1,(width-91)//8)],fg,SMALL)
+            r.text(81,47,raw[:max(1,(width-91)//8)],fg,SMALL)
             value=self.sheet.peek(self.position)
             detail=('FORMULA  '+format_value(value,self.sheet.style)) if raw.startswith('=') else (
                 'TEXT' if isinstance(value,str) else ('NUMBER' if value is not None else 'EMPTY CELL'))
-        r.text(59,75,detail[:max(1,(width-69)//6)],muted,TINY)
+        r.text(59,68,detail[:max(1,(width-69)//6)],muted,TINY)
         columns=self.visible_columns();count=self.visible_rows
         top,left,bottom,right=self.bounds
-        r.fill(4,96,24,18,panel)
+        r.fill(4,89,24,18,panel)
         for col,x,size in columns:
             active=left<=col<=right
-            r.fill(x,96,size,18,accent if active else panel)
-            r.text(x+(size-8)//2,99,chr(65+col),contrast if active else muted,SMALL)
+            r.fill(x,89,size,18,accent if active else panel)
+            r.text(x+(size-8)//2,92,chr(65+col),contrast if active else muted,SMALL)
         for row in range(self.top,min(ROWS,self.top+count)):
-            y=114+(row-self.top)*22
+            y=107+(row-self.top)*22
             if y+22>self.bottom-15-(52 if self.error else 0): break
             active=top<=row<=bottom
             r.fill(4,y,24,22,accent if active else panel)
@@ -609,43 +614,38 @@ class Spreadsheet:
     def draw_footer(self,r,width,height,accent,muted,panel):
         bottom=self.bottom
         r.fill(0,bottom,width,height-bottom,panel)
-        if self.help:
-            first='ENTER edit/set  ARROWS move  ESC cancel/back' if self.page=='grid' else 'UP/DOWN choose  ENTER open  ESC returns'
-            r.text(6,bottom+3,first[:(width-12)//6],accent,TINY)
-            r.text(6,bottom+15,'F1 File F2 Actions F3 Range F4 Copy F5 Paste'[:(width-12)//6],muted,TINY)
-            r.text(6,bottom+26,'F6 Plot F7 Go F8 Width F9 Hide TAB next'[:(width-12)//6],muted,TINY)
-        else: r.text(6,bottom+3,'F1 File   F2 Actions   F9 Help',accent,TINY)
+        r.text(6,bottom+2,'F9 Help',accent,TINY)
 
     def draw_page(self,r,width,height,fg,bg,accent,panel,muted,selected):
         title={'file':'FILE','actions':'ACTIONS','files':'IMPORT CSV' if self.purpose=='import' else 'OPEN WORKBOOK',
                'confirm':'UNSAVED CHANGES','overwrite':'REPLACE FILE?', 'plot_setup':'PLOT / CHART', 'fill_direction':'FILL DIRECTION', 'convert_confirm':'CONVERT TO VALUES', 'recovery':'RECOVERY',
                'dialog':('PLOT RANGE' if self.purpose.startswith('plot_') else self.purpose.upper())}.get(self.page,'')
-        r.text(9,53,title,accent,SMALL)
+        r.text(9,46,title,accent,SMALL)
         if self.page=='dialog':
-            r.fill(8,86,width-16,34,panel);r.rect(8,86,width-16,34,accent)
-            entry=self.renderer((13,89,width-13,117))
-            self.entry_text(entry,16,98,width-37)
+            r.fill(8,79,width-16,34,panel);r.rect(8,79,width-16,34,accent)
+            entry=self.renderer((13,82,width-13,110))
+            self.entry_text(entry,16,91,width-37)
             note=('Column range: A2:A20; blank = rows/off' if self.purpose.startswith('plot_') else
                   'Address: A1 through Z200' if self.purpose=='goto' else 'SD: '+DIRECTORY)
-            r.text(9,134,note[:(width-18)//6],muted,TINY)
-            r.text(9,152,'Type replaces | arrows edit | ENTER set',muted,TINY)
+            r.text(9,127,note[:(width-18)//6],muted,TINY)
+            r.text(9,145,'Type replaces | arrows edit | ENTER set',muted,TINY)
         else:
             items=self.menu_items()
-            capacity=max(1,(self.bottom-90-(52 if self.error else 0))//25)
+            capacity=max(1,(self.bottom-83-(52 if self.error else 0))//25)
             first=max(0,self.selected-capacity+1)
             for index in range(first,min(len(items),first+capacity)):
-                y=83+(index-first)*25
+                y=76+(index-first)*25
                 if index==self.selected: r.fill(6,y-4,width-12,24,selected);r.rect(6,y-4,width-12,24,accent)
                 r.text(13,y,items[index][:max(1,(width-26)//8)],fg,SMALL)
-            if not items: r.text(10,91,'No files in '+DIRECTORY,muted,TINY)
-            if self.page=='confirm': r.text(10,177,'Keep edits by saving before continuing.',muted,TINY)
+            if not items: r.text(10,84,'No files in '+DIRECTORY,muted,TINY)
+            if self.page=='confirm': r.text(10,170,'Keep edits by saving before continuing.',muted,TINY)
             if self.page=='overwrite' and self.overwrite:
-                r.text(10,150,self.overwrite[0].rsplit('/',1)[-1][:48],muted,TINY)
+                r.text(10,143,self.overwrite[0].rsplit('/',1)[-1][:48],muted,TINY)
             if self.page=='plot_setup' and not self.error:
                 r.text(10,267,'ENTER edits | L/R type/labels | ESC sheet',muted,TINY)
         if self.page=='convert_confirm':
-            r.text(9,162,'Formula links will stop updating.',muted,TINY)
-            r.text(9,178,'Undo is available until the next edit.',muted,TINY)
+            r.text(9,155,'Formula links will stop updating.',muted,TINY)
+            r.text(9,171,'Undo is available until the next edit.',muted,TINY)
         if self.error:self.draw_error_native()
         self.draw_footer(r,width,height,accent,muted,panel)
 

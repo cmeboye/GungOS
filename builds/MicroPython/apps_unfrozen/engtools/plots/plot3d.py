@@ -26,14 +26,12 @@ from picoware.system.buttons import (
     BUTTON_MINUS,
     BUTTON_EQUAL,
     BUTTON_A,
-    BUTTON_H,
     BUTTON_R,
     BUTTON_W,
     BUTTON_S,
     BUTTON_G,
     BUTTON_Z,
     BUTTON_SPACE,
-    BUTTON_QUESTION,
     BUTTON_P,
     BUTTON_F,
     BUTTON_C,
@@ -120,7 +118,7 @@ HELP_LINES = (
     'abs min max pow atan2 pi e', '0.6*sin(x)*cos(y)   sin(sqrt(x*x+y*y))',
     'Tips:', 'Functions use N x N samples,', 'implicit surfaces N x N x N', 'High N asks first; ESC cancels sampling',
     'Wire is faster; movement previews wire', 'Two surfaces: f heat colours, g pink',
-    'Shots go to picoware/settings/graph3d/', 'F9 or H opens this help; ESC closes',
+    'Shots go to picoware/settings/graph3d/', 'F9 opens this help; ESC closes',
 )
 
 _SAFE = {
@@ -2218,13 +2216,6 @@ def run(view_manager) -> None:
             inp.reset()
             _reset_camera()
             moved = True
-        elif button in (BUTTON_H, BUTTON_QUESTION):
-            inp.reset()
-            _auto = False
-            _help_return = ST_PLOT
-            _state = ST_HELP
-            _make_help(view_manager)
-            return
         elif button == BUTTON_CENTER:
             inp.reset()
             _auto = False

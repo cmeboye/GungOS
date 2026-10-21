@@ -65,7 +65,7 @@ for index in range(5):
  if index==0:assert 'engtools.plots.plot3d' not in sys.modules
  if index==3:
   from engtools.plots import plot3d
-  key(BUTTON_H);assert plot3d._state==plot3d.ST_HELP
+  key(BUTTON_F9);assert plot3d._state==plot3d.ST_HELP
   key(BUTTON_ESCAPE);finish()
  if index==2:
   assert owner.app.items[0].points and owner.app.items[1].style=='scatter'

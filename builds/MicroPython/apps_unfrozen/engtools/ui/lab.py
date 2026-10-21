@@ -222,6 +222,11 @@ def help_capacity(bottom):
 
 
 def help_box(draw,p,lines,first,bottom):
+    try:from picoware.gui import overlay
+    except ImportError:overlay=None  # firmware without the shared box
+    if overlay is not None:
+        overlay.paint(draw,p,(8,43,int(draw.size.x)-16,bottom-46),'KEYBINDINGS',lines,first)
+        return
     capacity=help_capacity(bottom)
     right=int(draw.size.x)-8
     panel(draw,p,(8,43,right-8,bottom-46),'KEYBINDINGS',

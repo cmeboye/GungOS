@@ -4,6 +4,13 @@ _bluetooth = None
 _broadcasting = False
 _last_update = 0
 _beacon_count = 0
+_page = None
+
+HELP = (
+    "BLE beacon:",
+    "Broadcasts as Picoware-Beacon every 100 ms.",
+    "ESC\tstop broadcasting and return",
+)
 
 
 def start(view_manager) -> bool:
@@ -51,10 +58,9 @@ def run(view_manager) -> None:
         view_manager (ViewManager): The view manager instance for display and storage access.
     """
     from picoware.system.buttons import BUTTON_ESCAPE
-    from picoware.system.vector import Vector
     from utime import ticks_ms, ticks_diff
 
-    global _last_update, _beacon_count
+    global _last_update, _beacon_count, _page
 
     if _bluetooth is not None:_bluetooth.poll()
 
@@ -73,37 +79,18 @@ def run(view_manager) -> None:
     if _broadcasting:
         _beacon_count += 1
 
-    draw = view_manager.draw
-    draw.erase()
-
-    text_vec = Vector(5, 5)
-
-    draw.text(text_vec, "BLE Beacon")
-    text_vec.y = 30
-    draw.text(text_vec, "Name: Picoware-Beacon")
-    text_vec.y = 50
-    draw.text(text_vec, f"MAC: {_bluetooth.mac_address}")
-
+    if _page is None:
+        from picoware.gui.style import Page
+        _page = Page(view_manager, "Bluetooth / Beacon", ())
+    lines = ["Name\tPicoware-Beacon", "MAC\t" + _bluetooth.mac_address]
     if _broadcasting:
-        text_vec.y = 80
-        draw.text(text_vec, "Status: Broadcasting")
-        text_vec.y = 100
-        draw.text(text_vec, "Interval: 100ms")
-        text_vec.y = 120
-        draw.text(text_vec, f"Display updates: {_beacon_count}")
+        lines += ["Status\tBroadcasting", "Interval\t100 ms", "Updates\t%d" % _beacon_count]
     else:
-        text_vec.y = 80
-        draw.text(text_vec, "Status: Stopped")
-
-    # Show if anyone connected
+        lines.append("Status\tStopped")
     conn_count = len(_bluetooth.central_connections)
     if conn_count > 0:
-        text_vec.y = 145
-        draw.text(text_vec, f"Connections: {conn_count}")
-
-    text_vec.y = draw.size.y - 20
-    draw.text(text_vec, "ESC: Stop & Exit")
-    draw.swap()
+        lines.append("Connections\t%d" % conn_count)
+    _page.update(lines)
 
 
 def stop(view_manager) -> None:
@@ -114,8 +101,9 @@ def stop(view_manager) -> None:
     """
     from gc import collect
 
-    global _bluetooth, _broadcasting, _beacon_count, _last_update
+    global _bluetooth, _broadcasting, _beacon_count, _last_update, _page
 
+    _page = None
     if _bluetooth is not None:
         _bluetooth.stop_peripheral()
         _bluetooth.close()

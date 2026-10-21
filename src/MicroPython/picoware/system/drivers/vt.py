@@ -580,6 +580,13 @@ class vt(uio.IOBase):
         # Get input from the view_manager's input system
         button = self.input_manager.button
 
+        if button == buttons.BUTTON_F9 and self.view_manager.help:
+            # The editor owns the input loop, so it shows its help itself.
+            from picoware.gui.overlay import modal
+            modal(self.view_manager, "KEYBINDINGS", self.view_manager.help)
+            self._needs_render = True
+            return
+
         if button != -1:
 
             # Convert button to terminal sequence

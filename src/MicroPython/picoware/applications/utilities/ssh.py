@@ -7,6 +7,19 @@ Last Updated: 2026-09-19
 """
 
 from micropython import const
+from picoware.gui.style import MENU_HELP
+
+HELP = MENU_HELP + (
+    "SSH menu:",
+    "Set the host, port, user and password, then Connect.",
+    "Values are typed on the on-screen keyboard.",
+    "Terminal:",
+    "Keys\ttype a command",
+    "ENTER\trun it; 'clear' empties the screen",
+    "UP/DOWN\tearlier or later commands",
+    "BACK / DEL\terase",
+    "ESC\tback to the SSH menu",
+)
 import usocket as socket
 import struct
 import hashlib

@@ -1,4 +1,5 @@
 """Custom - External Picoware applications."""
+from picoware.gui.style import MENU_HELP as HELP
 from picoware.system.decorator import storage_required
 
 _applications = None
@@ -101,7 +102,7 @@ def run(view_manager) -> None:
             # Check if view already exists
             if view_manager.get_view(app_view_name) is None:
                 app_view = View(
-                    app_view_name, app_module.run, app_module.start, app_module.stop
+                    app_view_name, app_module.run, app_module.start, app_module.stop, getattr(app_module, "HELP", None)
                 )
                 view_manager.log(
                     f"[Applications]: Created view for app {selected_app} after {ticks_ms() - start_time} ms"

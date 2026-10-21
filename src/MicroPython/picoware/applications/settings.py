@@ -2,6 +2,30 @@
 
 from micropython import const
 
+HELP = (
+    "Settings:",
+    "UP/DOWN\tchoose a setting",
+    "ENTER\topen the chosen setting",
+    "ESC\treturn; in a setting, cancel it",
+    "Appearance:",
+    "UP/DOWN\tchoose a colour role",
+    "ENTER\tpick its colour",
+    "F1\tsave all colours",
+    "F2\treset to the default colours",
+    "Colour picker:",
+    "Arrows\tchoose a preset colour",
+    "F2\ttype a custom #RRGGBB value",
+    "LEFT/RIGHT\tmove the cursor in the value",
+    "BACK / DEL\terase before the cursor",
+    "ENTER\tuse the colour",
+    "Date & Time:",
+    "LEFT/RIGHT\tchoose a field",
+    "UP/DOWN\tchange its value",
+    "ENTER\tsave the date and time",
+    "GMT offset:",
+    "Type the hours from UTC; ENTER saves",
+)
+
 # Brightness is the only choice mode; drawing/keyboard preferences remain
 # supported by Settings and ViewManager without exposing their old toggles.
 STATE_SCREEN_BRIGHTNESS = const(0)
@@ -300,7 +324,7 @@ def run(view_manager) -> None:
                 from picoware.applications.system import screensaver_setting
                 name='screensaver_setting'
                 if view_manager.get_view(name) is None:
-                    view_manager.add(View(name,screensaver_setting.run,screensaver_setting.start,screensaver_setting.stop))
+                    view_manager.add(View(name,screensaver_setting.run,screensaver_setting.start,screensaver_setting.stop, getattr(screensaver_setting, "HELP", None)))
                 view_manager.switch_to(name)
             elif selected == "Appearance":
                 __open_appearance()

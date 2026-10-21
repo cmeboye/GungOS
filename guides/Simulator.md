@@ -58,7 +58,7 @@ PicoLAB; Screensavers and Benchmark live under Misc. Games lists Tetris. Use
 
 On the 320 × 320 PicoCalc desktop, Left/Right selects the category and
 Up/Down selects its menu items. F1 focuses the scrollable resource panel,
-F3 focuses the optional widget, and H shows help. See
+F3 focuses the optional widget, and F9 shows help. See
 [Engineering desktop](Desktop.md) for layout, memory counters and widget setup.
 
 Run checks for the selected profile with:

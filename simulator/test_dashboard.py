@@ -38,25 +38,30 @@ key(k.BUTTON_LEFT); assert home.category==0
 key(k.BUTTON_RIGHT); assert home.indices[1]==1
 shots=[];native_capture=vm.draw.screenshot
 vm.draw.screenshot=lambda path:shots.append(path)
-key(k.BUTTON_F1); assert home.focus=='info'
-assert not shots, 'F1 took a screenshot instead of focusing Box 1'
-key(k.BUTTON_ALT_S); assert shots==['screenshot.bmp'] and home.focus=='info', 'Alt+S must capture without changing focus'
+key(k.BUTTON_F1); assert vm._overlay is not None and vm._overlay.title=='SYSTEM RESOURCES'
+assert not shots, 'F1 took a screenshot instead of opening the resource box'
+key(k.BUTTON_ALT_S); assert shots==['screenshot.bmp'] and vm._overlay is not None, 'Alt+S must capture without closing the box'
 vm.draw.screenshot=native_capture
 old_category=home.category
 for _ in range(8): key(k.BUTTON_DOWN)
-assert home.scroll==8 and home.category==old_category
+assert vm._overlay.first==8 and home.category==old_category
 vm.draw.screenshot('/private/tmp/picoware-dashboard-info.bmp')
-key(k.BUTTON_ESCAPE); assert home.focus=='menu'
-key(k.BUTTON_H); assert home.focus=='help'
+key(k.BUTTON_ESCAPE); assert vm._overlay is None and home.category==old_category
+key(k.BUTTON_F9); assert vm._overlay.title=='KEYBINDINGS'
+assert any(line.startswith('F1\t') for line in vm._overlay.lines)
 vm.draw.screenshot('/private/tmp/picoware-dashboard-help.bmp')
-key(k.BUTTON_H); assert home.focus=='menu'
-from picoware.applications.system import about
-key(k.BUTTON_I)
-assert vm.current_view.name=='about' and desktop._dashboard is None
+key(k.BUTTON_F9); assert vm._overlay is None
+# I no longer opens anything: version and credits live in System > Info.
+key(k.BUTTON_I); assert vm.current_view.name=='desktop_view' and desktop._dashboard is home
+from picoware.applications import library
+from picoware.applications.system import system_info
 from picoware.system.features import FIRMWARE_VERSION
-assert about.ABOUT_TEXT.startswith('GungOS v'+FIRMWARE_VERSION)
-assert 'Cem Gungor' in about.ABOUT_TEXT and 'jblanked' in about.ABOUT_TEXT
-assert 'GNU GPL v3' in about.ABOUT_TEXT and 'MIT' not in about.ABOUT_TEXT
+library.launch(vm,'Info')
+assert vm.current_view.name=='system_info' and desktop._dashboard is None
+text='\n'.join(system_info._page.source)
+assert text.startswith('GungOS v'+FIRMWARE_VERSION)
+assert 'Cem Gungor' in text and 'jblanked' in text and 'Heap' in text
+assert 'GNU GPL v3' in text and 'MIT' not in text
 vm.draw.screenshot('/private/tmp/picoware-gungos-info.bmp')
 key(k.BUTTON_DOWN)
 key(k.BUTTON_ESCAPE)

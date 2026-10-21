@@ -44,10 +44,9 @@ Transparent pixels use the destination panel colour. Old artwork is archived in
 | Left / Right | Select Apps, System, Comms or Utils |
 | Up / Down | Select an item in the current category |
 | Enter | Open the selected item |
-| Escape | Return from a panel; on the main menu, reset to Apps |
-| H | Show or close help |
-| I | Open GungOS version, features and credits |
-| F1 | Focus system information; Up / Down scroll; F1 or Escape returns |
+| Escape | On the main menu, reset to Apps |
+| F9 | Show or close help |
+| F1 | Show system resources; Up / Down scroll; F9 or Escape closes |
 | F3 | Focus the selected widget |
 
 Back and Del both erase before the cursor and never navigate away.
@@ -58,13 +57,13 @@ saves a screenshot to `screenshot.bmp` on the SD card from any screen; the key
 is not passed to the app. F1 and the other function keys belong to the app.
 
 The top status bar is black, with white time and battery-percentage text and the
-supplied connection icons. Category and footer bars use the selected accent.
+supplied connection icons. The category bar uses the selected accent.
 
-The footer shows `H: Help   I: Info` at the left and the firmware version at the
-right. The help panel describes the desktop
-controls. Info is also available through **System → About**; Up/Down scrolls
-its text and Escape returns. While a widget has keyboard focus,
-letters go to that widget; use F1 to return to desktop controls.
+The footer shows `F9 Help` at the left and the firmware version at the right,
+like the footer of every other screen. Help opens in a box over the desktop.
+Version, features, credits and resource counters are in **System → Info**;
+Up/Down scrolls it and Escape returns. While a widget has keyboard focus,
+keys, F9 included, go to that widget; its Escape returns to desktop controls.
 
 ## System information
 

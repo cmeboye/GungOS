@@ -33,8 +33,9 @@ assert home.status[1]==50 and home.status[6] is False
 from sim_pixels import Pixels
 fb=Pixels(vm.draw)
 assert all(fb.pixel(0,y)==0 for y in range(16))
-assert all(fb.pixel(1,y)==vm.selected_color for y in range(303,319))
-assert fb.pixel(0,303)==fb.pixel(1,319)==vm.background_color
+# One-line footer: F9 Help in the accent colour below a background gap.
+assert any(fb.pixel(x,y)==vm.selected_color for x in range(6,50) for y in range(308,320))
+assert fb.pixel(0,303)==fb.pixel(0,307)==vm.background_color
 assert fb.pixel(0,16)==vm.background_color
 before=tuple(fb.pixel(x,y) for y in range(16) for x in range(250,294))
 power.set_battery_charging(True)
@@ -63,7 +64,7 @@ for name in ICONS:
         width,height,raw=bitmap(name,theme)
         assert height<=16 and len(raw)==width*height*2
 vm.selected_color=0xFFE0;home.update()
-assert fb.pixel(0,0)==0 and fb.pixel(1,303)==0xFFE0
+assert fb.pixel(0,0)==0 and any(fb.pixel(x,y)==0xFFE0 for x in range(6,50) for y in range(308,320))
 assert any(fb.pixel(x,y)==0xFFFF for x in range(8,40) for y in range(2,14)),'Clock must stay white on the black status bar'
 assert len(home.status_bar._icons)==2
 print('PASS: exact battery percentages, alpha blits, bounded two-icon cache and live theme contrast')

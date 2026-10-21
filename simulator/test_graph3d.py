@@ -138,7 +138,7 @@ g._expr2='0.1*x*y'; g._need_eval=True; g._goto_plot(vm); sampled()
 assert g._zs2
 key(BUTTON_C); assert g._state==g.ST_SLICE
 key(BUTTON_RIGHT); key(BUTTON_C); key(BUTTON_ESCAPE)
-key(BUTTON_H); assert g._state==g.ST_HELP
+key(BUTTON_F9); assert g._state==g.ST_HELP
 key(BUTTON_DOWN); key(BUTTON_ESCAPE)
 g._saved=[g._pack_entry()]; assert g._write_saved(vm.storage)
 g._saved=[]; g._load_saved(vm.storage); assert '0.1*x*y' in g._saved[0]

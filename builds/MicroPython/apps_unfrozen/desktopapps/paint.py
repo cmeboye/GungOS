@@ -1,11 +1,17 @@
 """PicoPaint: keyboard crosshair, square brushes, shapes and hatched fills."""
 from picoware.system import buttons as k
-from .common import FileApp,COLORS
+from .common import FileApp,COLORS,FILE_HELP
+from .icons import PICOPAINT
 from .paint_model import Canvas,WIDTH,HEIGHT,TOOLS,PATTERNS,packed,rgb565,example
 
 
 class Paint(FileApp):
     title='PicoPaint';extension='.ppaint';export_extension='.bmp';directory='picoware/documents/picopaint'
+    ICON=PICOPAINT
+    HELP=('Canvas:','Arrows\tmove the cursor','ENTER\tpen on / off; line and box anchor',
+          'SPACE\tstamp the brush','BACK\terase under the cursor','F3\ttools','F4\tcolour',
+          'F5\tbrush size','F6\tfill pattern','F7\tundo',
+          'ESC\tdrop the anchor or pen; then close','ESC (fill)\tcancel a running fill')+FILE_HELP
     def __init__(self):
         super().__init__();self.reset_cursor()
     def fresh(self):return Canvas()
@@ -82,13 +88,10 @@ class Paint(FileApp):
     def stop(self,vm):
         if self.job is not None:self.job.close()
         self.job=None;super().stop(vm)
-    def hints(self):return ('ARROWS move ENTER pen/anchor SPACE stamp',
-                            'F3 Tools F4 Colour F5 Size F6 Pattern',
-                            'F7 Undo F2 File ESC cancel/back F9 Hide')
     def draw_document(self,r,p,w,h):
-        top=70;left=(w-WIDTH)//2
-        r.text(8,47,TOOLS[self.tool]+' | '+str(self.size)+'px | '+PATTERNS[self.pattern],p.TEXT,0)
-        r.fill(w-27,46,15,13,rgb565(self.ink));r.rect(w-28,45,17,15,p.AXIS)
+        top=63;left=(w-WIDTH)//2
+        r.text(8,40,TOOLS[self.tool]+' | '+str(self.size)+'px | '+PATTERNS[self.pattern],p.TEXT,0)
+        r.fill(w-27,39,15,13,rgb565(self.ink));r.rect(w-28,38,17,15,p.AXIS)
         self.vm.draw._bytearray(left,top,WIDTH,HEIGHT,self.model.pixels,False)
         r.rect(left-1,top-1,WIDTH+2,HEIGHT+2,p.GRID)
         if self.anchor is not None:
@@ -106,4 +109,4 @@ class Paint(FileApp):
             cursor.line(x+delta,y-5,x+delta,y+5,color)
         status=('Filling %d pixels; ESC cancels'%self.progress if self.job else
                 '%d,%d | %dx%d | %s'%(self.x,self.y,WIDTH,HEIGHT,'PEN DOWN' if self.pen else 'Pen up'))
-        r.text(8,270,status,p.MUTED,0)
+        r.text(8,263,status,p.MUTED,0)

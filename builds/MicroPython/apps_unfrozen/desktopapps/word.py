@@ -1,7 +1,8 @@
 """PicoWord: formatted paragraphs and calculator-style equation insertion."""
 from picoware.system import buttons as k
 from engtools.calculator.editor import Editor,clone
-from .common import FileApp,chunks
+from .common import FileApp,chunks,FILE_HELP
+from .icons import PICOWORD
 from .word_model import Document,paragraph,example,MAX_FILE
 
 FONTS=('Extra small / 8 px','Small / 12 px','Medium / 16 px','Large / 20 px','Extra large / 24 px')
@@ -12,6 +13,13 @@ TEMPLATE_LABELS=('Power','Subscript','Square root','Fraction','Integral','Log wi
 
 class Word(FileApp):
     title='PicoWord';extension='.pword';export_extension='.txt';directory='picoware/documents/picoword';theme_option=True
+    ICON=PICOWORD
+    HELP=('Document:','Arrows\tmove the cursor','ENTER\tnew paragraph','BACK / DEL\terase','TAB\tindent',
+          'F3\tfont and alignment','F4\ttext colour','F5\tinsert an equation','eq() SPACE\tinsert an equation',
+          'F6\tundo','F7 / F8\tpage up / down','ESC\tclose; asks to save changes',
+          'Equation:','LEFT/RIGHT\tmove','UP/DOWN\tmove between levels','TAB\tnext slot',
+          'CTRL+UP\tprevious slot','SPACE\texpand 2^, sqrt(), /, int()','F3 / F4\tfont / colour',
+          'F7\tmath symbols','ENTER\tplace the equation','ESC\tcancel the equation')+FILE_HELP
     def __init__(self):super().__init__();self.reset_cursor()
     def fresh(self):return Document()
     def example(self):return example()
@@ -175,35 +183,28 @@ class Word(FileApp):
                     blocks=list(self.model.blocks);blocks.insert(self.block+1,paragraph());self.model.apply(blocks)
                     self.block+=1;self.index=0;text=''
                 self.change_text(text[:self.index]+char+text[self.index:]);self.index+=len(char)
-    def hints(self):
-        if self.page=='equation':return ('SPACE expands TAB slots ENTER set ESC cancel',
-                                         '2^ SPACE sqrt() SPACE / SPACE int() SPACE',
-                                         'F3 Font F4 Colour F7 Math F9 Hide')
-        return ('ARROWS edit ENTER paragraph eq()+SPACE math',
-                'F3 Font/align F4 Colour F5 Equation F6 Undo',
-                'F7/F8 Page F2 File ESC back F9 Hide')
     def draw_document(self,r,p,w,h):
         if self.page=='equation':
-            r.text(9,49,'EQUATION / ENTER sets, ESC cancels',p.ACCENT,0)
-            r.rect(8,70,w-16,145,p.GRID)
-            er=self.renderer((15,77,w-15,208));style=self.eq_style
-            er.expression(self.eq.root,19,90,max(1,style['font']),p.TEXT if style['color'] is None else style['color'],editor=self.eq,follow=True)
-            r.text(10,230,self.eq.hint()[:50],p.MUTED,0);return
+            r.text(9,42,'EQUATION / ENTER sets, ESC cancels',p.ACCENT,0)
+            r.rect(8,63,w-16,145,p.GRID)
+            er=self.renderer((15,70,w-15,201));style=self.eq_style
+            er.expression(self.eq.root,19,83,max(1,style['font']),p.TEXT if style['color'] is None else style['color'],editor=self.eq,follow=True)
+            r.text(10,223,self.eq.hint()[:50],p.MUTED,0);return
         lines=self.layout();caret=lines[self.caret_line(lines)]
-        viewport=self.bottom-82
+        viewport=self.bottom-75
         self.scroll=min(self.scroll,caret[3])
         if caret[3]+caret[4]>self.scroll+viewport:self.scroll=caret[3]+caret[4]-viewport
         style=self.model.blocks[self.block]
-        r.text(9,48,'FONT '+str(style['font']+1)+' | '+('THEME' if style['color'] is None else 'COLOUR')+' | '+('LEFT','CENTRE','RIGHT')[style['align']],p.MUTED,0)
-        r.rect(7,63,w-14,self.bottom-78,p.GRID)
-        content=self.renderer((16,68,w-16,self.bottom-16))
+        r.text(9,41,'FONT '+str(style['font']+1)+' | '+('THEME' if style['color'] is None else 'COLOUR')+' | '+('LEFT','CENTRE','RIGHT')[style['align']],p.MUTED,0)
+        r.rect(7,56,w-14,self.bottom-71,p.GRID)
+        content=self.renderer((16,61,w-16,self.bottom-16))
         for block,start,end,y,height,x,font in lines:
-            screen_y=69+y-self.scroll
-            if screen_y+height<68 or screen_y>=self.bottom-16:continue
+            screen_y=62+y-self.scroll
+            if screen_y+height<61 or screen_y>=self.bottom-16:continue
             record=self.model.blocks[block];color=p.TEXT if record['color'] is None else record['color']
             if record['type']=='text':content.text(x,screen_y,record['text'][start:end],color,font)
             else:content.expression(record['row'],x,screen_y+4,font,color)
-        y=69+caret[3]-self.scroll;x=caret[5]+(self.index-caret[1])*content.metrics[caret[6]][0]
+        y=62+caret[3]-self.scroll;x=caret[5]+(self.index-caret[1])*content.metrics[caret[6]][0]
         if style['type']=='text':content.line(x,y,x,y+content.metrics[caret[6]][1],p.ACCENT)
         else:content.rect(16,y,w-32,caret[4],p.ACCENT)
         r.text(9,self.bottom-11,'Block %d/%d | %d characters'%(self.block+1,len(self.model.blocks),sum(len(b.get('text','')) for b in self.model.blocks)),p.MUTED,0)

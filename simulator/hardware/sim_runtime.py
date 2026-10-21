@@ -119,7 +119,7 @@ KEY_NAMES.update({"alt-" + chr(97 + i): 0xE1 + i for i in range(26)})
 
 LIBRARY_ITEMS = {"apps": 0, "applications": 0, "system": 1, "comms": 2, "utils": 3, "utilities": 3}
 APPLICATION_ITEMS = {"picodesk": 0, "picolab": 1, "games": 2, "misc": 3}
-SYSTEM_ITEMS = {"settings": 0, "about": 1, "system info": 2, "restart": 3, "shutdown": 4}
+SYSTEM_ITEMS = {"settings": 0, "info": 1, "system info": 1, "about": 1, "restart": 2, "shutdown": 3}
 COMMS_ITEMS = {"bluetooth": 0, "usb": 1, "wifi": 2}
 UTILITY_ITEMS = {"file manager": 0, "filemanager": 0, "picoide": 1, "python editor": 1, "pythoneditor": 1, "python repl": 2, "repl": 2, "serial terminal": 3, "serial": 3, "ssh terminal": 4, "ssh": 4}
 SCRIPT_ITEMS = {"python apps": 0, "custom": 0}
@@ -1021,8 +1021,6 @@ def request_open(name):
     if len(parts)>2 and lab_indices is None:
         choices=nested.get(parts[1],tuple(SCRIPT_ITEMS))
         if parts[2] not in choices:raise LaunchTargetError('Submenu route not found: '+str(name))
-    from picoware.applications import library
-    library._library_state = None
     from picoware.applications import desktop
     desktop._dashboard_state=None
     if desktop._dashboard is not None:

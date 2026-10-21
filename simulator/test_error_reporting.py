@@ -20,7 +20,6 @@ from picoware.system.view_manager import ViewManager
 from picoware.system.view import View, CRASH_LOG_PATH
 from picoware.system.input import Input
 from picoware.system import buttons as k
-from picoware.gui.alert import Alert
 
 # Idle polls (-1) come first so the wait loop must sleep and keep polling.
 pending = []
@@ -43,9 +42,10 @@ assert vm.alert('Any other key confirms') is True
 drawn = []
 original_text = vm.draw._text
 vm.draw._text = lambda x, y, text, color, *rest: drawn.append((y, text))
-Alert(vm.draw, 'first line\nsecond line').draw('Title')
+pending[:] = [k.BUTTON_CENTER]
+vm.alert('first line\nsecond line', title='Title')
 vm.draw._text = original_text
-rows = [text for y, text in sorted(drawn) if text != 'Title']
+rows = [text for y, text in sorted(drawn) if text not in ('Title', 'Any key continues')]
 assert rows == ['first line', 'second line'], rows
 
 # A crashing view reports the exception and its innermost file and line.

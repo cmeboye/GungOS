@@ -4,6 +4,15 @@ _usb = None
 _initialized = False
 _key_map = None
 
+HELP = (
+    "Numpad:",
+    "0-9\tnumpad digits",
+    "UP / DOWN\t+ / -",
+    "LEFT/RIGHT\t* / /",
+    "ENTER\tnumpad Enter",
+    "ESC\tstop and return",
+)
+
 
 def start(view_manager) -> bool:
     """Start the app and map buttons to numpad keys.
@@ -34,21 +43,14 @@ def start(view_manager) -> bool:
     )
 
     view_manager.alert(
-        "USB Numpad is about to start.. make sure you have a USB cable connected before clicking `Back`"
+        "USB Numpad is about to start. Connect the USB cable, then press any key."
     )
     global _usb, _initialized, _key_map
     _usb = USBKeyboard(
         manufacturer="MicroPython", product="Picoware Numpad", serial="000003"
     )
-    view_manager.draw.erase()
-    d = view_manager.draw
-    fg = view_manager.foreground_color
-    d._text(10, 10, "Numpad", fg)
-    d._text(10, 30, "0-9: Numpad digits", fg)
-    d._text(10, 45, "Up: +    Down: -", fg)
-    d._text(10, 60, "Left: *  Right: /", fg)
-    d._text(10, 75, "Center: Enter", fg)
-    d.swap()
+    from picoware.gui.style import Page
+    Page(view_manager, "USB / Numpad", HELP[1:-1]).draw()
     _key_map = {
         BUTTON_0: 0x62,
         BUTTON_1: 0x59,

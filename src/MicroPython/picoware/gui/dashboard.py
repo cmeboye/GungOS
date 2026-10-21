@@ -14,8 +14,12 @@ CATEGORY_RECT=(1,43,318,18)
 MENU_RECT=(1,62,77,240)
 WIDGET_RECT=(79,62,240,240)
 WIDGET_SURFACE=(80,63,238,238)
-FOOTER_RECT=(1,303,318,16)
-INFO_CAPACITY=20
+
+HELP=('Desktop:','LEFT/RIGHT\tchoose a category','UP/DOWN\tchoose a menu item',
+      'ENTER\topen the chosen item','ESC\tgo back to the first category',
+      'F1\tsystem resources in detail','F3\tsend keys to the widget; its ESC returns',
+      'Status:','Bars show heap, PSRAM and SD card in use',
+      'Settings > Screensaver chooses the widget')
 
 
 def outline(draw,rect,color):
@@ -33,8 +37,8 @@ class Dashboard:
         from picoware.system.settings import Settings
         self.vm,self.categories,self.sections=vm,CATEGORIES,SECTIONS
         self.category,self.indices=(state[0],state[1][:]) if state else (0,[0]*4)
-        self.focus,self.scroll='menu',0
-        self.info,self.info_lines,self.next_info=None,[],0
+        self.focus='menu'
+        self.info,self.next_info=None,0
         self.logo,self.theme=None,None
         self.status,self.error=None,''
         self.status_bar=StatusBar(vm)
@@ -48,11 +52,13 @@ class Dashboard:
         now=ticks_ms()
         # Compact usage bars share the detailed resource snapshot, sampled at 5s.
         if self.info is None or ticks_diff(now,self.next_info)>=0:
-            self.info=snapshot(self.vm); self.info_lines=lines(self.info)
+            self.info=snapshot(self.vm)
             self.next_info=now+5000
             self.dirty=True
         status=self.status_bar.sample()
         if status!=self.status: self.status=status; self.dirty=True
+        # F9 shows the desktop's help, except while the widget has the keys.
+        self.vm.help=None if self.focus=='widget' else HELP
         button=self.vm.button
         previous_focus=self.focus
         if button!=-1 and self.key(button): return
@@ -63,34 +69,20 @@ class Dashboard:
         if self.dirty: self.draw()
     def key(self,button):
         self.dirty=True
-        if button==keys.BUTTON_F1:
-            self.focus='menu' if self.focus=='info' else 'info'
-            self.widget.focused=False
-            if self.focus=='info': self.next_info=0
-            return
         if self.focus=='widget': return
-        if button==keys.BUTTON_I:
-            from picoware.applications.library import launch
-            launch(self.vm,'About')
+        if button==keys.BUTTON_F1:
+            self.vm.show('SYSTEM RESOURCES',lines(snapshot(self.vm)))
+            self.dirty=False
             return True
         if button==keys.BUTTON_F3:
             if self.widget.module:
                 self.focus='widget'; self.widget.focused=True
             else: self.error=self.widget.error or 'Choose a screensaver in Settings'
             return
-        if button==keys.BUTTON_H:
-            self.focus='menu' if self.focus=='help' else 'help'
-            return
         if button == keys.BUTTON_ESCAPE:
-            if self.focus!='menu': self.focus='menu'
-            else: self.category=0; self.indices[0]=0
+            self.category=0; self.indices[0]=0
             self.error=''
             return
-        if self.focus=='info':
-            if button==keys.BUTTON_UP: self.scroll=max(0,self.scroll-1)
-            elif button==keys.BUTTON_DOWN: self.scroll=min(max(0,len(self.info_lines)-INFO_CAPACITY),self.scroll+1)
-            return
-        if self.focus=='help': return
         self.error=''
         if button in (keys.BUTTON_LEFT,keys.BUTTON_RIGHT):
             self.category=(self.category+(-1 if button==keys.BUTTON_LEFT else 1))%4
@@ -157,38 +149,15 @@ class Dashboard:
             draw._text(x+9,y+94,'Select a widget in',fg,FONT_XTRA_SMALL)
             draw._text(x+9,y+108,'Settings > Screensaver',fg,FONT_XTRA_SMALL)
         outline(draw,(x,y,w,h),accent if self.focus=='widget' else fg)
-        draw._fill_rectangle(*FOOTER_RECT,accent)
-        if self.error:
-            draw._fill_rectangle(2,284,316,17,bg)
-            draw._text(5,288,self.error[:51],fg,FONT_XTRA_SMALL)
-        draw._text(FOOTER_RECT[0]+7,FOOTER_RECT[1]+4,'H: Help   I: Info',foreground(accent),FONT_XTRA_SMALL)
-        version='v'+FIRMWARE_VERSION
-        version_x=FOOTER_RECT[0]+FOOTER_RECT[2]-7-draw.len(version,FONT_XTRA_SMALL)
-        draw._text(version_x,FOOTER_RECT[1]+4,version,accent_fg,FONT_XTRA_SMALL)
-        if self.focus=='info':
-            draw._fill_rectangle(4,65,312,235,bg)
-            outline(draw,(4,65,312,235),accent)
-            draw._text(10,72,'SYSTEM RESOURCES / F1 or ESC closes',fg,FONT_XTRA_SMALL)
-            for i,text in enumerate(self.info_lines[self.scroll:self.scroll+INFO_CAPACITY]):
-                draw._text(10,87+i*10,text[:50],fg,FONT_XTRA_SMALL)
-            draw._text(10,289,'UP/DOWN scroll',fg,FONT_XTRA_SMALL)
-        if self.focus=='help':
-            draw._fill_rectangle(4,65,312,235,bg)
-            outline(draw,(4,65,312,235),accent)
-            help_lines=('GungOS CONTROLS','Left/Right: choose category','Up/Down: choose menu item','Enter: open the selected item',
-                        'Esc: return; root resets Apps','F1: resource details; arrows scroll','F3: send input to the widget',
-                        'Widget Esc returns to the menu','Settings > Screensaver selects widget',
-                        'Usage bars: heap / PSRAM / SD used',
-                        'I: version, features and credits','Alt+S: save a screenshot to SD',
-                        'H or Esc closes help')
-            for i,text in enumerate(help_lines): draw._text(10,74+i*16,text[:49],fg,FONT_XTRA_SMALL)
+        from .style import footer,system_palette
+        footer(draw,self.error,bool(self.error),system_palette(vm),'v'+FIRMWARE_VERSION)
         draw.swap(); self.dirty=False
 
     def draw_info_summary(self):
         draw=self.vm.draw
         fg,bg=self.vm.foreground_color,self.vm.background_color
         accent=self.vm.selected_color
-        outline(draw,INFO_RECT,accent if self.focus=='info' else fg)
+        outline(draw,INFO_RECT,fg)
         board=self.info['board'].replace('Raspberry Pi ','')
         heading=board+' / %d MHz' % self.info['frequency']
         panel_x,panel_y,panel_width,_=INFO_RECT

@@ -14,8 +14,8 @@ from picoware.system import buttons as k
 vm=ViewManager();vm._wifi=None
 sys.path.insert(0,root+'/builds/MicroPython/apps_unfrozen')  # engtools, as on the SD card
 from engtools.bench import core as bench
-import picoware.gui.alert,picoware.gui.list,picoware.system.settings
-before={name:sys.modules[name] for name in ('picoware.gui.alert','picoware.gui.list','picoware.system.settings')}
+import picoware.gui.overlay,picoware.gui.menu,picoware.system.settings
+before={name:sys.modules[name] for name in ('picoware.gui.overlay','picoware.gui.menu','picoware.system.settings')}
 mode=vm.draw.mode
 def step(button=-1):
     vm._button=button;bench.run(vm)
@@ -37,7 +37,7 @@ report=finish()
 assert 'Status: complete, 3 rounds' in report
 assert 'failed:' not in report and 'ran out of memory' not in report,report
 for line in ('Processor clock, reported','Heap total','Largest free block at start','Python method call',
-             'Garbage collection, full','Import picoware.gui.list (frozen)','Import engtools.bench.models (SD .mpy)',
+             'Garbage collection, full','Import picoware.gui.menu (frozen)','Alert box, draw','Help box, open and close','Import engtools.bench.models (SD .mpy)',
              'Fill rectangle 32x32, SRAM','Swap, nothing changed, PSRAM','Menu of 30 entries, draw',
              'Home screen, idle frame','On-screen keyboard frame, draw','Resource snapshot','Settings load from SD',
              'PSRAM write, 4 KB pieces','PSRAM copy 32 KB','SD write 64 KB file in one call','SD append 512 bytes',

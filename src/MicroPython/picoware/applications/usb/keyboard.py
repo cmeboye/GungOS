@@ -3,6 +3,12 @@
 _usb = None
 _initialized = False
 
+HELP = (
+    "USB keyboard:",
+    "Keys\tsent to the connected computer",
+    "ESC\tstop and return",
+)
+
 
 def start(view_manager) -> bool:
     """Start the app and warn before initializing USB.
@@ -16,15 +22,14 @@ def start(view_manager) -> bool:
     from picoware.system.usb import USBKeyboard
 
     view_manager.alert(
-        "USB Keyboard is about to start.. make sure you have a usb cable connected before clicking `Back`"
+        "USB Keyboard is about to start. Connect the USB cable, then press any key."
     )
     global _usb, _initialized
     _usb = USBKeyboard(
         manufacturer="MicroPython", product="Pico Keyboard", serial="000001"
     )
-    view_manager.draw.erase()
-    view_manager.draw._text(10, 40, "Press any key...", view_manager.foreground_color)
-    view_manager.draw.swap()
+    from picoware.gui.style import Page
+    Page(view_manager, "USB / Keyboard", ("Type: each key is sent to the computer.",)).draw()
     return True
 
 

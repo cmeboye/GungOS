@@ -1,4 +1,5 @@
 """Games - Collection of built-in games."""
+from picoware.gui.style import MENU_HELP as HELP
 from picoware.system.decorator import storage_required
 
 _games = None
@@ -106,7 +107,7 @@ def run(view_manager) -> None:
                     game_view_name,
                     game_module.run,
                     game_module.start,
-                    game_module.stop,
+                    game_module.stop, getattr(game_module, "HELP", None),
                 )
                 view_manager.log(
                     f"[Games]: Created view for app {selected_game} after {ticks_ms() - start_time} ms",

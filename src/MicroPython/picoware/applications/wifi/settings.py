@@ -1,9 +1,13 @@
 """WiFi Settings - Configure WiFi settings."""
+from picoware.gui.style import MENU_HELP
+
+HELP = MENU_HELP + (
+    "Network Info:",
+    "Shows the saved SSID and password; ESC closes it.",
+)
 
 _settings_menu = None
 _settings_menu_index = 0
-_settings_textbox = None
-_text_visible = False
 
 
 def start(view_manager) -> bool:
@@ -60,8 +64,6 @@ def run(view_manager) -> None:
     if not _settings_menu:
         return
 
-    global _text_visible
-    global _settings_textbox
     global _settings_menu_index
 
     button: int = view_manager.button
@@ -72,13 +74,7 @@ def run(view_manager) -> None:
         _settings_menu.scroll_down()
     elif button == BUTTON_ESCAPE:
         _settings_menu_index = 0
-        if not _text_visible:
-            view_manager.back()
-            return
-        _text_visible = False
-        if _settings_textbox is not None:
-            _settings_textbox.clear()
-            _settings_menu.draw()
+        view_manager.back()
     elif button == BUTTON_CENTER:
         _settings_menu_index = _settings_menu.selected_index
         if _settings_menu_index == 0:
@@ -90,21 +86,7 @@ def run(view_manager) -> None:
             ssid = load_wifi_ssid(view_manager)
             password = load_wifi_password(view_manager)
 
-            info = "Network Info\n\nSSID: {}\nPassword: {}".format(ssid, password)
-
-            from picoware.gui.textbox import TextBox
-
-            if _settings_textbox is None:
-                _settings_textbox = TextBox(
-                    view_manager.draw,
-                    0,
-                    320,
-                    view_manager.foreground_color,
-                    view_manager.background_color,
-                )
-
-            _settings_textbox.set_text(info)
-            _text_visible = True
+            view_manager.show("NETWORK INFO", ("SSID\t" + ssid, "Password\t" + password))
 
         elif _settings_menu_index == 1:
             from picoware.applications.wifi import ssid
@@ -114,7 +96,7 @@ def run(view_manager) -> None:
                     "wifi_ssid",
                     ssid.run,
                     ssid.start,
-                    ssid.stop,
+                    ssid.stop, getattr(ssid, "HELP", None),
                 )
             )
             view_manager.switch_to("wifi_ssid")
@@ -126,7 +108,7 @@ def run(view_manager) -> None:
                     "wifi_password",
                     password.run,
                     password.start,
-                    password.stop,
+                    password.stop, getattr(password, "HELP", None),
                 )
             )
             view_manager.switch_to("wifi_password")
@@ -141,17 +123,10 @@ def stop(view_manager) -> None:
     from gc import collect
 
     global _settings_menu
-    global _settings_textbox
-    global _text_visible
 
     if _settings_menu is not None:
         del _settings_menu
         _settings_menu = None
 
-    if _settings_textbox is not None:
-        del _settings_textbox
-        _settings_textbox = None
-
-    _text_visible = False
 
     collect()

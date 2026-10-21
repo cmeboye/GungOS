@@ -1,5 +1,13 @@
 from micropython import const
 
+HELP = (
+    "Serial terminal:",
+    "UART0 at 115200 baud: TX on GP0, RX on GP1.",
+    "Messages are typed on the on-screen keyboard.",
+    "ENTER\ttype the next message",
+    "ESC\treturn",
+)
+
 # states
 STATE_VIEWING = const(0)
 STATE_TYPING = const(1)
@@ -13,6 +21,7 @@ state = STATE_TYPING
 message = ""
 _received = False
 _prev_callback = None
+_log = []
 
 def __uart_callback(uart_instance):
     """Callback for UART events"""
@@ -22,50 +31,30 @@ def __uart_callback(uart_instance):
 
 
 def __box_start(view_manager) -> None:
-    """Start the textbox for server output"""
-    from picoware.gui.textbox import TextBox
+    """Show the conversation, newest lines at the bottom."""
+    from picoware.gui.style import Page
 
     global _textbox
 
-    draw = view_manager.draw
-    fg = view_manager.foreground_color
-    height = draw.size.y
-    bg = view_manager.background_color
-    size = draw.size
-
-    draw.fill_screen(bg)
-
-    top = int(height * 0.0625)
-
-    msg = f"Listening on GPIO{_uart.rx_pin}"
-    display_x = int((size.x - len(msg) * draw.font_size.x) // 2)
-    draw._text(
-        display_x,
-        top,
-        msg,
-        fg,
-    )
-    draw.swap()
-
     if _textbox is None:
-        _textbox = TextBox(
-            draw,
-            top + int(top // 2),
-            height - int(top + (top // 2)),
-            fg,
-            bg,
-        )
+        _textbox = Page(view_manager, "Utils / Serial", ())
+        _textbox.message = f"Listening on GPIO{_uart.rx_pin}"
+    __log(message)
 
-        _textbox.set_text(message)
-    else:
-        _textbox.current_text += message
-        _textbox.refresh()
+
+def __log(text: str) -> None:
+    """Add received or sent text to the conversation and redraw it."""
+    _log.extend(line for line in text.split("\n") if line)
+    del _log[:-60]
+    _textbox.set_lines(_log)
+    _textbox.first = len(_textbox.lines)
+    _textbox.draw()
 
 
 def __callback(result: str) -> None:
     """Callback for keyboard input"""
     global state, message
-    message = "\nYou: " + result + "\n"
+    _log.append("You: " + result)
     state = STATE_SENDING
     _uart.println(result)
     message = ""
@@ -96,13 +85,10 @@ def __set_kb(view_manager, title: str) -> None:
 
 def start(view_manager) -> bool:
     """Start the app"""
-    from picoware.system.buttons import BUTTON_ESCAPE
-
     global _textbox, _uart, state, _loading, _received, _prev_callback
 
-    if _textbox is not None:
-        del _textbox
-        _textbox = None
+    _textbox = None
+    del _log[:]
     if _loading is not None:
         del _loading
         _loading = None
@@ -115,32 +101,14 @@ def start(view_manager) -> bool:
     _prev_callback = _uart.callback
     _uart.set_callback(__uart_callback)
 
-    # first show info screen about connection
-    d = view_manager.draw
-    fg = view_manager.foreground_color
-    sixteen = d.font_size.y + 1
-    d.erase()
-    d._text(0, 0, "To connect to the device, use the following settings:", fg)
-    d._text(0, sixteen, "Baudrate: 115200", fg)
-    d._text(0, sixteen * 2, "TX Pin: UART0_TX (GP0)", fg)
-    d._text(0, sixteen * 3, "RX Pin: UART0_RX (GP1)", fg)
-    d._text(0, sixteen * 4, "Press the any button to continue...", fg)
-    d.swap()
-    inp = view_manager.input_manager
-    inp.reset()
-    from time import sleep_ms
-
-    while True:
-        but = inp.button
-        if but == -1:
-            sleep_ms(10)  # wait without spinning the CPU
-            continue
-        if but == BUTTON_ESCAPE:
-            view_manager.back()
-            return False
-        if but != -1:
-            inp.reset()
-            break
+    # first show the connection settings
+    if not view_manager.alert(
+        "Connect with these settings:\nBaud rate\t115200\nTX pin\tUART0_TX (GP0)\nRX pin\tUART0_RX (GP1)",
+        False,
+        "Serial",
+    ):
+        view_manager.back()
+        return False
 
     __set_kb(view_manager, "Start the conversation")
 
@@ -183,8 +151,7 @@ def run(view_manager) -> None:
     elif state == STATE_VIEWING:
         global _received, message
         if _received:
-            _textbox.current_text += f"Friend: {message}\n"
-            _textbox.refresh()
+            __log(message)
             _received = False
             message = ""
 
@@ -195,9 +162,8 @@ def stop(view_manager) -> None:
 
     global _textbox, _uart, _loading, state, message, _received, _prev_callback
 
-    if _textbox is not None:
-        del _textbox
-        _textbox = None
+    _textbox = None
+    del _log[:]
     if _loading is not None:
         del _loading
         _loading = None

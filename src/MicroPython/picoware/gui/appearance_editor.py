@@ -66,9 +66,5 @@ class AppearanceEditor:
                 d._text(247, y + 3, '#' + to_hex(color), p.TEXT, XS)
         d._text(10, 190, 'ENTER edits  /  changes preview until saved', p.MUTED, XS)
         preview(d, self.values, 207, 77)
-        if self.error:
-            d._fill_rectangle(4, 284, 312, 15, 0x5800)
-            d._text(8, 287, self.error[:50], 0xFFFF, XS)
-        d._fill_rectangle(0, 300, 320, 20, 0x1082)
-        d._text(7, 306, 'F1 Save   F2 Reset   ESC Cancel', 0xFFFF, XS)
+        style.footer(d, self.error, bool(self.error), p)
         d.swap()

@@ -13,6 +13,7 @@ _pending_message=None
 _incoming=bytearray()
 _incoming_at=0
 _last_update=0
+_page=None
 STATE_MODE_SELECT=0
 STATE_SCANNING=1
 STATE_DEVICE_LIST=2
@@ -20,6 +21,12 @@ STATE_CONNECTING=3
 STATE_CHAT=4
 STATE_TYPING=5
 STATE_PERIPHERAL_WAIT=6
+
+
+HELP=('UART chat:','UP/DOWN\tchoose a mode or device','ENTER\tchoose it; in a chat, type a message',
+      'ESC\tdisconnect; at the mode menu, return',
+      'Central connects to a device with a UART service.','Peripheral waits as Picoware-Chat.',
+      'Messages are typed on the on-screen keyboard.')
 
 
 def _append(sent,text):
@@ -70,7 +77,7 @@ def start(vm):
     _messages=[];_pending_message=None;_last_update=0;_modes(vm);return True
 
 def run(vm):
-    global _state,_mode,_bluetooth,_menu,_loading,_selected_device,_pending_message,_last_update
+    global _state,_mode,_bluetooth,_menu,_loading,_selected_device,_pending_message,_last_update,_page
     from picoware.system import buttons as k
     from picoware.gui.menu import Menu
     if _bluetooth is not None:_bluetooth.poll()
@@ -80,6 +87,7 @@ def run(vm):
         if _state==STATE_MODE_SELECT:vm.back();return
         _modes(vm);return
     if _state==STATE_MODE_SELECT:
+        if _page is not None:_page.invalidate()
         if _menu.title!='UART Chat':_modes(vm)
         if button in (k.BUTTON_UP,k.BUTTON_LEFT):_menu.scroll_up()
         elif button in (k.BUTTON_DOWN,k.BUTTON_RIGHT):_menu.scroll_down()
@@ -96,6 +104,7 @@ def run(vm):
                 if not _bluetooth.start_peripheral('Picoware-Chat'):vm.alert(_bluetooth.error);_modes(vm)
         return
     if _state==STATE_DEVICE_LIST:
+        if _page is not None:_page.invalidate()
         _menu.draw()
         if button in (k.BUTTON_UP,k.BUTTON_LEFT):_menu.scroll_up()
         elif button in (k.BUTTON_DOWN,k.BUTTON_RIGHT):_menu.scroll_down()
@@ -120,23 +129,27 @@ def run(vm):
     now=ticks_ms()
     if button==k.BUTTON_NONE and ticks_diff(now,_last_update)<100:return
     _last_update=now
-    d=vm.draw;fg=vm.foreground_color;d.clear()
-    d._text(5,24,'UART Chat / '+str(_mode),vm.selected_color)
-    if _state==STATE_SCANNING:d._text(5,60,'Scanning... ESC cancels',fg)
-    elif _state==STATE_CONNECTING:d._text(5,60,'Connecting / discovering UART...',fg)
-    elif _state==STATE_PERIPHERAL_WAIT:d._text(5,60,'Waiting for a connection...',fg);d._text(5,85,'Name: Picoware-Chat',fg)
+    if _page is None:
+        from picoware.gui.style import Page
+        _page=Page(vm,'Bluetooth / UART Chat',())
+    lines=['Mode\t'+str(_mode)]
+    if _state==STATE_SCANNING:lines.append('Scanning... ESC cancels')
+    elif _state==STATE_CONNECTING:lines.append('Connecting / discovering UART...')
+    elif _state==STATE_PERIPHERAL_WAIT:lines+=['Waiting for a connection...','Name\tPicoware-Chat']
     elif _state==STATE_CHAT:
-        for index,(sent,text) in enumerate(_messages[-10:]):d._text(5,52+index*18,('> ' if sent else '< ')+text[:43],fg)
-        if _bluetooth.error:d._text(5,int(d.size.y)-53,_bluetooth.error[:45],0xF800)
-        d._text(5,int(d.size.y)-30,'ENTER Type   ESC Disconnect',fg)
+        lines+=[('> ' if sent else '< ')+text for sent,text in _messages]
         if button==k.BUTTON_CENTER:
             _pending_message=None;_state=STATE_TYPING;vm.keyboard.reset();vm.keyboard.title='Send UART message'
             vm.keyboard.set_save_callback(_saved);vm.input_manager.reset();vm.keyboard.run(force=True,max_characters=128)
+            _page.invalidate()
             return
-    d.swap()
+    _page.first=len(lines)  # newest messages stay in view
+    _page.update(lines,_bluetooth.error if _bluetooth else '',bool(_bluetooth and _bluetooth.error))
 
 def stop(vm):
     global _bluetooth,_menu,_loading,_messages,_incoming,_state,_pending_message
     if _bluetooth is not None:_bluetooth.close()
+    global _page
+    _page=None
     _bluetooth=None;_menu=None;_loading=None;_messages=[];_incoming=bytearray();_state=STATE_MODE_SELECT;_pending_message=None
     vm.keyboard.reset()

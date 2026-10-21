@@ -1,4 +1,5 @@
 """Select a desktop widget from the SD screensavers directory."""
+from picoware.gui.style import MENU_HELP as HELP
 _items=[]
 _selected=0
 _error=''
@@ -19,7 +20,7 @@ def draw(vm):
     from picoware.gui import style
     rows=[(name,'') for name in _items]
     style.menu(vm.draw,rows,_selected,'Settings / Screensaver / widget','GungOS',
-               'UP/DOWN choose  ENTER saves',_error or 'ESC returns',palette=style.system_palette(vm))
+               _error,palette=style.system_palette(vm),error=bool(_error))
 
 
 def run(vm):

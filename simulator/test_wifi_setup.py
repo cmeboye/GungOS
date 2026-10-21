@@ -49,7 +49,7 @@ assert vm._current_view.name == 'wifi_connect', 'Enter did not open connection s
 assert vm.wifi.is_connected(), 'Connection was not started or did not complete'
 saved = Settings(vm.storage).wifi_settings
 assert saved == {'ssid': 'Lab (2.4 GHz)', 'password': 'test-pass'}, 'Credentials did not persist'
-assert 'Connected successfully!' in connect._get_status_text(vm)
+assert 'Status\tConnected successfully!' in connect._get_status_lines(vm)
 print('PASS: scanned SSID with parentheses preserved; Enter saves and connects')
 print('PASS: fresh Settings instance reloads both credentials')
 

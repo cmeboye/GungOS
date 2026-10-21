@@ -215,7 +215,7 @@ class Game:
         self.dirty=True
         if self.page=='help':
             capacity=self.help_capacity()
-            limit=max(0,len(self.help_lines())-capacity)
+            limit=max(0,len(self.help_layout())-capacity)
             if button in (k.BUTTON_F9,k.BUTTON_ESCAPE):
                 if self.help_return=='game':self.close_page(now)
                 else:self.page=self.help_return
@@ -292,71 +292,66 @@ class Game:
             self.draw();self.last_draw=now
     def help_lines(self):
         return (
-            'PLAY',
-            'Left / Right: move the falling piece',
-            'Up: rotate clockwise',
-            'Z: rotate counter-clockwise',
-            'Down: soft drop (+1 point per cell)',
-            'Enter / Space: hard drop (+2 per cell)',
-            'C: hold / swap (Modern mode only)',
-            'P: pause or resume',
-            'Esc: leave Tetris from the game screen',
-            '', 'FUNCTION KEYS',
-            'F2: open / close Settings',
-            'F3: toggle music',
-            'F4: toggle sound effects',
-            'F5: new game (confirms during play)',
-            'F9: show / close this help page',
-            '', 'SETTINGS',
-            'Up / Down: choose a setting',
-            'Left / Right / Enter: change it',
-            'Mode change starts a new game; confirm first',
-            'Music, FX, volume and block style save to SD',
-            'A failed save keeps your current settings',
-            'Menus freeze gravity, lock delay and audio',
-            'Esc returns without unpausing a paused game',
-            '', 'MODES AND STATISTICS',
-            'Classic: one next piece; hold disabled',
-            'Modern: three next pieces and one hold slot',
-            'Both use seven-bag, SRS and current scoring',
-            'Both retain the landing-outline preview',
-            'Counts track new pieces entering play',
-            'Swapping a held piece does not add a count',
-            'Counts reset when a new game starts',
-            'Ten cleared lines advance the level',
-            'Level colours repeat after ten palettes',
-            'Block styles: Pixel / Bevel / Solid',
-            '', 'HELP NAVIGATION',
-            'Up / Down: scroll; Left / Right: page',
-            'Home / End: first / last page',
-            'F9 / Esc: return to the previous screen')
-    def help_capacity(self):return max(1,(int(self.vm.draw.size.y)-70)//12)
+            'Play:',
+            'LEFT/RIGHT\tmove the falling piece',
+            'UP\trotate clockwise',
+            'Z\trotate counter-clockwise',
+            'DOWN\tsoft drop (+1 point per cell)',
+            'ENTER / SPACE\thard drop (+2 per cell)',
+            'C\thold / swap (Modern mode only)',
+            'P\tpause or resume',
+            'ESC\tleave Tetris from the game screen',
+            'Function keys:',
+            'F2\topen / close Settings',
+            'F3\ttoggle music',
+            'F4\ttoggle sound effects',
+            'F5\tnew game (confirms during play)',
+            'F9\tshow / close this help',
+            'Settings:',
+            'UP/DOWN\tchoose a setting',
+            'LEFT/RIGHT\tchange it; ENTER too',
+            'Mode change starts a new game; confirm first.',
+            'Music, FX, volume and block style save to SD.',
+            'A failed save keeps your current settings.',
+            'Menus freeze gravity, lock delay and audio.',
+            'ESC returns without unpausing a paused game.',
+            'Modes and statistics:',
+            'Classic: one next piece; hold disabled.',
+            'Modern: three next pieces and one hold slot.',
+            'Both use seven-bag, SRS and current scoring.',
+            'Both retain the landing-outline preview.',
+            'Counts track new pieces entering play.',
+            'Swapping a held piece does not add a count.',
+            'Counts reset when a new game starts.',
+            'Ten cleared lines advance the level.',
+            'Level colours repeat after ten palettes.',
+            'Block styles: Pixel / Bevel / Solid.')
+    def help_layout(self):
+        from picoware.gui import overlay
+        return overlay.layout(self.help_lines(),overlay.RECT[2])
+    def help_capacity(self):
+        from picoware.gui import overlay
+        return overlay.capacity(overlay.RECT[3])
     def draw_help(self,p):
-        d=self.vm.draw;w,h=int(d.size.x),int(d.size.y)
-        lines=self.help_lines();capacity=self.help_capacity()
-        first=max(0,min(self.help_first,max(0,len(lines)-capacity)))
-        self.help_first=first
-        d.fill_screen(p.BG)
-        theme.chrome(d,'Games / Tetris / Help','UP/DOWN scroll  LEFT/RIGHT page',
-                     'F9 / ESC close   '+str(first+1)+'-'+str(min(len(lines),first+capacity))+'/'+str(len(lines)),
-                     'GungOS',p)
-        for index,line in enumerate(lines[first:first+capacity]):
-            d._text(8,34+index*12,line[:max(1,(w-16)//6)],p.ACCENT if line and line.upper()==line else p.TEXT,0)
-        d.swap();self.dirty=False
+        from picoware.gui import overlay
+        lines=self.help_layout();capacity=self.help_capacity()
+        self.help_first=max(0,min(self.help_first,max(0,len(lines)-capacity)))
+        overlay.paint(self.vm.draw,p,overlay.RECT,'KEYBINDINGS',lines,self.help_first)
     def draw_settings(self,p):
         rows=(('Mode',self.mode+' / '+str(self.next_count)+' next / '+('no hold' if self.mode=='Classic' else 'hold')),
               ('Music','On' if self.music_enabled else 'Off'),
               ('Sound FX','On' if self.fx_enabled else 'Off'),
               ('Volume',str(self.sound.volume)+'%'),('Block style',self.block_style),
               ('New game','Reset board and piece counts'),('Return','Keep playing'))
+        error=self.error or self.sound.error
         theme.menu(self.vm.draw,rows,self.settings_row,'Games / Tetris / Settings','GungOS',
-                   'ARROWS choose / change  ENTER select',self.error or self.sound.error or 'F9 Help   ESC returns',palette=p)
+                   error,palette=p,error=bool(error))
         self.dirty=False
     def draw_restart(self,p):
         label='Start '+self.pending_mode if self.pending_mode else 'New game'
         theme.menu(self.vm.draw,((label,'Reset board and piece counts'),('Cancel','Keep the current game')),
                    self.confirm_row,'Games / Tetris / Confirm','GungOS',
-                   'ARROWS choose  ENTER select',self.error or 'F9 Help   ESC cancels',palette=p)
+                   self.error,palette=p,error=bool(self.error))
         self.dirty=False
     def preview(self,piece,x,y,size):
         if piece is None:return
@@ -364,9 +359,13 @@ class Game:
         for dx,dy in cells:self.blocks.draw(self.vm.draw,piece,x+(dx-min_x)*size,y+(dy-min_y)*size,size-1)
     def draw(self):
         p=theme.system_palette(self.vm)
-        if self.page=='help':self.draw_help(p);return
         if self.page=='settings':self.draw_settings(p);return
         if self.page=='restart':self.draw_restart(p);return
+        self.draw_board(p)
+        # Help is a box over the paused board.
+        if self.page=='help':self.draw_help(p)
+        self.vm.draw.swap();self.dirty=False
+    def draw_board(self,p):
         d=self.vm.draw;w,h=int(d.size.x),int(d.size.y)
         cell=max(3,min(13,(h-52)//20,(w-170)//10))
         left,top=max(76,(w-150)//2),30
@@ -423,12 +422,7 @@ class Game:
             d._text(x+6,y+29,'Enter restart' if self.over else 'P resumes',p.TEXT,0)
             d._text(x+6,y+49,'F5 new game',p.MUTED,0)
         error=self.error or self.sound.error
-        if error:
-            d._fill_rectangle(3,h-29,w-6,13,p.PANEL)
-            d._text(6,h-26,error[:max(1,(w-12)//6)],p.ERROR,0)
-        d._fill_rectangle(0,h-14,w,14,p.PANEL)
-        d._text(6,h-11,'F2 Settings   F9 Help',p.ACCENT,0)
-        d.swap();self.dirty=False
+        theme.footer(d,error,bool(error),p)
     def stop(self):
         self.save_best();self.sound.stop();self.grid=None;self.blocks.cache={}
 

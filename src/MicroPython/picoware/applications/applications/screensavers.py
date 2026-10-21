@@ -1,4 +1,5 @@
 """Screensavers - Collection of screensaver animations."""
+from picoware.gui.style import MENU_HELP as HELP
 from picoware.system.decorator import storage_required
 _screensavers = None
 _screensavers_index = 0
@@ -118,7 +119,7 @@ def run(view_manager) -> None:
                     screensaver_view_name,
                     screensaver_module.run,
                     screensaver_module.start,
-                    screensaver_module.stop,
+                    screensaver_module.stop, getattr(screensaver_module, "HELP", None),
                 )
                 view_manager.log(
                     f"[Screensavers]: Created view for app {selected_screensaver} after {ticks_ms() - start_time} ms",

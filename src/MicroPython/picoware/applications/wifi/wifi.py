@@ -1,4 +1,5 @@
 """WiFi Apps Menu - Central hub for WiFi applications"""
+from picoware.gui.style import MENU_HELP as HELP
 
 _wifi = None
 _wifi_index = 0
@@ -85,7 +86,7 @@ def run(view_manager) -> None:
             from picoware.applications.wifi import connect
 
             view_manager.add(
-                View("wifi_connect", connect.run, connect.start, connect.stop)
+                View("wifi_connect", connect.run, connect.start, connect.stop, getattr(connect, "HELP", None))
             )
             view_manager.switch_to("wifi_connect")
         elif _wifi_index == 1:
@@ -96,25 +97,25 @@ def run(view_manager) -> None:
                     "wifi_rssi_monitor",
                     rssi_monitor.run,
                     rssi_monitor.start,
-                    rssi_monitor.stop,
+                    rssi_monitor.stop, getattr(rssi_monitor, "HELP", None),
                 )
             )
             view_manager.switch_to("wifi_rssi_monitor")
         elif _wifi_index == 2:
             from picoware.applications.wifi import scan
 
-            view_manager.add(View("wifi_scan", scan.run, scan.start, scan.stop))
+            view_manager.add(View("wifi_scan", scan.run, scan.start, scan.stop, getattr(scan, "HELP", None)))
             view_manager.switch_to("wifi_scan")
         elif _wifi_index == 3:
             from picoware.applications.wifi import server
 
-            view_manager.add(View("wifi_server", server.run, server.start, server.stop))
+            view_manager.add(View("wifi_server", server.run, server.start, server.stop, getattr(server, "HELP", None)))
             view_manager.switch_to("wifi_server")
         elif _wifi_index == 4:
             from picoware.applications.wifi import settings
 
             view_manager.add(
-                View("wifi_settings", settings.run, settings.start, settings.stop)
+                View("wifi_settings", settings.run, settings.start, settings.stop, getattr(settings, "HELP", None))
             )
             view_manager.switch_to("wifi_settings")
 

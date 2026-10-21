@@ -52,19 +52,12 @@ def compact(value):
 
 
 def lines(info):
-    board='Board: '+info['board']
-    result=[]
-    while len(board)>26:
-        split=board.rfind(' ',0,26)
-        if split<1: split=26
-        result.append(board[:split]); board=board[split:].lstrip()
-    result.append(board)
-    result.append('Frequency: %d MHz' % info['frequency'])
+    result=['Board: '+info['board'],'Frequency: %d MHz' % info['frequency']]
     result.append('       Free Used  Tot  %F')
     for name,free,used,total in info['rows']:
         percent=str(int(100*free/total)) if free is not None and total else '-'
         result.append('%-5s %4s %4s %4s %3s' % (name,compact(free),compact(used),compact(total),percent))
-    result.extend(('F1/Esc returns to menu','K/M/G are binary units','Flash = filesystem space',
+    result.extend(('K/M/G are binary units','Flash = filesystem space',
                    'SRAM usage unavailable','Heap is part of SRAM'))
     if info['simulator']: result.append('Simulator: host counters')
     for name,free,used,total in info['rows']:

@@ -15,30 +15,26 @@ RESULT_PATH = 'picoware/engtool-render-benchmark.txt'
 RESERVE = 32 * 1024
 WORK_LIMIT_US = 30 * 1000000
 MODES = ('Both', 'PSRAM', 'SRAM')
-HELP = ('ENGTOOL RENDER BENCHMARK',
-        'ENTER: start the selected test ladder',
-        'F2: Quick / Full stress', 'F3: Both / PSRAM / SRAM screen',
-        'F4: original display / CPU benchmark',
-        'F6: core benchmark (whole firmware)',
-        'F5: skip the current case', 'ESC: cancel, keep completed results',
-        'F9: show / hide this help', '',
-        'Full: real editor limits, then synthetic',
-        'Beam models above the editor limits.',
-        'CAD: 8 steps, quality 24, camera zoom',
-        '1x/4x/16x, perspective and isometric.',
-        'Five-cycle build/release checks too.', '',
-        'Memory: GC heap only; sampled live use',
-        'can miss a temporary allocation peak.',
+HELP = ('Render benchmark:',
+        'ENTER\tstart the selected test ladder',
+        'F2\tQuick / Full stress',
+        'F3\tBoth / PSRAM / SRAM screen',
+        'F4\toriginal display / CPU benchmark',
+        'F6\tcore benchmark (whole firmware)',
+        'F5\tskip the current case',
+        'ESC\tcancel, keep completed results',
+        'Full stress:',
+        'Real editor limits, then synthetic Beam models above them.',
+        'CAD: 8 steps, quality 24, camera zoom 1x/4x/16x, perspective and isometric.',
+        'Five-cycle build/release checks too.',
+        'Measurements:',
+        'Memory: GC heap only; sampled live use can miss a temporary allocation peak.',
         'Native info is reported separately.',
-        'Build/solve, compose and swap are timed',
-        'separately with normal garbage collection.', '',
+        'Build/solve, compose and swap are timed separately with normal garbage collection.',
+        'Limits:',
         'A 32 KB free-heap reserve stops a case.',
-        '30 seconds of measured work stops it',
-        'between calls. Native calls cannot be',
-        'interrupted; a hang leaves its last',
-        'START/phase checkpoint on the SD.', '',
-        'A failure stops remaining cases in that',
-        'family/screen mode; other families run.',
+        '30 seconds of measured work stops it between calls. Native calls cannot be interrupted; a hang leaves its last START/phase checkpoint on the SD.',
+        'A failure stops remaining cases in that family/screen mode; other families run.',
         'Expected CAD refusals are NOT failures.',
         'No settings or documents are changed.')
 
@@ -226,7 +222,7 @@ def _case_job(vm, case, measure):
 
 class Benchmark:
     def __init__(self,vm):
-        self.vm=vm;self.full=True;self.mode=0;self.phase='intro';self.help=False;self.help_first=0
+        self.vm=vm;self.full=True;self.mode=0;self.phase='intro'
         self.queue=[];self.index=0;self.job=None;self.work=0;self.total_work=0;self.blocked=set()
         self.last=[];self.error='';self.saved=False;self.start_mode=vm.draw.mode
         self.measure=MeterDraw(vm.draw);self.quiet=QuietVM(vm,self.measure)
@@ -324,13 +320,6 @@ class Benchmark:
 
     def run(self,button):
         if self.legacy is not None:self.legacy.run(self.vm);return
-        if button==k.BUTTON_F9:
-            self.help=not self.help;self.draw();return
-        if self.help:
-            if button==k.BUTTON_ESCAPE:self.help=False
-            elif button==k.BUTTON_UP:self.help_first=max(0,self.help_first-1)
-            elif button==k.BUTTON_DOWN:self.help_first=min(len(HELP)-10,self.help_first+1)
-            self.draw();return
         if button==k.BUTTON_ESCAPE:
             self.close_job()
             try:
@@ -366,10 +355,7 @@ class Benchmark:
         d.fill_screen(p.BG)
         theme.header(d,'Misc / EngTool render benchmark',palette=p,height=18)
         def text(y,s,color=None):d._text(9,y,s[:50],p.TEXT if color is None else color,0)
-        if self.help:
-            for i,s in enumerate(HELP[self.help_first:self.help_first+24]):text(30+i*11,s)
-            text(307,'UP/DOWN scroll   F9 / ESC close',p.ACCENT)
-        elif self.phase=='intro':
+        if self.phase=='intro':
             for y,s in ((34,'BEAM + PICOCAD'),(56,'Build / solve, draw and panel transfer'),
                         (75,'F2 Profile: '+('Full stress' if self.full else 'Quick')),
                         (94,'F3 Screen: '+MODES[self.mode]),(122,'Uses disposable synthetic models.'),
@@ -378,7 +364,7 @@ class Benchmark:
                         (176,'Expected refusals are reported separately.'),
                         (205,'F4 Display / CPU baseline benchmark'),
                         (223,'F6 Core benchmark (whole firmware)'),
-                        (245,'ENTER Start   F9 Help   ESC Return')):text(y,s)
+                        (245,'ENTER starts the tests.')):text(y,s)
         else:
             text(31,self.phase.upper(),p.ACCENT)
             text(51,'Case %d / %d'%(min(self.index+1,len(self.queue)),len(self.queue)))
@@ -387,7 +373,7 @@ class Benchmark:
             for i,s in enumerate(self.last):text(122+i*18,s)
             if self.error:text(263,self.error,p.ERROR)
             text(282,'Report: picoware/engtool-render-benchmark.txt',p.MUTED)
-            text(307,'F5 Skip   F9 Help   ESC Return',p.ACCENT)
+        theme.footer(d,palette=p)
         d.swap()
 
 

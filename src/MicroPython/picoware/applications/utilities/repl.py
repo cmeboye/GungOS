@@ -9,6 +9,14 @@ Last Updated: 2026-05-07
 from micropython import const
 from picoware.system.decorator import keyboard_required
 
+HELP = (
+    "Python REPL:",
+    "Type Python; a line ending in : continues.",
+    "ENTER\trun the line, or finish a block",
+    "UP/DOWN\tearlier or later input",
+    "ESC\treturn",
+)
+
 _PROMPT = const(">>> ")
 _PROMPT_CONT = const("... ")
 

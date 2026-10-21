@@ -144,7 +144,6 @@ class ThemePicker:
         draw = self.vm.draw
         bg, text, muted = 0, 0xFFFF, 0xAD55
         colour = self.colour
-        ink = 0 if is_light(colour) else 0xFFFF
         draw.fill_screen(bg)
         from picoware.gui import style
         label='Appearance / '+self.label+(' / Custom' if self.editing else '')
@@ -177,12 +176,7 @@ class ThemePicker:
         values = dict(self.values)
         values[self.field] = colour
         preview(draw, values, 229, 67)
-        if self.error:
-            draw._fill_rectangle(4, 282, 312, 16, 0x5800)
-            draw._text(8, 286, self.error, text, FONT_XTRA_SMALL)
-        draw._fill_rectangle(0, 300, 320, 20, colour)
-        hint = 'ENTER accepts hex   ESC discards edit' if self.editing else 'Arrows  F2 Custom  ENTER Set  ESC Cancel'
-        draw._text(6, 306, hint, ink, FONT_XTRA_SMALL)
+        style.footer(draw, self.error, bool(self.error), style.colors(bg, text, colour))
         draw.swap()
 
 

@@ -117,7 +117,8 @@ key(k.BUTTON_RIGHT);key(k.BUTTON_DOWN);key(k.BUTTON_PLUS);key(k.BUTTON_ESCAPE)
 assert vm.current_view.name=='eggcel' and (ui.sheet,ui.sheet.document(),ui.position,ui.anchor,ui.filename,ui.sheet.dirty)==state
 ui.plot_options['style']='pie';ui.open_plot();finish();assert vm.current_view.name=='eggcel_chart'
 vm.draw.screenshot('/private/tmp/eggcel-next-pie.bmp')
-key(k.BUTTON_RIGHT);key(k.BUTTON_F9);key(k.BUTTON_ESCAPE)
+key(k.BUTTON_RIGHT);key(k.BUTTON_F9);assert vm._overlay is not None
+key(k.BUTTON_ESCAPE);assert vm._overlay is None;key(k.BUTTON_ESCAPE)
 # Pie constraints and column gaps.
 ui.sheet.apply({(1,1):'-1'})
 try:build_spec(ui.sheet,ui.plot_options,vm)

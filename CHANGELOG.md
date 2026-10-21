@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- One set of screen parts and keys everywhere
+  ([Screens and controls](guides/UI.md)). F9 shows help on every screen,
+  also while typing: a scrollable box listing every key with its meaning,
+  drawn over the screen. The app waits behind it, and closing it puts the
+  screen back exactly. H and I no longer open help or information on the
+  home screen; the plots no longer take H or ?.
+- Every footer is one line: `F9 Help` and the latest message. Key hints
+  moved into F9 help.
+- Alerts, Yes/No questions (Shutdown, saving a Wi-Fi network) and
+  information (F1 resources, file and Bluetooth device details, Wi-Fi network
+  info) are boxes over the screen instead of full-screen pages.
+- System lists Settings, Info, Restart and Shutdown. Info shows the version,
+  device resources and credits on one page, replacing About and System Info.
+- Status screens (Wi-Fi connect and RSSI, Bluetooth, USB, Serial, the
+  Wi-Fi server) use the shared header, page and footer.
+- About 18 KB less flash: removed code nothing used — the image,
+  scrollbar, search bar, toggle, toggle list, list, alert and two-panel menu
+  widgets, the old library menu view, the Scripts menu and the unshown boot
+  logo. Scripts under Python Apps that imported those widgets need updating;
+  `picoware.system.http`, `websocket` and `LED` remain for them. The core
+  benchmark times the alert and help boxes instead of the old alert and list.
+- Serial shows the messages you send, not only those received. Escape on a
+  Bluetooth device's details returns to the list instead of leaving the scan.
+
 ## v1.33 — 2026-10-21
 
 - The home screen's resource snapshot (every 5 s) walks the heap once

@@ -1,4 +1,11 @@
 """BLE Scanner - Scan for nearby Bluetooth devices (Central mode)"""
+from picoware.gui.style import MENU_HELP
+
+HELP = MENU_HELP[:2] + (
+    "ENTER\tshow the device's details",
+    "ESC\treturn",
+    "Scanning takes a few seconds; devices list when done.",
+)
 
 _menu = None
 _bluetooth = None
@@ -101,7 +108,6 @@ def run(view_manager) -> None:
         BUTTON_RIGHT,
         BUTTON_CENTER,
     )
-    from picoware.system.vector import Vector
 
     if _bluetooth is not None:_bluetooth.poll()
 
@@ -143,24 +149,12 @@ def run(view_manager) -> None:
             addr_type, addr, name, rssi = _scanned_devices[idx]
             addr_str = ":".join("{:02X}".format(b) for b in addr)
 
-            draw = view_manager.draw
-            draw.clear()
-            text_vec = Vector(5, 5)
-            draw.text(text_vec, "Device Info")
-            text_vec.y = 30
-            draw.text(text_vec, f"Name: {name or 'Unknown'}")
-            text_vec.y = 50
-            draw.text(text_vec, f"Addr: {addr_str[:17]}")
-            if len(addr_str) > 17:
-                text_vec.y = 70
-                draw.text(text_vec, f"      {addr_str[17:]}")
-            text_vec.y = 90
-            draw.text(text_vec, f"Type: {'Public' if addr_type == 0 else 'Random'}")
-            text_vec.y = 110
-            draw.text(text_vec, f"RSSI: {rssi} dB")
-            text_vec.y = draw.size.y - 20
-            draw.text(text_vec, "Press ESC to return")
-            draw.swap()
+            view_manager.show("DEVICE INFO", (
+                "Name\t" + (name or "Unknown"),
+                "Address\t" + addr_str,
+                "Type\t" + ("Public" if addr_type == 0 else "Random"),
+                "RSSI\t%d dB" % rssi,
+            ))
 
 
 def stop(view_manager) -> None:

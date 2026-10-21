@@ -1,98 +1,69 @@
-"""System Info - Display system information."""
+"""Info - firmware version, device resources and credits on one page."""
+from picoware.gui.style import PAGE_HELP as HELP
 
-_system_info = None
+ABOUT = (
+    "Lightweight PicoCalc firmware supporting an engineering toolbox.",
+    "",
+    "Scientific calculator:",
+    "Calculate, Statistics, Solver, Complex, Base-N and Matrix. Structured mathematical input and variables.",
+    "Graph and Graph3D:",
+    "2D and 3D plotting, general expressions, navigation and adjustable views.",
+    "PicoLAB engineering toolbox:",
+    "Shared numerical routines powered by ulab.",
+    "PicoCalc desktop:",
+    "Category navigation, system information, themes and a configurable widget.",
+    "Also included:",
+    "SD files and Wi-Fi connectivity.",
+    "Tetris and the Lorenz attractor demonstration.",
+    "Credits:",
+    "Based on the open-source project Picoware by jblanked.",
+    "GungOS by Cem Gungor",
+    "License: GNU GPL v3.",
+    "Includes third-party components under their respective licenses.",
+)
+
+_page = None
 
 
-def __set_text(view_manager):
-    """Populate the system information text box.
+def _lines(view_manager) -> list:
+    from picoware.system.features import FIRMWARE_NAME, FIRMWARE_VERSION
+    from picoware.system.resource_info import snapshot, lines
 
-    Args:
-        view_manager (ViewManager): The view manager instance for display and storage access.
-    """
-    from picoware.system.system import System
-
-    if _system_info:
-        system = System()
-        info = f"""System Information
-
-        Board: {system.board_name}
-        Device: {system.device_name}
-        Frequency: {system.freq} MHz
-
-        Free Heap: {system.free_heap} bytes
-        Used Heap: {system.used_heap} bytes
-        Total Heap: {system.total_heap} bytes
-
-        Free PSRAM: {system.free_psram} bytes
-        Used PSRAM: {system.used_psram} bytes
-        Total PSRAM: {system.total_psram} bytes
-
-        Free Flash: {system.free_flash} bytes
-        Used Flash: {system.used_flash} bytes
-        Total Flash: {system.total_flash} bytes
-
-        Battery Level: {view_manager.battery.percentage}%
-        """
-        _system_info.set_text(info)
+    result = [FIRMWARE_NAME + " v" + FIRMWARE_VERSION + ":"]
+    result.extend(ABOUT[:2])
+    result.append("Device:")
+    try:
+        result.append("Battery: %d%%" % view_manager.battery.percentage)
+    except (OSError, ValueError, TypeError):
+        pass
+    result.extend(lines(snapshot(view_manager)))
+    result.append("")
+    result.extend(ABOUT[2:])
+    return result
 
 
 def start(view_manager) -> bool:
-    """Start the app and show system information.
+    """Show the version, resources and credits."""
+    from picoware.gui.style import Page
 
-    Args:
-        view_manager (ViewManager): The view manager instance for display and storage access.
-
-    Returns:
-        bool: True if the app started.
-    """
-    from picoware.gui.textbox import TextBox
-
-    global _system_info
-
-    if _system_info is None:
-        _system_info = TextBox(
-            view_manager.draw,
-            0,
-            view_manager.draw.size.y,
-            view_manager.foreground_color,
-            view_manager.background_color,
-        )
-
-        __set_text(view_manager)
-        _system_info._set_cursor(0)
-
+    global _page
+    _page = Page(view_manager, "System / Info", _lines(view_manager))
+    _page.draw()
     return True
 
 
 def run(view_manager) -> None:
-    """Run the app and handle scrolling input.
+    """Scroll the page; ESC returns."""
+    from picoware.system.buttons import BUTTON_ESCAPE
 
-    Args:
-        view_manager (ViewManager): The view manager instance for display and storage access.
-    """
-    from picoware.system.buttons import BUTTON_ESCAPE, BUTTON_UP, BUTTON_DOWN
-
-    button: int = view_manager.button
-
+    button = view_manager.button
     if button == BUTTON_ESCAPE:
         view_manager.back()
-    elif button == BUTTON_UP:
-        _system_info.scroll_up()
-    elif button == BUTTON_DOWN:
-        _system_info.scroll_down()
+    elif button != -1:
+        _page.key(button)
 
 
 def stop(view_manager) -> None:
-    """Stop the app and clean up.
-
-    Args:
-        view_manager (ViewManager): The view manager instance for display and storage access.
-    """
-    from gc import collect
-
-    global _system_info
-    if _system_info is not None:
-        del _system_info
-        _system_info = None
-
-    collect()
+    """Release the page."""
+    global _page
+    _page = None

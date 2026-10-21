@@ -1,7 +1,16 @@
 """WiFi Server - Host a web server over WiFi."""
-
 from micropython import const
 from utime import ticks_ms, ticks_diff
+from picoware.gui.style import MENU_HELP
+
+HELP = MENU_HELP + (
+    "Server:",
+    "Start\trun the web server on port 80",
+    "Edit\tadd or change pages; Settings sets AP or STA mode",
+    "Fields are typed on the on-screen keyboard.",
+    "While running:",
+    "ESC\tstop the server",
+)
 
 # menu states
 STATE_MENU_MAIN = const(0)
@@ -451,38 +460,21 @@ def __add_page_callback(result: str) -> None:
 
 
 def __box_start(view_manager) -> None:
-    """Start the textbox for server output.
+    """Show the running server's address.
 
     Args:
         view_manager (ViewManager): The view manager instance for display and storage access.
     """
-    from picoware.gui.textbox import TextBox
+    from picoware.gui.style import Page
 
     global box
 
-    if box is not None:
-        del box
-        box = None
-
-    draw = view_manager.draw
-    fg = view_manager.foreground_color
-    bg = view_manager.background_color
-    height = draw.size.y
-
-    top = int(height * 0.0625)
-
-    box = TextBox(
-        draw,
-        top + (top // 2),
-        height - (top + (top // 2)),
-        fg,
-        bg,
-    )
-
-    if menu_state == STATE_RUNNING:
-        box.set_text("Server is running...\n")
-    elif menu_state == STATE_MENU_VIEW_PAGES:
-        box.set_text("")
+    box = Page(view_manager, "WiFi / Server", (
+        "Address\thttp://" + view_manager.wifi.device_ip,
+        "Server is running.",
+        "Open the address in a browser on the same network.",
+    ))
+    box.draw()
 
 
 def __callback_edit_save(result: str) -> None:
@@ -1088,23 +1080,6 @@ def __server_start(view_manager) -> bool:
         view_manager.alert('Wi-Fi is not connected. Connect, then choose Start again.')
         return False
     if server.start():
-        from picoware.system.vector import Vector
-
-        bg = view_manager.background_color
-        fg = view_manager.foreground_color
-
-        draw = view_manager.draw
-        draw.fill_screen(bg)
-        size = draw.size
-        msg = f"Server started at http://{view_manager.wifi.device_ip}"
-        display_x = (size.x - len(msg) * draw.font_size.x) // 2
-        draw.text(
-            Vector(display_x, int(size.y * 0.0625)),
-            msg,
-            fg,
-        )
-        draw.swap()
-
         __box_start(view_manager)
 
         return True

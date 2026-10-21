@@ -40,7 +40,7 @@ def show_placeholder(draw, tool):
                 break
             theme.text(draw, 12, y, line, theme.MUTED)
             y += 15
-    theme.chrome(draw, 'placeholder', 'Tool structure is ready', 'ESC returns to tools')
+    theme.chrome(draw, 'placeholder', 'Tool structure is ready')
     draw.swap()
 
 

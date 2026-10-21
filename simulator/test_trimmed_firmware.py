@@ -83,7 +83,7 @@ assert not settings._menu.item_exists("USB Stream")
 assert [settings._menu.get_item(i) for i in range(settings._menu.item_count)] == [
     "Screen Brightness", "Appearance", "Time", "Screensaver"]
 from picoware.applications import library
-assert library.SYSTEM_ITEMS == ("Settings", "About", "System Info", "Restart", "Shutdown")
+assert library.SYSTEM_ITEMS == ("Settings", "Info", "Restart", "Shutdown")
 assert library.COMMS_ITEMS == ("Bluetooth", "USB", "WiFi")
 # Legacy SD apps receive a clear unsupported error rather than a fake IR API.
 from picoware.system.decorator import infrared_tx_required, infrared_rx_required
@@ -99,13 +99,13 @@ from picoware.applications.system import system as system_menu
 from picoware.system.buttons import BUTTON_CENTER
 assert system_menu.start(vm)
 assert [system_menu._system.get_item(i) for i in range(system_menu._system.item_count)] == [
-    "About", "System Info", "Restart", "Shutdown"]
+    "Info", "Restart", "Shutdown"]
 actions = []
 activate = system_menu.activate
 system_menu.activate = lambda manager, index: actions.append(index)
 try:
     vm._button = BUTTON_CENTER
-    for row in (2, 3):
+    for row in (1, 2):
         system_menu._system.set_selected(row)
         system_menu.run(vm)
     assert actions == [3, 4]

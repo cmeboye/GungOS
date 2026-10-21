@@ -9,6 +9,13 @@ _scan_count = 0
 _last_scan = None
 _scan_error = ""
 
+HELP = (
+    "RSSI monitor:",
+    "Networks rescan every two seconds, strongest first.",
+    "ENTER\tclear the list",
+    "ESC\treturn",
+)
+
 
 def run(view_manager) -> None:
     """Run the app and update the RSSI display.
@@ -67,22 +74,19 @@ def run(view_manager) -> None:
     }
 
 
+    from picoware.gui import style
+
     draw = view_manager.draw
-    draw.erase()
+    palette = style.system_palette(view_manager)
+    draw.fill_screen(palette.BG)
 
     width = draw.size.x
-    height = draw.size.y
-    font_height = draw.font_size.y
-    footer_y = max(0, height - font_height - 2)
-    status_y = max(0, footer_y - font_height - 3)
-
-    title = "WiFi RSSI Monitor"
-    draw.text(Vector(max(0, (width - draw.len(title)) // 2), 2), title)
+    status_y = draw.size.y - style.FOOT_HEIGHT
 
     # Sort networks by RSSI (strongest first)
     sorted_networks = sorted(_networks.items(), key=lambda x: x[1][2], reverse=True)
 
-    y = 22
+    y = style.HEAD_HEIGHT + 8
     max_networks = max(1, (status_y - y - 3) // 16)
 
     if not sorted_networks:
@@ -126,17 +130,7 @@ def run(view_manager) -> None:
             draw.text(Vector(max(0, (width - draw.len(row)) // 2), y), row, color)
             y += 16
 
-    # Status bar
-    status = f"Networks: {len(_networks)}"
-    draw.text(Vector(max(0, (width - draw.len(status)) // 2), status_y), status)
-
-    footer = "CENTER: Clear | ESC: Exit"
-    if width < 180:
-        footer = "CTR: Clear | ESC: Exit"
-    if draw.len(footer) > width:
-        footer = "C:Clear ESC:Exit"
-    draw.text(Vector(max(0, (width - draw.len(footer)) // 2), footer_y), footer)
-
+    style.chrome(draw, "WiFi / RSSI Monitor", f"Networks: {len(_networks)}", palette=palette)
     draw.swap()
 
 

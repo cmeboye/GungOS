@@ -23,22 +23,25 @@ ROWS = (('Grid', 'size', 'Simulation'), ('Target steps/s', 'fps', 'Simulation'),
 MODEL = ('size','radius','kernel','center','width','rings','b1','b2','b3')
 SEED = ('seed','density','amplitude')
 HELP = (
-    'LENIA / single channel',
-    'A smooth cellular automaton by Bert Chan.',
-    'F2: settings (animation pauses).',
-    'F3: random seed position/orientation; Noise gets fresh random values.',
-    'F4: show/hide statistics for this session.',
-    'F5: restart the configured seed.',
-    'Space or P: pause/resume.',
-    'N: one generation while paused.',
-    'F9: open/close this help.',
-    'Esc: return; widget releases focus.',
-    'SETTINGS',
-    'Up/Down: select; Left/Right: adjust.',
-    'Enter: type a numeric value or cycle a choice. Enter again commits it.',
-    'Back/Del erase before the cursor.',
-    'F2: apply and save to SD.',
-    'Esc: cancel entry, then discard settings.',
+    'Lenia:',
+    'A smooth, single-channel cellular automaton by Bert Chan.',
+    'F2\tsettings (animation pauses)',
+    'F3\trandom seed position; Noise gets new values',
+    'F4\tshow / hide statistics',
+    'F5\trestart the configured seed',
+    'SPACE / P\tpause / resume',
+    'N\tone generation while paused',
+    'F9\tshow / close this help',
+    'ESC\treturn; a widget releases focus',
+    'Settings:',
+    'UP/DOWN\tchoose a setting',
+    'LEFT/RIGHT\tadjust it',
+    'ENTER\ttype a value or cycle a choice',
+    'BACK / DEL\terase before the cursor',
+    'F2\tapply and save to SD',
+    'F3\trandom rules',
+    'ESC\tcancel entry, then discard',
+    'About the settings:',
     'Apply this session does not write to SD.',
     'Random rules changes the draft only; apply when ready. Life is not guaranteed.',
     'Grid: simulation resolution, not screen pixels. 64 uses more RAM/work.',
@@ -58,7 +61,6 @@ HELP = (
     'Changed grids and seed controls restart. Growth/kernel edits at the same grid retain the field.',
     'Blank/frozen patterns can be valid outcomes. F5 resets; Defaults restores Orbium rules.',
     'Timing reports measured steps/s and compute time, not guaranteed Pico performance.',
-    'Help: Up/Down scroll; Left/Right page; Home/End jump.',
 )
 
 
@@ -193,28 +195,25 @@ class App:
                 elif name=='defaults':self.draft=DEFAULTS.copy();self.error=''
         self.dirty=True
 
+    def help_rect(self):
+        w,h=int(self.vm.draw.size.x),int(self.vm.draw.size.y)
+        return (4,4,w-8,h-8) if self.widget else (6,22,w-12,h-36)
+
     def help_lines(self):
-        width=int(self.vm.draw.size.x)-18
-        lines=[]
-        for paragraph in HELP:
-            line=''
-            for word in paragraph.split():
-                candidate=(line+' '+word).strip()
-                if line and self.vm.draw.len(candidate,0)>width:lines.append(line);line=word
-                else:line=candidate
-            lines.append(line)
-        return lines
+        from picoware.gui import overlay
+        return overlay.layout(HELP,self.help_rect()[2])
 
     def input(self, button):
         if button==k.BUTTON_NONE:return
         self.dirty=True
         if self.page=='help':
-            lines=self.help_lines();capacity=max(1,(int(self.vm.draw.size.y)-56)//13)
+            from picoware.gui import overlay
+            lines=self.help_lines();capacity=overlay.capacity(self.help_rect()[3])
             if button in (k.BUTTON_F9,k.BUTTON_ESCAPE):
                 self.page=self.help_return;self.next=0;self.last_step=None;self.actual=0.0
             elif button in (k.BUTTON_UP,k.BUTTON_DOWN,k.BUTTON_LEFT,k.BUTTON_RIGHT):
                 distance=capacity if button in (k.BUTTON_LEFT,k.BUTTON_RIGHT) else 1
-                self.help_first=max(0,min(len(lines)-capacity,self.help_first+(-distance if button in (k.BUTTON_UP,k.BUTTON_LEFT) else distance)))
+                self.help_first=max(0,min(max(0,len(lines)-capacity),self.help_first+(-distance if button in (k.BUTTON_UP,k.BUTTON_LEFT) else distance)))
             elif button in (k.BUTTON_HOME,k.BUTTON_CTRL_UP):self.help_first=0
             elif button in (k.BUTTON_END,k.BUTTON_CTRL_DOWN):self.help_first=max(0,len(lines)-capacity)
             return
@@ -295,16 +294,15 @@ class App:
         else:
             warning=('64 grid: benchmark on Pico' if self.draft['size']==64 else 'Grid bytes: %d KiB + work' % (16*self.draft['size']**2//1024))
             self.text(6,h-50,warning,p.MUTED)
-        self.text(6,h-35,'Enter number; arrows adjust' if self.editor is None else 'Enter set; Esc cancel entry',p.MUTED)
-        self.text(6,h-20,'F2 save  F3 random rules',p.ACCENT)
-        self.text(6,h-9,'F9 help  Esc discard',p.MUTED)
+        self.text(6,h-28,'Enter number; arrows adjust' if self.editor is None else 'Enter set; Esc cancel entry',p.MUTED)
+        theme.footer(d,palette=p)
 
     def draw_help(self,d,p,w,h):
-        theme.header(d,'Lenia / Help',palette=p,height=18)
-        lines=self.help_lines();capacity=max(1,(h-56)//13)
-        self.text(7,25,'%d-%d / %d' % (self.help_first+1,min(len(lines),self.help_first+capacity),len(lines)),p.MUTED)
-        for i,line in enumerate(lines[self.help_first:self.help_first+capacity]):self.text(8,41+i*13,line,p.TEXT)
-        self.text(6,h-10,'Arrows scroll   F9/Esc close',p.ACCENT)
+        """Help is a box over the field, which stays paused behind it."""
+        from picoware.gui import overlay
+        rect=self.help_rect();lines=self.help_lines()
+        self.help_first=max(0,min(self.help_first,len(lines)-overlay.capacity(rect[3])))
+        overlay.paint(d,p,rect,'KEYBINDINGS',lines,self.help_first)
 
     def draw_widget_overlay(self,d,p,w,h):
         # The desktop supplies the frame. Draw the field across the whole native
@@ -333,7 +331,6 @@ class App:
         d=self.vm.draw;p=theme.system_palette(self.vm);w,h=int(d.size.x),int(d.size.y)
         d.fill_screen(p.BG)
         if self.page=='settings':self.draw_settings(d,p,w,h)
-        elif self.page=='help':self.draw_help(d,p,w,h)
         else:
             n=self.field.size
             if self.widget:
@@ -372,7 +369,8 @@ class App:
                 elif self.notice:self.text(6,h-23,self.notice,p.MUTED)
                 elif self.paused:self.text(6,h-23,'Space resume / N single step',p.MUTED)
                 else:self.text(6,h-23,'%s  R%.1f  mu%.3f' % (self.options['seed'],self.options['radius'],self.options['mu']),p.MUTED)
-                self.text(6,h-9,'F2 Settings F3 Random F9 Help',p.ACCENT)
+                theme.footer(d,palette=p)
+            if self.page=='help':self.draw_help(d,p,w,h)
         d.swap();self.dirty=False;self.last_draw=ticks_ms()
 
     def stop(self):

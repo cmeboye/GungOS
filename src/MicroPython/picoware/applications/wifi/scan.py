@@ -1,4 +1,10 @@
 """WiFi Scanner - Scan for nearby WiFi networks."""
+from picoware.gui.style import MENU_HELP
+
+HELP = MENU_HELP + (
+    "Scan:",
+    "Choose a network to save it, then type its password.",
+)
 
 from picoware.system.buttons import (
     BUTTON_ESCAPE,
@@ -47,57 +53,8 @@ def __should_save_choice(view_manager) -> bool:
     Returns:
         bool: True if the user chose to save, False otherwise.
     """
-    from picoware.gui.choice import Choice
-    from picoware.system.vector import Vector
-
-    choice = Choice(
-        view_manager.draw,
-        Vector(0, 0),
-        view_manager.draw.size,
-        f"Save '{_scan.current_item.rsplit(' (', 1)[0]}'?",
-        ["No", "Yes"],
-        0,
-        view_manager.foreground_color,
-        view_manager.background_color,
-    )
-    choice.draw()
-    choice.open()
-
-    input_manager = view_manager.input_manager
-    input_manager.reset()
-    from time import sleep_ms
-
-    while True:
-        _button = input_manager.button
-        if _button == -1:
-            sleep_ms(10)  # wait without spinning the CPU
-            continue
-        if _button in (BUTTON_LEFT, BUTTON_UP):
-            input_manager.reset()
-            choice.scroll_up()
-        elif _button in (BUTTON_RIGHT, BUTTON_DOWN):
-            input_manager.reset()
-            choice.scroll_down()
-        elif _button == BUTTON_CENTER:
-            input_manager.reset()
-            if choice.is_open():
-                choice.close()
-
-            _state = choice.state
-            del choice
-            choice = None
-            if _state == 1:
-                return True
-            view_manager.draw.clear()
-            _scan.draw()
-            return False
-        elif _button == BUTTON_ESCAPE:
-            input_manager.reset()
-            del choice
-            choice = None
-            view_manager.draw.clear()
-            _scan.draw()
-            return False
+    name = _scan.current_item.rsplit(" (", 1)[0]
+    return view_manager.choose(f"Save '{name}'?", ("No", "Yes")) == 1
 
 
 def __switch_to_password_view(view_manager) -> None:
@@ -114,7 +71,7 @@ def __switch_to_password_view(view_manager) -> None:
             "wifi_password",
             password.run,
             password.start,
-            password.stop,
+            password.stop, getattr(password, "HELP", None),
         )
     )
     view_manager.switch_to("wifi_password")

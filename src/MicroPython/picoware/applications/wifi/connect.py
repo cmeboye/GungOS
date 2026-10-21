@@ -2,6 +2,14 @@
 
 from utime import ticks_ms, ticks_diff
 
+HELP = (
+    "Wi-Fi connect:",
+    "RIGHT\tconnect to the saved network",
+    "LEFT / DOWN\tconnect as well",
+    "UP\tdisconnect",
+    "ESC\treturn",
+)
+
 _connect = None
 _status_message: str = ""
 _connection_start_time = 0
@@ -31,32 +39,26 @@ def __connect_callback(state: int, error: str) -> None:
         _status_message = "Connection timeout"
 
 
-def _get_status_text(view_manager) -> str:
-    """Build the connection status text.
+def _get_status_lines(view_manager) -> list:
+    """Build the connection status lines.
 
     Args:
         view_manager (ViewManager): The view manager instance for display and storage access.
 
     Returns:
-        str: The status text to display.
+        list: The lines to display.
     """
     global _status_message
 
-    extension = "\n\n"
-
     wifi = view_manager.wifi
-    text = f"WiFi Setup{extension}"
-    text += "Network: " + _ssid + "\n"
+    lines = ["Network\t" + _ssid, "MAC address\t" + wifi.mac_address]
 
     if wifi.is_connected():
         _status_message = "Connected successfully!"
-        text += "MAC Address: " + wifi.mac_address + "\n"
-        text += "IP Address: " + wifi.device_ip + extension
-        text += "Status: " + _status_message + extension
+        lines.append("IP address\t" + wifi.device_ip)
+        lines.append("Status\t" + _status_message)
 
     else:
-        text += "MAC Address: " + wifi.mac_address + extension
-        text += "Status: " + _status_message + extension
         from picoware.system.wifi import (
             WIFI_STATE_IDLE,
             WIFI_STATE_CONNECTING,
@@ -67,23 +69,21 @@ def _get_status_text(view_manager) -> str:
         state = wifi.status()
         if wifi.last_error:
             _status_message=wifi.last_error
-            text+='Reason: '+wifi.last_error+extension
+        lines.append("Status\t" + _status_message)
+        if wifi.last_error:
+            lines.append("Reason\t" + wifi.last_error)
 
         if state == WIFI_STATE_IDLE:
-            text += f"Ready to connect{extension}"
+            lines.append("Ready to connect.")
         elif state == WIFI_STATE_CONNECTING:
             elapsed = max(0,ticks_diff(ticks_ms(),wifi.connection_start_time)) // 1000 if wifi.connection_start_time is not None else 0
-            text += f"Connecting... ({elapsed}s){extension}"
+            lines.append(f"Connecting... ({elapsed}s)")
         elif state == WIFI_STATE_CONNECTED:
-            text += f"Connected!{extension}"
+            lines.append("Connected!")
         elif state == WIFI_STATE_TIMEOUT:
-            text += f"Connection timeout{extension}"
+            lines.append("Connection timeout")
 
-    text += "Press RIGHT to connect\n"
-    text += "Press ESC to go back\n"
-    text += "Press UP to disconnect"
-
-    return text
+    return lines
 
 
 def start(view_manager) -> bool:
@@ -109,28 +109,19 @@ def start(view_manager) -> bool:
         return False
 
     if _connect is None:
-        from picoware.gui.textbox import TextBox
+        from picoware.gui.style import Page
 
         global _connection_start_time
         global _status_message
 
-        _connect = TextBox(
-            view_manager.draw,
-            0,
-            view_manager.draw.size.y,
-            view_manager.foreground_color,
-            view_manager.background_color,
-        )
-
-        if _connect is None:
-            return False
+        _connect = Page(view_manager, "WiFi / Connect", ())
 
         # Reset state
         _connection_start_time = 0
         _status_message = (
             "Connected" if view_manager.wifi.is_connected() else "Disconnected"
         )
-        _connect.set_text(_get_status_text(view_manager))
+        _connect.update(_get_status_lines(view_manager))
 
     return True
 
@@ -151,7 +142,7 @@ def start_connection(view_manager) -> bool:
     else:
         _status_message = wifi.error or "Failed to start connection"
     if _connect is not None:
-        _connect.set_text(_get_status_text(view_manager))
+        _connect.update(_get_status_lines(view_manager))
     return started
 
 
@@ -189,7 +180,7 @@ def run(view_manager) -> None:
     elif button in (BUTTON_UP, BUTTON_LEFT, BUTTON_RIGHT, BUTTON_DOWN):
         start_connection(view_manager)
 
-    _connect.set_text(_get_status_text(view_manager))
+    _connect.update(_get_status_lines(view_manager))
 
 
 def stop(view_manager) -> None:

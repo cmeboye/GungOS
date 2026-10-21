@@ -1,4 +1,5 @@
 """PicoDESK: independent productivity applications."""
+HELP=('PicoDESK:','UP/DOWN\tchoose an app','ENTER\topen it','ESC\treturn')
 _owner=None
 
 

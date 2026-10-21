@@ -98,7 +98,7 @@ def text(value):
 key(k.BUTTON_CENTER)
 assert vm.current_view.name=='eggcel' and app._active is not None
 ui=app._active
-assert not ui.sheet.cells and not ui.help
+assert not ui.sheet.cells and vm._overlay is None
 vm.draw.screenshot('/private/tmp/eggcel-empty.bmp')
 text('12');key(k.BUTTON_CENTER)
 assert ui.sheet.value((0,0))==12 and not ui.editing and ui.position==(0,0)
@@ -109,8 +109,8 @@ assert ui.sheet.value((0,1))==24
 key(k.BUTTON_LEFT);key(k.BUTTON_F3);key(k.BUTTON_RIGHT);key(k.BUTTON_F4)
 key(k.BUTTON_DOWN);key(k.BUTTON_LEFT);key(k.BUTTON_F5)
 assert ui.sheet.value((1,1))==24 and ui.sheet.cells[(1,1)]=='=A2*2'
-key(k.BUTTON_F9);assert ui.help
-key(k.BUTTON_F9);assert not ui.help
+key(k.BUTTON_F9);assert vm._overlay is not None and vm._overlay.title=='KEYBINDINGS'
+key(k.BUTTON_F9);assert vm._overlay is None
 for _ in range(15):key(k.BUTTON_DOWN)
 assert ui.top<=ui.row<ui.top+ui.visible_rows
 for _ in range(10):key(k.BUTTON_RIGHT)
@@ -160,7 +160,7 @@ vm.draw.screenshot('/private/tmp/eggcel-edit.bmp')
 key(vm.input_manager._key_esc)
 vm.foreground_color,vm.background_color,vm.selected_color=0,0xFFFF,0xB300
 ui.draw();vm.draw.screenshot('/private/tmp/eggcel-light.bmp')
-key(k.BUTTON_F9);vm.draw.screenshot('/private/tmp/eggcel-help.bmp')
+key(k.BUTTON_F9);vm.draw.screenshot('/private/tmp/eggcel-help.bmp');key(k.BUTTON_F9)
 key(k.BUTTON_F1);assert ui.page=='file'
 vm.draw.screenshot('/private/tmp/eggcel-file.bmp')
 key(vm.input_manager._key_esc)
@@ -168,7 +168,7 @@ key(vm.input_manager._key_esc);assert ui.page=='confirm'
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
 assert vm.current_view.name=='desk' and app._active is None
 key(k.BUTTON_CENTER)
-assert app._active.sheet.cells=={} and not app._active.help
+assert app._active.sheet.cells=={} and vm._overlay is None
 key(vm.input_manager._key_esc)
 key(vm.input_manager._key_esc)
 assert vm.current_view.name=='parent'

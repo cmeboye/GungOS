@@ -4,6 +4,15 @@ _usb = None
 _initialized = False
 _key_map = None
 
+HELP = (
+    "Media keys:",
+    "UP / DOWN\tvolume up / down",
+    "LEFT/RIGHT\tprevious / next track",
+    "ENTER\tplay or pause",
+    "0\tmute",
+    "ESC\tstop and return",
+)
+
 
 def start(view_manager) -> bool:
     """Start the app and map buttons to media keys.
@@ -25,19 +34,12 @@ def start(view_manager) -> bool:
     )
 
     view_manager.alert(
-        "USB Media Keys is about to start.. make sure you have a USB cable connected before clicking `Back`"
+        "USB Media Keys is about to start. Connect the USB cable, then press any key."
     )
     global _usb, _initialized, _key_map
     _usb = USBMedia(manufacturer="MicroPython", product="Pico Media", serial="000002")
-    view_manager.draw.erase()
-    d = view_manager.draw
-    fg = view_manager.foreground_color
-    d._text(10, 10, "Media Keys", fg)
-    d._text(10, 30, "Up: Vol+    Down: Vol-", fg)
-    d._text(10, 45, "Left: Prev  Right: Next", fg)
-    d._text(10, 60, "Center: Play/Pause", fg)
-    d._text(10, 75, "0: Mute", fg)
-    d.swap()
+    from picoware.gui.style import Page
+    Page(view_manager, "USB / Media Keys", HELP[1:-1]).draw()
     _key_map = {
         BUTTON_CENTER: USBMedia.USAGE_PLAY_PAUSE,
         BUTTON_UP: USBMedia.USAGE_VOL_UP,

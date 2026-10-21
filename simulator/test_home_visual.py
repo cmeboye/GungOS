@@ -30,7 +30,6 @@ Input.button = property(simulator_input)
 
 from picoware.applications import desktop
 from picoware.gui.draw import Draw
-from picoware.assets import boot_logo
 class Clock:
     def __init__(self): self.value=(2026,10,13,1,10,10,0,0)
     def datetime(self): return self.value
@@ -63,10 +62,6 @@ vm.time._is_set=False
 desktop.run(vm)
 assert swaps[0]==4, 'Unset time should show a placeholder'
 vm.draw.screenshot('/private/tmp/picoware-logo-clock-unset.bmp')
-raw=boot_logo.decode()
-assert len(raw)==boot_logo.WIDTH*boot_logo.HEIGHT==21432
-assert len(boot_logo.DATA)<4096
-assert raw != boot_logo.decode(0, 0), 'Theme-aware lettering should change color'
 vm.time._is_set=True
 vm.background_color=0xFFFF
 vm.foreground_color=0

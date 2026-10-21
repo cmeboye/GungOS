@@ -798,7 +798,7 @@ class GraphApp:
                     'Window (W):', 'UP/DOWN choose   ENTER edit', 'Type a number to replace a value',
                     'UP/DOWN while typing applies it', 'ENTER on Grid toggles it',
                     'Data:', 'Blank, text or error pairs are gaps', 'Edit cells and redraw to refresh',
-                    'F9 or H opens this help; ESC closes')
+                    'F9 opens this help; ESC closes')
         return ('Plot:', 'ARROWS pan   + - zoom', 'ENTER expressions   W window', 'F fit   R reset   G grid',
                 'ESC menu' + (' (returns to the tool)' if self.embedded else ''),
                 'Expressions (ENTER):', 'UP/DOWN choose   ENTER edit or add', 'SPACE show / hide   DEL removes',
@@ -807,7 +807,7 @@ class GraphApp:
                 'UP/DOWN while typing applies it', 'ENTER on Grid toggles it',
                 'Syntax:', 'sin(x) or y=x^2   ^ is power', 'x=3 or x*y=1   equations', 'x^2+y^2<=25   shaded region',
                 'cos(t);sin(t)   parametric, T in Window', 'Arithmetic in numbers: 2*pi, 10/3',
-                'Session:', 'Save session keeps equations and bounds', 'F9 or H opens this help; ESC closes')
+                'Session:', 'Save session keeps equations and bounds', 'F9 opens this help; ESC closes')
 
     def draw_menu(self):
         d, p = self.draw, self.palette
@@ -1017,7 +1017,7 @@ class GraphApp:
             inp.reset()
             self.message, self.error = '', False
             try:
-                if button==BUTTON_F9 or (self.state=='help' and button in (BUTTON_ESCAPE,BUTTON_CENTER,BUTTON_H)):
+                if button==BUTTON_F9 or (self.state=='help' and button in (BUTTON_ESCAPE,BUTTON_CENTER)):
                     if self.state=='help': self.state,self.dirty=self.help_return,True
                     else: self.set_state('help')
                 elif self.state=='help':
@@ -1052,7 +1052,6 @@ class GraphApp:
                         if self.data_only: self.fit('data')
                         else: self.bounds=[-10.,10.,-10.,10.]
                         self.dirty=True
-                    elif button in (BUTTON_H,BUTTON_QUESTION): self.set_state('help')
                     elif button==BUTTON_G: self.grid=not self.grid; self.dirty=True
                 elif button==BUTTON_ESCAPE:
                     if self.state=='menu' and not self.data_only:self.vm.back();return
@@ -1062,7 +1061,6 @@ class GraphApp:
                     if count: self.row=(self.row+(-1 if button==BUTTON_UP else 1))%count
                     self.dirty=True
                 elif button==BUTTON_CENTER: self.activate()
-                elif button in (BUTTON_H,BUTTON_QUESTION): self.set_state('help')
                 elif self.state=='window' and self.row<len(self.window_fields()):
                     char=inp.button_to_char(button)
                     label,value,target=self.window_fields()[self.row]

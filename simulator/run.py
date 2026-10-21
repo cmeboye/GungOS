@@ -606,10 +606,7 @@ def _run_library_route_check():
         for item_index, label in enumerate(library.SECTIONS[index]):
             if routes.get(label.lower()) != item_index:
                 raise RuntimeError("Simulator submenu route mismatch: " + label)
-    for index, label in enumerate(library.SCRIPT_ITEMS):
-        if sim_runtime.SCRIPT_ITEMS.get(label.lower()) != index:
-            raise RuntimeError("Simulator script route mismatch: " + label)
-    print("[sim-check:ok] Two-panel menu routes synchronized")
+    print("[sim-check:ok] Desktop menu routes synchronized")
 
 
 def _run_stale_app_link_check(opts):

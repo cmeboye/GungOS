@@ -1,4 +1,5 @@
 """File Manager - Browse and manage files."""
+from picoware.gui.file_browser import HELP
 
 _file_browser = None
 

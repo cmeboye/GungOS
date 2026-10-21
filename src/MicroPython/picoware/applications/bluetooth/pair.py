@@ -10,12 +10,18 @@ _save_done=False
 _save_ok=False
 _passkey_editing=False
 _passkey_result=None
+_page=None
 STATE_IDLE=0
 STATE_SCANNING=1
 STATE_CONNECTING=2
 STATE_CONNECTED=5
 STATE_PAIRING=4
 STATE_PAIRED=6
+
+
+HELP=('Pair:','UP/DOWN\tchoose a scanned device','ENTER\tconnect, then ENTER again to pair',
+      'Passkey:','ENTER\tconfirm a shown passkey','ESC\treject it, or disconnect and return',
+      'A six-digit passkey is typed on the on-screen keyboard.')
 
 
 def bluetooth_callback(event,data):
@@ -35,6 +41,7 @@ def _saved(value):
     _passkey_result=value
 
 def start(vm):
+    global _page;_page=None
     global _bluetooth,_menu,_scanned_devices,_addresses,_selected_device,_state,_save_done,_save_ok,_passkey_editing,_passkey_result
     from picoware.system.bluetooth import Bluetooth
     from picoware.gui.menu import Menu
@@ -49,13 +56,14 @@ def start(vm):
     return True
 
 def run(vm):
-    global _state,_selected_device,_save_done,_save_ok,_passkey_editing,_passkey_result
+    global _state,_selected_device,_save_done,_save_ok,_passkey_editing,_passkey_result,_page
     from picoware.system import buttons as k
     _bluetooth.poll();button=vm.button
     if button==k.BUTTON_ESCAPE:
         if _bluetooth.passkey_action==4:_bluetooth.passkey_reply(False)
         vm.keyboard.reset();vm.back();return
     if _state==STATE_IDLE:
+        if _page is not None:_page.invalidate()
         _menu.draw()
         if button in (k.BUTTON_UP,k.BUTTON_LEFT):_menu.scroll_up()
         elif button in (k.BUTTON_DOWN,k.BUTTON_RIGHT):_menu.scroll_down()
@@ -65,6 +73,7 @@ def run(vm):
             if not _bluetooth.connect(*_selected_device[:2],auto_discover=False):vm.alert(_bluetooth.error);_state=STATE_IDLE
         return
     if _state==STATE_PAIRING and _bluetooth.passkey_action==2:
+        if _page is not None:_page.invalidate()  # the keyboard covers the page
         if not _passkey_editing:
             vm.keyboard.reset();vm.keyboard.title='Bluetooth passkey (6 digits)'
             vm.keyboard.set_save_callback(_saved);vm.input_manager.reset();vm.keyboard.run(force=True,max_characters=6);_passkey_editing=True
@@ -78,34 +87,35 @@ def run(vm):
     if _state==STATE_PAIRING and not _bluetooth.is_pairing:
         _state=STATE_CONNECTED if _bluetooth.is_connected else STATE_IDLE
     if _state==STATE_CONNECTING and not _bluetooth.is_connecting and not _bluetooth.is_connected:_state=STATE_IDLE
-    d=vm.draw;fg=vm.foreground_color;d.clear();d._text(5,24,'Bluetooth Pairing',vm.selected_color)
-    if _state==STATE_SCANNING:d._text(5,60,'Scanning...',fg)
-    elif _state==STATE_CONNECTING:d._text(5,60,'Connecting...',fg)
+    if _page is None:
+        from picoware.gui.style import Page
+        _page=Page(vm,'Bluetooth / Pair',())
+    lines=[]
+    if _state==STATE_SCANNING:lines.append('Scanning...')
+    elif _state==STATE_CONNECTING:lines.append('Connecting...')
     elif _state==STATE_CONNECTED:
-        d._text(5,60,'Connected: '+(_selected_device[2] or 'Unknown'),fg)
-        d._text(5,100,'ENTER Pair   ESC Disconnect',fg)
+        lines+=['Connected\t'+(_selected_device[2] or 'Unknown'),'Press ENTER to pair.']
         if button==k.BUTTON_CENTER:
             _save_done=False;_passkey_editing=False
             if _bluetooth.pair():_state=STATE_PAIRING
     elif _state==STATE_PAIRING:
         action=_bluetooth.passkey_action
-        d._text(5,60,'Pairing...',fg)
+        lines.append('Pairing...')
         if action in (3,4):
-            d._text(5,100,'Passkey: %06d'%(_bluetooth.passkey or 0),fg)
-            d._text(5,130,'ENTER Confirm   ESC Reject' if action==4 else 'Enter this code on the other device',fg)
+            lines.append('Passkey\t%06d'%(_bluetooth.passkey or 0))
+            lines.append('ENTER confirms the code; ESC rejects it.' if action==4 else 'Enter this code on the other device.')
             if action==4 and button==k.BUTTON_CENTER:_bluetooth.passkey_reply(True)
     elif _state==STATE_PAIRED:
         if not _save_done:
             _save_done=True
             address=':'.join('%02X'%b for b in _selected_device[1])
             _save_ok=_bluetooth.bonds_saved and _bluetooth.save_paired_device(address,_selected_device[2])
-        d._text(5,60,'Pairing succeeded',fg)
-        d._text(5,100,'Bond saved to SD' if _save_ok else 'Session only: bond save failed',fg if _save_ok else 0xF800)
-    if _bluetooth.error:d._text(5,int(d.size.y)-45,_bluetooth.error[:45],0xF800)
-    d._text(5,int(d.size.y)-22,'ESC Return',fg);d.swap()
+        lines+=['Pairing succeeded','Bond saved to SD' if _save_ok else 'Session only: bond save failed']
+    _page.update(lines,_bluetooth.error,bool(_bluetooth.error))
 
 def stop(vm):
     global _bluetooth,_menu,_state,_passkey_editing
     if _bluetooth is not None:_bluetooth.close()
-    _bluetooth=None;_menu=None;_state=STATE_IDLE;_passkey_editing=False
+    global _page
+    _bluetooth=None;_menu=None;_page=None;_state=STATE_IDLE;_passkey_editing=False
     vm.keyboard.reset()

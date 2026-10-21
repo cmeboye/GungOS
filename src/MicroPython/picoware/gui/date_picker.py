@@ -166,8 +166,8 @@ class DatePicker:
         from picoware.gui import style
         header_h=style.HEAD_HEIGHT
         style.header(draw,'Settings / Time / Date & Time',palette=style.system_palette(self._view_manager))
-        # Layout: header, two equal bands and a hint row at the bottom
-        hint_h = lbl_h + draw.scale_y(6)
+        # Layout: header, two equal bands and the footer at the bottom
+        hint_h = style.FOOT_HEIGHT + draw.scale_y(4)
         gap = draw.scale_y(6)
         band_h = (h - header_h - hint_h - gap) // 2
 
@@ -216,13 +216,7 @@ class DatePicker:
             VAL_FONT,
         )
 
-        # Bottom hint
-        hint = "L/R:field  U/D:value  OK:done"
-        hint_pw = draw.len(hint)
-        if hint_pw > w:
-            hint = "L/R field  U/D value"
-            hint_pw = draw.len(hint)
-        draw._text(pos.x + (w - hint_pw) // 2, pos.y + h - lbl_h - 2, hint, fg)
+        style.footer(draw, palette=style.system_palette(self._view_manager))
 
         draw.swap()
         self._needs_redraw = False

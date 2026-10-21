@@ -46,7 +46,7 @@ HELP = (
     'Main keys:',
     'F1 Add  F2 Remove  F3 Options',
     'F4 Plot  F5 Results  F6 Preview',
-    'F9 or ? help  Z undo (12 steps)',
+    'F9 help  Z undo (12 steps)',
     'I shows/hides the result summary',
     'V switches section / 3D view',
     'ESC returns; from the list leaves',
@@ -493,9 +493,6 @@ class Discs:
         if button == keys.BUTTON_F6:
             self.page = 'model'
             self.focus = 'list' if self.focus == 'preview' else 'preview'
-            return
-        if self.char(button) == '?':
-            self.help_open, self.help_first = True, 0
             return
         if self.page == 'model' and button in (keys.BUTTON_F1, keys.BUTTON_F2):
             self.focus = 'list'

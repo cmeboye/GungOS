@@ -13,7 +13,6 @@ from picoware.system.buttons import (
     BUTTON_BACKSPACE,
     BUTTON_SPACE,
     BUTTON_D,
-    BUTTON_H,
     BUTTON_I,
     BUTTON_M,
     BUTTON_N,
@@ -31,6 +30,30 @@ FILE_BROWSER_VIEWER = const(0)
 FILE_BROWSER_MANAGER = const(1)
 FILE_BROWSER_SELECTOR = const(2)
 
+
+
+HELP = (
+    "Browser:",
+    "UP/DOWN\tchoose a file",
+    "LEFT/RIGHT\tswitch pane",
+    "ENTER\tfile menu; in a picker, choose it",
+    "SPACE\tmark or unmark",
+    "D\tdelete the marked files",
+    "N\tnew folder",
+    "I\tfile information",
+    "M\tENTER on a folder: menu or open",
+    "O\toptions",
+    "ESC\treturn",
+    "Text editor:",
+    "Arrows\tmove the cursor",
+    "ENTER\tnew line",
+    "SHIFT / CAPS\tupper case",
+    "BACK\terase a character",
+    "ESC\tmenu: save, exit, whitespace",
+    "Viewers:",
+    "UP/DOWN\tscroll",
+    "ESC\tclose",
+)
 
 class FileBrowser:
     """Class to handle file browsing, text editing, and image viewing within Picoware."""
@@ -119,12 +142,9 @@ class FileBrowser:
 
         # UI overlays
         self._loading = None
-        self._is_help_screen = False
         self._show_options = False
-        self._show_info = False
         self._needs_redraw = True
         self._opt_idx = 0
-        self._info_data = []
 
         self._context_menu = None
         self._confirm_menu = None
@@ -155,7 +175,6 @@ class FileBrowser:
         self._image_load_state = 0
         self._image_path = ""
         self._jpeg_vec = Vector(0, 0)
-        self._info_box = None
 
         draw = self._vm.draw
         self._screen_w = draw.size.x
@@ -216,9 +235,6 @@ class FileBrowser:
         if self._confirm_menu:
             del self._confirm_menu
             self._confirm_menu = None
-        if self._info_box:
-            del self._info_box
-            self._info_box = None
         if self._text_viewer_box:
             del self._text_viewer_box
             self._text_viewer_box = None
@@ -229,7 +245,6 @@ class FileBrowser:
         self._app_state = None
         self._stat_cache = None
         self._edit_file = None
-        self._info_data = None
 
         del self._jpeg_vec
 
@@ -363,9 +378,7 @@ class FileBrowser:
             for entry in self._vm.storage.listzip(path):
                 entries.append(f"{entry['filename']}  {entry['size_uncompressed']} bytes")
 
-            self._info_data = "\n".join(entries) if entries else "Archive is empty."
-            self._show_info = True
-            self._needs_redraw = True
+            self._vm.show("ARCHIVE", entries or ("Archive is empty.",))
         except Exception as e:
             self._vm.alert(f"Failed to list ZIP: {e}")
             self._needs_redraw = True
@@ -509,8 +522,9 @@ class FileBrowser:
 
         char_h = max(1, draw.font_size.y)
 
+        from picoware.gui import style
         top_bar_h = max(18, char_h + sy(4), self._five * 2)
-        bottom_bar_h = top_bar_h
+        bottom_bar_h = style.FOOT_HEIGHT
         pane_header_h = top_bar_h
         splitter_w = max(1, sx(1))
         text_pad_x = sx(2)
@@ -608,48 +622,6 @@ class FileBrowser:
 
         draw.erase()
 
-        # 3. Help Screen Overlay
-        if self._is_help_screen:
-            help_lines = (
-                ("[MAIN BROWSER]", 20, color_sel),
-                ("UP/DWN:Scroll   L/R:Switch Pane", 32, color_fg),
-                ("CENTER:Menu     ESC:Exit App", 44, color_fg),
-                ("SPACE:Mark/Sel  D:Delete Marked", 56, color_fg),
-                ("N:New Folder    I:File Info", 68, color_fg),
-                ("M:Dir Enter Mode", 80, color_fg),
-                ("O:Options       H:Toggle Help", 92, color_fg),
-                ("[TEXT EDITOR]", 108, color_sel),
-                ("Arrows:Cursor   CENTER:Newline", 120, color_fg),
-                ("SHF/CAPS:Upper  BSPC:Delete Char", 132, color_fg),
-                ("ESC:Menu (Save/Exit/Whitespace)", 144, color_fg),
-                ("[TEXT ENTRY & MENUS]", 160, color_sel),
-                ("SHF/CAPS:Case   L/R:Move Cursor", 172, color_fg),
-                ("CENTER:Confirm  ESC:Cancel", 184, color_fg),
-                ("[IMAGE & TEXT VIEWER]", 200, color_sel),
-                ("UP/DWN:Scroll   ESC: Close", 212, color_fg),
-            )
-            from picoware.gui import style
-            style.header(draw,self._breadcrumb+" / Help",self._brand,
-                         style.system_palette(self._vm),top_bar_h)
-            for text, y, color in help_lines:
-                draw._text(sx(10), top_bar_h+sy(y), text, color)
-
-            draw.swap()
-            self._needs_redraw = False
-            return
-
-        # 4. File Info Window
-        if self._show_info:
-            if self._info_box is None:
-                from picoware.gui.textbox import TextBox
-
-                self._info_box = TextBox(draw, 0, sh, color_fg, color_bg)
-
-            self._info_box.set_text(self._info_data)
-            self._info_box.refresh()
-            self._needs_redraw = False
-            return
-
         # 5. Options Menu
         if self._show_options:
             from picoware.gui import style
@@ -657,7 +629,6 @@ class FileBrowser:
                     "Menu" if self._app_state.get("dir_menu",True) else "Open")
             rows=[(label,values[i]) for i,label in enumerate(self.OPTIONS_LABELS)]
             style.menu(draw,rows,self._opt_idx,self._breadcrumb+" / Options",self._brand,
-                       "UP/DOWN choose  LEFT/RIGHT change","ENTER saves  ESC returns",
                        palette=style.system_palette(self._vm))
             self._needs_redraw=False
             return
@@ -815,22 +786,8 @@ class FileBrowser:
                 )
                 yo += row_h
 
-        from picoware.gui.status_bar import foreground
-        draw._fill_rectangle(0, sh - bottom_bar_h, sw, bottom_bar_h, color_sel)
-        if self._mode == FILE_BROWSER_SELECTOR:
-            draw._text(
-                text_pad_x,
-                sh - bottom_bar_h + text_line_y,
-                "ENT:Sel M:DirMode O:Opt",
-                foreground(color_sel),
-            )
-        else:
-            draw._text(
-                text_pad_x,
-                sh - bottom_bar_h + text_line_y,
-                "ENT:Menu SPC:Mark N:New M:DirMode O:Opt H:Help",
-                foreground(color_sel),
-            )
+        style.footer(draw, "Choose a file" if self._mode == FILE_BROWSER_SELECTOR else "",
+                     palette=style.system_palette(self._vm))
         draw.swap()
         self._needs_redraw = False
 
@@ -957,21 +914,6 @@ class FileBrowser:
                 if len(self._text_editor.current_text) != prev_text_len:
                     self._edit_unsaved = True
 
-        elif self._show_info:
-            if btn in (BUTTON_ESCAPE, BUTTON_CENTER):
-                self._show_info = False
-                self._info_data = ""
-                if self._info_box:
-                    del self._info_box
-                    self._info_box = None
-                self._needs_redraw = True
-            elif btn == BUTTON_UP:
-                if self._info_box:
-                    self._info_box.scroll_up()
-            elif btn == BUTTON_DOWN:
-                if self._info_box:
-                    self._info_box.scroll_down()
-
         elif self._input_active:
             if btn == BUTTON_ESCAPE:
                 self._input_active = False
@@ -1076,12 +1018,10 @@ class FileBrowser:
 
         elif (
             btn == BUTTON_SPACE
-            and not self._is_help_screen
             and not self._show_options
             and self._confirm_menu is None
             and self._context_menu is None
             and not self._input_active
-            and not self._show_info
         ):
             if self._mode == FILE_BROWSER_MANAGER:
                 ap = self._app_state["active_pane"]
@@ -1118,7 +1058,6 @@ class FileBrowser:
 
         elif (
             btn == BUTTON_M
-            and not self._is_help_screen
             and not self._show_options
             and self._confirm_menu is None
             and self._context_menu is None
@@ -1128,18 +1067,7 @@ class FileBrowser:
             self._needs_redraw = True
 
         elif (
-            btn == BUTTON_H
-            and self._confirm_menu is None
-            and self._context_menu is None
-            and not self._input_active
-            and not self._show_options
-        ):
-            self._is_help_screen = not self._is_help_screen
-            self._needs_redraw = True
-
-        elif (
             btn == BUTTON_O
-            and not self._is_help_screen
             and self._confirm_menu is None
             and self._context_menu is None
             and not self._input_active
@@ -1150,7 +1078,6 @@ class FileBrowser:
 
         elif (
             btn == BUTTON_N
-            and not self._is_help_screen
             and not self._show_options
             and self._confirm_menu is None
             and self._context_menu is None
@@ -1166,11 +1093,9 @@ class FileBrowser:
 
         elif (
             btn == BUTTON_I
-            and not self._is_help_screen
             and not self._show_options
             and self._confirm_menu is None
             and self._context_menu is None
-            and not self._show_info
         ):
             ap = self._app_state["active_pane"]
             cp = (
@@ -1203,17 +1128,14 @@ class FileBrowser:
                         isd = storage.is_directory(fp)
                         fz = storage.size(fp)
 
-                    self._info_data = (
-                        f"Name: {sf}\n"
-                        f"Type: {'Directory' if isd else 'File'}\n"
-                        f"Size: {fz} bytes"
-                    )
-                    self._show_info = True
-                    self._needs_redraw = True
+                    self._vm.show("FILE INFO", (
+                        "Name\t" + sf,
+                        "Type\t" + ("Directory" if isd else "File"),
+                        "Size\t%d bytes" % fz,
+                    ))
 
         elif (
             btn == BUTTON_D
-            and not self._is_help_screen
             and not self._show_options
             and self._confirm_menu is None
             and self._context_menu is None
@@ -1517,23 +1439,19 @@ class FileBrowser:
 
         # --- Main File Browser Input: Navigation and Exiting ---
         elif btn == BUTTON_ESCAPE:
-            if self._is_help_screen:
-                self._is_help_screen = False
-                self._needs_redraw = True
-            else:
-                self.__save_settings()
-                self._mode = self.MODE_EXIT
-                return False
+            self.__save_settings()
+            self._mode = self.MODE_EXIT
+            return False
 
-        elif btn == BUTTON_LEFT and not self._is_help_screen:
+        elif btn == BUTTON_LEFT:
             self._app_state["active_pane"] = self.PANE_LEFT
             self._needs_redraw = True
 
-        elif btn == BUTTON_RIGHT and not self._is_help_screen:
+        elif btn == BUTTON_RIGHT:
             self._app_state["active_pane"] = self.PANE_RIGHT
             self._needs_redraw = True
 
-        elif btn == BUTTON_UP and not self._is_help_screen:
+        elif btn == BUTTON_UP:
             ap = self._app_state["active_pane"]
             fl = (
                 self._app_state["left_files"]
@@ -1554,7 +1472,7 @@ class FileBrowser:
                     self._app_state["right_index"] = (ix - 1) % fln
                 self._needs_redraw = True
 
-        elif btn == BUTTON_DOWN and not self._is_help_screen:
+        elif btn == BUTTON_DOWN:
             ap = self._app_state["active_pane"]
             fl = (
                 self._app_state["left_files"]
@@ -1575,7 +1493,7 @@ class FileBrowser:
                     self._app_state["right_index"] = (ix + 1) % fln
                 self._needs_redraw = True
 
-        elif btn == BUTTON_CENTER and not self._is_help_screen:
+        elif btn == BUTTON_CENTER:
             ap = self._app_state["active_pane"]
             cp = (
                 self._app_state["left_path"]

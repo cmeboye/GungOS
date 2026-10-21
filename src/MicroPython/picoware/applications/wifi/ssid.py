@@ -1,4 +1,5 @@
 """WiFi SSID - Enter a WiFi network name."""
+from picoware.gui.style import KEYBOARD_HELP as HELP
 
 _ssid_is_running = False
 _ssid_save_requested = False

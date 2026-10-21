@@ -44,26 +44,28 @@ from picoware.applications.system import system
 from picoware.system.system import System
 shutdowns = []
 System.shutdown_device = lambda self, view_manager=None: shutdowns.append(True)
-redraws = []
+# The question is a box over the screen; closing it puts the screen back.
+vm.draw._fill_rectangle(0, 0, 320, 320, 0x07E0)
+vm.draw.swap()
+screen = [vm.draw._read_row(y) for y in range(320)]
 pending[:] = [k.BUTTON_ESCAPE]
-system.activate(vm, 4, lambda: redraws.append(True))
+system.activate(vm, 4)
 pending[:] = [k.BUTTON_CENTER]
-system.activate(vm, 4, lambda: redraws.append(True))
-assert not shutdowns and len(redraws) == 2, 'Shutdown dialog must cancel cleanly'
+system.activate(vm, 4)
+assert not shutdowns, 'Shutdown dialog must cancel cleanly'
+assert [vm.draw._read_row(y) for y in range(320)] == screen, 'The screen behind the box must return'
 pending[:] = [k.BUTTON_DOWN, k.BUTTON_CENTER]
-system.activate(vm, 4, lambda: redraws.append(True))
+system.activate(vm, 4)
 assert shutdowns == [True], 'Choosing Yes must request shutdown'
 
 # Wi-Fi scan > save network: the dialog returns the chosen answer.
 from picoware.applications.wifi import scan
 class Item:
     current_item = 'Lab (2.4 GHz) (-30 dBm)'
-    def draw(self):
-        pass
 scan._scan = Item()
 ask = getattr(scan, '__should_save_choice')
 pending[:] = [k.BUTTON_DOWN, k.BUTTON_CENTER]
 assert ask(vm) is True
 pending[:] = [k.BUTTON_CENTER]
 assert ask(vm) is False
-print('PASS: Choice open/close API; shutdown and Wi-Fi save dialogs no longer crash')
+print('PASS: Choice open/close API; shutdown and Wi-Fi save popups answer and restore the screen')

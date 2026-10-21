@@ -11,11 +11,13 @@ class View:
         start (callable): Function called when the view is created.
         stop (callable): Function called when the view is destroyed.
         active (bool): Whether the view is currently active.
+        help (tuple): Lines F9 shows over the view (see picoware.gui.overlay),
+            or None when the view answers F9 itself.
     """
 
-    __slots__ = ("name", "_run", "_start", "_stop", "active")
+    __slots__ = ("name", "_run", "_start", "_stop", "active", "help")
 
-    def __init__(self, name: str, run: callable, start: callable, stop: callable):
+    def __init__(self, name: str, run: callable, start: callable, stop: callable, help=None):
         """Initialize the view with its name and callbacks.
 
         Args:
@@ -23,8 +25,10 @@ class View:
             run (callable): Function called every frame.
             start (callable): Function called when the view is created.
             stop (callable): Function called when the view is destroyed.
+            help (tuple): Lines F9 shows over the view. Defaults to None.
         """
         self.name = name
+        self.help = help
         self._run = run
         self._start = start
         self._stop = stop

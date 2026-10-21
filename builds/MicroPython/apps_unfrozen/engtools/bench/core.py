@@ -381,13 +381,13 @@ def _import_once(name):
 
 def _stage_imports(vm):
     import sys
-    for name in ('picoware.gui.alert', 'picoware.gui.list', 'picoware.gui.textbox',
+    for name in ('picoware.gui.overlay', 'picoware.gui.menu', 'picoware.gui.textbox',
                  'picoware.system.settings', 'picoware.gui.file_browser'):
         _record('Import %s (frozen)' % name, min(_import_once(name) for _ in range(3)) / 1000, 'ms')
     _record('Import engtools.bench.models (SD .mpy)',
             min(_import_once('engtools.bench.models') for _ in range(3)) / 1000, 'ms')
-    import picoware.gui.alert
-    _time('Import of a module already loaded', lambda: __import__('picoware.gui.alert'), 5, 1, 'us')
+    import picoware.gui.overlay
+    _time('Import of a module already loaded', lambda: __import__('picoware.gui.overlay'), 5, 1, 'us')
 
     def missing():
         try:
@@ -535,12 +535,6 @@ def _stage_gui(vm):
         menu.scroll_down()
         draw.swap()
     _time('Menu, move down one entry and present', scroll_frame, 5, 1, 'ms')
-    from picoware.gui.list import List
-    items = List(draw, 0, 320, fg, bg, accent)
-    for i in range(30):
-        items.add_item('List entry %d' % i)
-    _time('List of 30 entries, draw', lambda: items.draw(False), 5, 1, 'ms')
-    _time('List, move down one entry', lambda: items.scroll_down(False), 5, 1, 'ms')
     from picoware.gui.textbox import TextBox
     text = '\n'.join('Line %d of a long help page, wrapped to the screen width when needed.' % i
                      for i in range(120))
@@ -550,9 +544,22 @@ def _stage_gui(vm):
     _time('Text box, scroll one line', box.scroll_down, 5, 1, 'ms')
     _time('Text box, jump to the end', box.jump_to_bottom, 3, 1, 'ms')
     box = None
-    from picoware.gui.alert import Alert
-    alert = Alert(draw, 'Benchmark alert with a message that wraps over two lines.', fg, bg)
-    _time('Alert, draw', lambda: alert.draw('Alert'), 5, 1, 'ms')
+    from picoware.gui import overlay, style
+    palette = style.system_palette(vm)
+    message = ('Benchmark alert with a message that wraps over two lines.',)
+    lines, rect = overlay.layout(message, overlay.RECT[2]), overlay.fitted(message)
+
+    def alert_frame():
+        overlay.paint(draw, palette, rect, 'Alert', lines, 0, 'Any key continues')
+        draw.swap()
+    _time('Alert box, draw', alert_frame, 5, 1, 'ms')
+    help_lines = tuple('Key %d\tWhat the key does on this screen' % i for i in range(40))
+
+    def help_box():
+        box = overlay.Overlay(vm, 'KEYBINDINGS', help_lines)
+        box.open()  # keeps the covered screen rows
+        box.close()  # puts them back
+    _time('Help box, open and close', help_box, 5, 1, 'ms')
     from picoware.gui.status_bar import StatusBar
     bar = StatusBar(quiet)
     _time('Status bar, read clock and battery', lambda: bar.sample(True), 5, 1, 'ms')

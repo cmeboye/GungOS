@@ -1,4 +1,5 @@
 """USB Apps Menu - Central hub for all USB applications"""
+from picoware.gui.style import MENU_HELP as HELP
 
 _usb = None
 _usb_index = 0
@@ -84,7 +85,7 @@ def run(view_manager) -> None:
                     "usb_keyboard",
                     keyboard.run,
                     keyboard.start,
-                    keyboard.stop,
+                    keyboard.stop, getattr(keyboard, "HELP", None),
                 )
             )
             view_manager.switch_to("usb_keyboard")
@@ -97,7 +98,7 @@ def run(view_manager) -> None:
                     "usb_media_keys",
                     media_keys.run,
                     media_keys.start,
-                    media_keys.stop,
+                    media_keys.stop, getattr(media_keys, "HELP", None),
                 )
             )
             view_manager.switch_to("usb_media_keys")
@@ -110,7 +111,7 @@ def run(view_manager) -> None:
                     "usb_numpad",
                     numpad.run,
                     numpad.start,
-                    numpad.stop,
+                    numpad.stop, getattr(numpad, "HELP", None),
                 )
             )
             view_manager.switch_to("usb_numpad")
@@ -123,7 +124,7 @@ def run(view_manager) -> None:
                     "usb_payload",
                     payload.run,
                     payload.start,
-                    payload.stop,
+                    payload.stop, getattr(payload, "HELP", None),
                 )
             )
             view_manager.switch_to("usb_payload")

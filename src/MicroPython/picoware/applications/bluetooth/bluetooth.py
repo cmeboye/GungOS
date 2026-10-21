@@ -1,4 +1,5 @@
 """Bluetooth Apps Menu - Central hub for all Bluetooth applications"""
+from picoware.gui.style import MENU_HELP as HELP
 
 _bluetooth = None
 _bluetooth_index = 0
@@ -90,7 +91,7 @@ def run(view_manager) -> None:
                     "bluetooth_scan",
                     scan.run,
                     scan.start,
-                    scan.stop,
+                    scan.stop, getattr(scan, "HELP", None),
                 )
             )
             view_manager.switch_to("bluetooth_scan")
@@ -104,7 +105,7 @@ def run(view_manager) -> None:
                     "bluetooth_advertise",
                     advertise.run,
                     advertise.start,
-                    advertise.stop,
+                    advertise.stop, getattr(advertise, "HELP", None),
                 )
             )
             view_manager.switch_to("bluetooth_advertise")
@@ -118,7 +119,7 @@ def run(view_manager) -> None:
                     "bluetooth_pair",
                     pair.run,
                     pair.start,
-                    pair.stop,
+                    pair.stop, getattr(pair, "HELP", None),
                 )
             )
             view_manager.switch_to("bluetooth_pair")
@@ -132,7 +133,7 @@ def run(view_manager) -> None:
                     "bluetooth_uart_chat",
                     uart_chat.run,
                     uart_chat.start,
-                    uart_chat.stop,
+                    uart_chat.stop, getattr(uart_chat, "HELP", None),
                 )
             )
             view_manager.switch_to("bluetooth_uart_chat")
@@ -146,7 +147,7 @@ def run(view_manager) -> None:
                     "bluetooth_beacon",
                     beacon.run,
                     beacon.start,
-                    beacon.stop,
+                    beacon.stop, getattr(beacon, "HELP", None),
                 )
             )
             view_manager.switch_to("bluetooth_beacon")
@@ -160,7 +161,7 @@ def run(view_manager) -> None:
                     "bluetooth_rssi_monitor",
                     rssi_monitor.run,
                     rssi_monitor.start,
-                    rssi_monitor.stop,
+                    rssi_monitor.stop, getattr(rssi_monitor, "HELP", None),
                 )
             )
             view_manager.switch_to("bluetooth_rssi_monitor")

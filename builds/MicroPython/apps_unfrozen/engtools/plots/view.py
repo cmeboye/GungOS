@@ -15,6 +15,10 @@ def open_view(view_manager, name, controller):
         try:controller.stop(vm)
         finally:breadcrumbs.unbind(vm,name)
     view = View(name, controller.run, start, stop)
+    help = getattr(controller, 'HELP', None)
+    if help is not None:
+        try:view.help = help  # F9 help drawn by the firmware
+        except AttributeError:pass  # firmware without shared help
     if not view_manager.add(view):
         raise ValueError('No free view slots')
     view_manager.switch_to(name)

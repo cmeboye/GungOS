@@ -42,7 +42,6 @@ class Menu:
     def draw(self,*args):
         palette=style.colors(self.background_color,self.text_color,self.selected_color)
         rows=[(str(item),'') for item in self.items] or [('No entries available','')]
-        style.menu(self.display,rows,self._selected_index,self.title,self.brand,
-                   'UP/DOWN choose  ENTER select','ESC returns',palette=palette)
+        style.menu(self.display,rows,self._selected_index,self.title,self.brand,palette=palette)
     def refresh(self):self.draw()
     def draw_title(self):self.draw()
