@@ -84,7 +84,7 @@ assert plot3d._edit is None and breadcrumbs.current(vm,'app_Graph3D') is None
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==1
 pick('Modules');path('modules');shot('modules')
 assert [r[1] for r in lab.MENUS['modules']]==['Structural','Dynamics','Thermal','Electrical','Fluids']
-for label in ('Dynamics','Thermal','Electrical','Fluids'):
+for label in ('Dynamics','Electrical','Fluids'):
     pick(label);path('modules',label.lower())
     assert lab.MENUS[lab._page]==()
     page=lab._page

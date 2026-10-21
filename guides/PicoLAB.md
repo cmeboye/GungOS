@@ -19,11 +19,12 @@ PicoLAB
     │   └── Mohr circle
     ├── Dynamics
     ├── Thermal
+    │   └── Heat transfer 2D
     ├── Electrical
     └── Fluids
 ```
 
-Dynamics, Thermal, Electrical and Fluids are empty folders labelled as planned.
+Dynamics, Electrical and Fluids are empty folders labelled as planned.
 Beam view is the former Beam Lab; its saved models, solver, controls and CSV
 exports keep their existing formats and locations.
 
@@ -40,7 +41,7 @@ content panels remain below it. Beam view, Mohr circle, Graph and Graph3D share 
 title bar, panels, property forms, editor panel and F9 help box
 (`engtools/ui/lab.py`); values are typed in place, with no on-screen keyboard.
 
-See [PicoCAD](PicoCAD.md), [Beam view](BeamLab.md), [Shrink fit](ShrinkFit.md), [Mohr circle](MohrCircle.md), [Scientific calculator](ScientificCalculator.md),
+See [PicoCAD](PicoCAD.md), [Beam view](BeamLab.md), [Shrink fit](ShrinkFit.md), [Mohr circle](MohrCircle.md), [Heat transfer 2D](HeatTransfer.md), [Scientific calculator](ScientificCalculator.md),
 [Graph](Graph.md), [Graph3D](Graph3D.md) and [plot previews](SharedPlots.md).
 
 The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Graph,

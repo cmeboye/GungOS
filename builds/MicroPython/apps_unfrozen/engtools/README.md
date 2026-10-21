@@ -3,7 +3,8 @@
 `PicoLAB.py` provides a plotting preview gallery, a native Numerics checks page,
 and a keyboard-driven scientific calculator with six numerical modes. Checks contains numerics validation and plot previews. Tools contains Graph,
 Graph3D and the scientific calculator. Modules contains Structural → Beam view
-and empty planned folders for Dynamics, Thermal, Electrical and Fluids. See
+Thermal → Heat transfer 2D (`thermal/`, see [HeatTransfer.md](../../../../guides/HeatTransfer.md)),
+and empty planned folders for Dynamics, Electrical and Fluids. See
 [ScientificCalculator.md](../../../../guides/ScientificCalculator.md) for
 its input rules and current mode/precision limits.
 Statistics now provides one-/two-variable data, frequencies, descriptive

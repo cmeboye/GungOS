@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Heat transfer 2D in PicoLAB → Modules → Thermal: conduction in a plate,
+  steady or transient, with fixed-temperature, convection, heat-flux and
+  insulated sides, a heat source and a heat patch, drawn as a temperature
+  field with a probe. See [Heat transfer 2D](guides/HeatTransfer.md).
 - One set of screen parts and keys everywhere
   ([Screens and controls](guides/UI.md)). F9 shows help on every screen,
   also while typing: a scrollable box listing every key with its meaning,

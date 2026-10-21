@@ -13,7 +13,7 @@ keyboard-driven applications on a 320 × 320 display.
 - **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint drawing.
 - **PicoLAB:** scientific calculator, statistics, solvers, complex/Base-N/matrix modes,
   Graph and Graph3D, direct-geometry PicoCAD, Beam view for beams/plane frames,
-  Mohr circles and Shrink Fit, backed by float32 ulab and the picosolve solver.
+  Mohr circles, Shrink Fit and Heat transfer 2D, backed by float32 ulab and the picosolve solver.
 - **Games and Misc:** Tetris, Lorenz and Lenia screensavers, a calculator widget,
   and an [engineering render stress benchmark](guides/EngToolBenchmark.md).
 - **System and connectivity:** SD file manager, PicoIDE, Wi-Fi, Bluetooth and USB.

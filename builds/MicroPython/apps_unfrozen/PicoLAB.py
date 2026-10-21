@@ -15,12 +15,13 @@ MENUS = {
               ('calculator','Scientific calculator','Expressions, statistics, solver and matrices'),
               ('picocad','PicoCAD','Analytic primitives and Boolean part previews')),
     'modules': (('structural','Structural','Beams, frames, sections and stress'),
-                ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','No tools yet'),
+                ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','Heat conduction and temperature fields'),
                 ('electrical','Electrical','No tools yet'),('fluids','Fluids','No tools yet')),
     'structural': (('beam','Beam view','Supports, loads, sections and diagrams'),
                    ('discs','Shrink fit','Rotating discs, thick cylinders, press fits'),
                    ('mohr','Mohr circle','2D/3D stress, element rotation, principal')),
-    'dynamics': (), 'thermal': (), 'electrical': (), 'fluids': (),
+    'thermal': (('heat2d','Heat transfer 2D','Steady and transient conduction in a plate'),),
+    'dynamics': (), 'electrical': (), 'fluids': (),
 }
 PARENTS = {'checks':'root','tools':'root','modules':'root','structural':'modules',
            'dynamics':'modules','thermal':'modules','electrical':'modules','fluids':'modules',
@@ -120,9 +121,9 @@ def _launch(view_manager,target):
     from engtools.ui import breadcrumbs
     before=view_manager.current_view
     name={'Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
-          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view'}[target]
+          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view','heat2d':'thermal_view'}[target]
     path={'beam':('modules','structural','Beam view'),'mohr':('modules','structural','Mohr circle'),
-          'discs':('modules','structural','Shrink fit'),
+          'discs':('modules','structural','Shrink fit'),'heat2d':('modules','thermal','Heat transfer 2D'),
           'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD')}.get(target,('tools',target))
     breadcrumbs.bind(view_manager,path,name)
     _resume=True
@@ -141,6 +142,9 @@ def _launch(view_manager,target):
             app.show(view_manager)
         elif target=='discs':
             from engtools.discs import app
+            app.show(view_manager)
+        elif target=='heat2d':
+            from engtools.thermal import app
             app.show(view_manager)
         else:
             from engtools.beamlab import app
