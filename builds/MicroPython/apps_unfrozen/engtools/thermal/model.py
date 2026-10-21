@@ -8,7 +8,8 @@ conductivity; the faces (front and back) are insulated, so the problem is
 per unit depth and "depth" only scales the heat flows into watts.
 
 Temperatures are stored relative to a reference so float32 keeps its
-precision. Inputs are in mm, W/mK, kg/m3, J/kgK, W/m2K, W/m3, C and s.
+precision. Inputs are in mm, W/mK, kg/m3, J/kgK, W/m2K, W/m3, W, C and s.
+Heat patches (chips, heaters) give their total power in W over the depth.
 """
 from math import sqrt
 from time import ticks_ms, ticks_diff
@@ -41,6 +42,9 @@ STEP_LIMIT = 2000000
 TOLERANCE = 1e-6      # residual relative to the heat sources
 RESOLUTION = 1e-6     # an update this small, against the field, is below float32
 REFRESH = 25          # iterations between true residuals
+MAX_PATCHES = 4
+HISTORY = 120         # transient samples after the start: with t, min, mean, max a CSV fits Eggcel
+TOOL = 'thermal'
 
 
 def new_state():
@@ -49,14 +53,59 @@ def new_state():
     sides[1].update(kind=TEMPERATURE, T=0.0)
     return {'mode': 'steady', 'W': 100.0, 'H': 60.0, 'depth': 10.0, 'mat': 1,
             'k': MATERIALS[1][1], 'rho': MATERIALS[1][2], 'cp': MATERIALS[1][3],
-            'gen': 0.0, 'pq': 0.0, 'px': 40.0, 'py': 25.0, 'pw': 20.0, 'ph': 10.0,
-            'res': 1, 'T0': 20.0, 'tend': 60.0, 'sides': sides}
+            'gen': 0.0, 'patches': [], 'res': 1, 'T0': 20.0, 'tend': 60.0, 'sides': sides}
+
+
+def new_patch(state):
+    """A patch a fifth of the plate, centred, giving 1 W."""
+    w, h = state['W'] / 5, state['H'] / 5
+    return {'P': 1.0, 'x': (state['W'] - w) / 2, 'y': (state['H'] - h) / 2, 'w': w, 'h': h}
 
 
 def copy_state(state):
     out = dict(state)
     out['sides'] = [dict(side) for side in state['sides']]
+    out['patches'] = [dict(patch) for patch in state['patches']]
     return out
+
+
+def to_case(state):
+    case = copy_state(state)
+    case['tool'] = TOOL
+    return case
+
+
+def from_case(case):
+    """A state from a saved case, keeping only known entries of the right
+    type, so a damaged or older file cannot break the screen."""
+    state = new_state()
+    for key, value in state.items():
+        if key in ('sides', 'patches'):
+            continue
+        given = case.get(key)
+        if isinstance(value, float) and isinstance(given, (int, float)):
+            state[key] = float(given)
+        elif isinstance(value, int) and isinstance(given, int):
+            state[key] = given
+        elif isinstance(value, str) and given in ('steady', 'transient'):
+            state[key] = given
+    state['mat'] = min(max(state['mat'], 0), CUSTOM)
+    state['res'] = min(max(state['res'], 0), len(RESOLUTIONS) - 1)
+    for side, given in zip(state['sides'], case.get('sides') or ()):
+        if isinstance(given, dict):
+            for key in side:
+                if isinstance(given.get(key), (int, float)):
+                    side[key] = type(side[key])(given[key])
+            side['kind'] = min(max(side['kind'], 0), len(KINDS) - 1)
+    if case.get('pq'):   # the first version's single patch, in W/m3
+        case = dict(case, patches=[{'P': case['pq'] * case['pw'] * case['ph'] * case['depth'] / 1e9,
+                                    'x': case['px'], 'y': case['py'], 'w': case['pw'], 'h': case['ph']}])
+    for given in (case.get('patches') or ())[:MAX_PATCHES]:
+        if isinstance(given, dict) and all(isinstance(given.get(key), (int, float)) for key in 'Pxywh'):
+            state['patches'].append({key: float(given[key]) for key in 'Pxywh'})
+    if isinstance(case.get('name'), str):
+        state['name'] = case['name']
+    return state
 
 
 def diffusivity(state):
@@ -69,10 +118,10 @@ def check(state):
         raise ValueError('Width, height and depth must be positive')
     if state['k'] <= 0 or state['rho'] <= 0 or state['cp'] <= 0:
         raise ValueError('k, density and specific heat must be positive')
-    if state['pq'] != 0 and (state['pw'] <= 0 or state['ph'] <= 0 or state['px'] < 0 or state['py'] < 0
-                             or state['px'] + state['pw'] > state['W'] + 1e-9
-                             or state['py'] + state['ph'] > state['H'] + 1e-9):
-        raise ValueError('The heat patch must lie inside the plate')
+    for n, patch in enumerate(state['patches']):
+        if (patch['w'] <= 0 or patch['h'] <= 0 or patch['x'] < 0 or patch['y'] < 0
+                or patch['x'] + patch['w'] > state['W'] + 1e-9 or patch['y'] + patch['h'] > state['H'] + 1e-9):
+            raise ValueError('Patch %d must lie inside the plate' % (n + 1))
     cooled = False
     for side in state['sides']:
         if side['kind'] == CONVECTION:
@@ -116,9 +165,7 @@ class Plate:
         self.ref = sum(fixed) / len(fixed) if fixed and steady else state['T0']
         ref = self.ref
         source = np.ones((ny, nx)) * (state['gen'] * dx * dy)
-        self.patch = 0
-        if state['pq'] != 0:
-            self.patch = self._patch(source, state['pq'] * dx * dy)
+        self.patch_cells = [self._patch(source, patch) for patch in state['patches']]
         conductance = np.zeros((ny, nx))
         pull = np.zeros((ny, nx))   # conductance times boundary temperature
         flux = np.zeros((ny, nx))   # imposed heat flux through the edges
@@ -174,22 +221,22 @@ class Plate:
             self.steps = max(1, int(steps) + 1)
             self.dt = state['tend'] / self.steps
             self.step_count = 0
+            self.every = max(1, -(-self.steps // HISTORY))
+            self.history = []
+            self._record()
 
-    def _patch(self, source, power):
+    def _patch(self, source, patch):
         """Add the patch's source to the cells whose centres fall in it."""
-        state = self.state
         dx, dy = self.dx * 1000, self.dy * 1000
-        cells = []
-        for j in range(self.ny):
-            for i in range(self.nx):
-                x, y = (i + 0.5) * dx, (j + 0.5) * dy
-                if state['px'] <= x <= state['px'] + state['pw'] and state['py'] <= y <= state['py'] + state['ph']:
-                    cells.append((j, i))
+        x0, y0, x1, y1 = patch['x'], patch['y'], patch['x'] + patch['w'], patch['y'] + patch['h']
+        i0, i1 = max(0, int(x0 / dx - 0.5)), min(self.nx - 1, int(x1 / dx))
+        j0, j1 = max(0, int(y0 / dy - 0.5)), min(self.ny - 1, int(y1 / dy))
+        cells = [(j, i) for j in range(j0, j1 + 1) for i in range(i0, i1 + 1)
+                 if x0 <= (i + 0.5) * dx <= x1 and y0 <= (j + 0.5) * dy <= y1]
         if not cells:   # a patch smaller than a cell still heats the cell it sits in
-            x, y = state['px'] + state['pw'] / 2, state['py'] + state['ph'] / 2
-            cells.append((min(self.ny - 1, int(y / dy)), min(self.nx - 1, int(x / dx))))
-        # Keep the total power of the patch whatever the cell count.
-        per_cell = state['pq'] * state['pw'] / 1000 * state['ph'] / 1000 / len(cells)
+            cells.append((min(self.ny - 1, int((y0 + y1) / 2 / dy)), min(self.nx - 1, int((x0 + x1) / 2 / dx))))
+        # Keep the total power of the patch whatever the cell count: W per metre of depth.
+        per_cell = patch['P'] / self.depth / len(cells)
         for j, i in cells:
             source[j, i] = source[j, i] + per_cell
         return len(cells)
@@ -269,6 +316,8 @@ class Plate:
                         break
                     self._step()
                     self.step_count += 1
+                    if self.step_count % self.every == 0 or self.step_count == self.steps:
+                        self._record()
                 self.time = self.step_count * self.dt
                 if self.step_count >= self.steps:
                     self.done = True
@@ -285,15 +334,47 @@ class Plate:
 
     # ------------------------------------------------------------ results
 
+    def _record(self):
+        np, T = self.np, self.T
+        self.history.append((self.step_count * self.dt, float(np.min(T)) + self.ref,
+                             float(np.mean(T)) + self.ref, float(np.max(T)) + self.ref))
+
     def temperature(self, j, i):
         return float(self.T[j, i]) + self.ref
+
+    def cell(self, x, y):
+        """The (j, i) cell containing the point x, y in mm."""
+        return (min(self.ny - 1, max(0, int(y / (self.dy * 1000)))),
+                min(self.nx - 1, max(0, int(x / (self.dx * 1000)))))
+
+    def centre(self, j, i):
+        """The centre of cell (j, i) in mm."""
+        return (i + 0.5) * self.dx * 1000, (j + 0.5) * self.dy * 1000
+
+    def flux(self, j, i):
+        """Heat flux (qx, qy) in W/m2 at a cell centre, from the temperature
+        differences to its neighbours (one-sided at the edges)."""
+        T, k = self.T, self.state['k']
+        a, b = max(0, i - 1), min(self.nx - 1, i + 1)
+        qx = -k * (float(T[j, b]) - float(T[j, a])) / ((b - a) * self.dx) if b > a else 0.0
+        a, b = max(0, j - 1), min(self.ny - 1, j + 1)
+        qy = -k * (float(T[b, i]) - float(T[a, i])) / ((b - a) * self.dy) if b > a else 0.0
+        return qx, qy
+
+    def row(self, j):
+        """Temperatures along x through row j."""
+        return [v + self.ref for v in self.T[j, :].tolist()]
+
+    def column(self, i):
+        """Temperatures along y through column i."""
+        return [v + self.ref for v in self.T[:, i].tolist()]
 
     def stats(self):
         np, T = self.np, self.T
         low, high = float(np.min(T)), float(np.max(T))
-        where = int(np.argmax(T))
+        hot, cold = int(np.argmax(T)), int(np.argmin(T))
         return {'min': low + self.ref, 'max': high + self.ref, 'mean': float(np.mean(T)) + self.ref,
-                'hot': (where // self.nx, where % self.nx)}
+                'hot': (hot // self.nx, hot % self.nx), 'cold': (cold // self.nx, cold % self.nx)}
 
     def flows(self):
         """Heat into the plate through each side, the heat generated inside

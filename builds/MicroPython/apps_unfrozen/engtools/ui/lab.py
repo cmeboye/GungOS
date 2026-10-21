@@ -71,7 +71,7 @@ def tabs(draw,p,rect,labels,selected,counts,font=SM,height=22):
         active=i==selected
         color=p.ACCENT if active else p.PANEL
         draw._fill_rectangle(left,y+1,right-left,height-2,color)
-        title=label+' '+str(counts[i])
+        title=label if counts[i] is None else label+' '+str(counts[i])
         text(draw,left+(right-left-draw.len(title,font))//2,text_y,title,
              foreground(color) if active else p.MUTED,font)
     draw._line(x+1,y+height-1,x+w-2,y+height-1,p.GRID)
