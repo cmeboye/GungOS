@@ -50,7 +50,12 @@ key(k.BUTTON_ESCAPE);assert lab._page=='gallery'
 key(k.BUTTON_ESCAPE);assert lab._page=='checks' and lab._selected==1
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==0
 pick('Tools');path('tools');shot('tools')
-assert [r[1] for r in lab.MENUS['tools']]==['Graph','Graph3D','Scientific calculator','PicoCAD']
+assert [r[1] for r in lab.MENUS['tools']]==['Graph','Graph3D','Scientific calculator','PicoCAD','UnitConverter']
+pick('UnitConverter');assert vm.current_view.name=='unitconvert_view'
+path('tools','UnitConverter')
+key(k.BUTTON_CENTER)  # Length
+key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE)
+assert lab._page=='tools' and lab._selected==4;path('tools')
 pick('Scientific calculator');assert vm.current_view.name=='eng_calculator'
 path('tools','Scientific calculator');shot('calculator')
 from engtools.calculator import app as calc
@@ -115,7 +120,7 @@ assert vm.current_view.name=='parent' and not breadcrumbs._paths
 assert lab._page=='root' and not lab._resume and not lab._suspended
 # Full and legacy simulator routes resolve through the new folders.
 for route in ('PicoLAB/checks/Numerics check','PicoLAB/checks/Plot previews',
-              'PicoLAB/tools/Graph','PicoLAB/tools/Graph3D','PicoLAB/tools/Scientific calculator',
+              'PicoLAB/tools/Graph','PicoLAB/tools/Graph3D','PicoLAB/tools/Scientific calculator','PicoLAB/tools/UnitConverter',
               'PicoLAB/modules/structural/Beam view','PicoLAB/modules/thermal',
               'Apps/PicoLAB/Graph','PicoLAB/Beam Lab'):
     sim_runtime._keys=[];sim_runtime.request_open(route);assert sim_runtime._keys

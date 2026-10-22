@@ -13,7 +13,8 @@ MENUS = {
     'tools': (('Graph','Graph','2D expressions, curves and shading'),
               ('Graph3D','Graph3D','3D surfaces and implicit expressions'),
               ('calculator','Scientific calculator','Expressions, statistics, solver and matrices'),
-              ('picocad','PicoCAD','Analytic primitives and Boolean part previews')),
+              ('picocad','PicoCAD','Analytic primitives and Boolean part previews'),
+              ('unitconvert','UnitConverter','Search everyday and engineering units')),
     'modules': (('structural','Structural','Beams, frames, sections and stress'),
                 ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','Heat conduction and temperature fields'),
                 ('electrical','Electrical','No tools yet'),('fluids','Fluids','No tools yet')),
@@ -121,10 +122,12 @@ def _launch(view_manager,target):
     from engtools.ui import breadcrumbs
     before=view_manager.current_view
     name={'Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
-          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view','heat2d':'thermal_view'}[target]
+          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view','heat2d':'thermal_view',
+          'unitconvert':'unitconvert_view'}[target]
     path={'beam':('modules','structural','Beam view'),'mohr':('modules','structural','Mohr circle'),
           'discs':('modules','structural','Shrink fit'),'heat2d':('modules','thermal','Heat transfer 2D'),
-          'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD')}.get(target,('tools',target))
+          'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD'),
+          'unitconvert':('tools','UnitConverter')}.get(target,('tools',target))
     breadcrumbs.bind(view_manager,path,name)
     _resume=True
     try:
@@ -133,6 +136,9 @@ def _launch(view_manager,target):
             launch(view_manager,target)
         elif target=='calculator':
             from engtools.calculator import app
+            app.show(view_manager)
+        elif target=='unitconvert':
+            from engtools.unitconvert import app
             app.show(view_manager)
         elif target=='picocad':
             from engtools.picocad import app

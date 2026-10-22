@@ -11,7 +11,8 @@ PicoLAB
 │   ├── Graph
 │   ├── Graph3D
 │   ├── Scientific calculator
-│   └── PicoCAD
+│   ├── PicoCAD
+│   └── UnitConverter
 └── Modules
     ├── Structural
     │   ├── Beam view
@@ -42,7 +43,7 @@ title bar, panels, property forms, editor panel and F9 help box
 (`engtools/ui/lab.py`); values are typed in place, with no on-screen keyboard.
 
 See [PicoCAD](PicoCAD.md), [Beam view](BeamLab.md), [Shrink fit](ShrinkFit.md), [Mohr circle](MohrCircle.md), [Heat transfer 2D](HeatTransfer.md), [Scientific calculator](ScientificCalculator.md),
-[Graph](Graph.md), [Graph3D](Graph3D.md) and [plot previews](SharedPlots.md).
+[Graph](Graph.md), [Graph3D](Graph3D.md), [UnitConverter](UnitConverter.md) and [plot previews](SharedPlots.md).
 
 The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Graph,
 Graph3D and the complete `engtools` package together; this UI update does not

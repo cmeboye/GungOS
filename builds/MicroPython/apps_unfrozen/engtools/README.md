@@ -2,7 +2,10 @@
 
 `PicoLAB.py` provides a plotting preview gallery, a native Numerics checks page,
 and a keyboard-driven scientific calculator with six numerical modes. Checks contains numerics validation and plot previews. Tools contains Graph,
-Graph3D and the scientific calculator. Modules contains Structural → Beam view
+Graph3D, the scientific calculator, PicoCAD and UnitConverter. UnitConverter
+(`unitconvert/`) provides searchable offline everyday and engineering units;
+see [UnitConverter.md](../../../../guides/UnitConverter.md).
+Modules contains Structural → Beam view
 Thermal → Heat transfer 2D (`thermal/`, see [HeatTransfer.md](../../../../guides/HeatTransfer.md)),
 and empty planned folders for Dynamics, Electrical and Fluids. See
 [ScientificCalculator.md](../../../../guides/ScientificCalculator.md) for
