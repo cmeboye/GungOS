@@ -78,10 +78,11 @@ def tabs(draw,p,rect,labels,selected,counts,font=SM,height=22):
 
 
 def chrome(draw,p,page,message='',error=False,title='BEAM VIEW',fallback=('modules','structural','Beam view'),
-           hint='F9 Help',brand='PicoLAB'):
+           hint='F9 Help',brand='PicoLAB',title_bar=True):
     """Breadcrumb, app title bar with the page name, and a one-line footer.
     A PicoLAB tool shows its breadcrumb; another brand (a PicoDESK app
-    embedding a plot) shows that brand with the fallback path."""
+    embedding a plot) shows that brand with the fallback path.
+    Set title_bar=False when content starts directly below the breadcrumb."""
     if brand=='PicoLAB':
         from engtools.ui import breadcrumbs
         breadcrumbs.paint(draw,p,fallback=fallback)
@@ -89,9 +90,10 @@ def chrome(draw,p,page,message='',error=False,title='BEAM VIEW',fallback=('modul
         from engtools.ui import theme
         theme.header(draw,' / '.join(fallback),brand,p,18,font=XS)
     width,height=int(draw.size.x),int(draw.size.y)
-    draw._fill_rectangle(0,18,width,20,p.PANEL)
-    text(draw,8,22,title,p.ACCENT,SM)
-    right_text(draw,width-8,24,page.upper(),p.TEXT)
+    if title_bar:
+        draw._fill_rectangle(0,18,width,20,p.PANEL)
+        text(draw,8,22,title,p.ACCENT,SM)
+        right_text(draw,width-8,24,page.upper(),p.TEXT)
     bottom=height-12
     draw._fill_rectangle(0,bottom,width,12,p.PANEL)
     text(draw,6,bottom+2,hint,p.ACCENT)

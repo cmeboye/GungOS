@@ -32,6 +32,11 @@ typedef enum
     PS_ERR_SUPPORT,    /* spring or settlement on an unsuitable DOF; item = node, dof */
     PS_ERR_MECHANISM,  /* structure can move freely; item = node, dof */
     PS_ERR_ACCURACY,   /* single precision is not enough; solve again in double */
+    PS_ERR_SINGULAR,   /* circuit has no unique solution; item = node or element */
+    PS_ERR_CONVERGENCE,/* circuit: Newton iterations do not settle */
+    PS_ERR_TIMESTEP,   /* circuit: time step shrank below its minimum */
+    PS_ERR_SPACE,      /* LU fill outgrew its block: enlarge it and call again */
+    PS_PENDING,        /* not an error: more work remains, call again */
 } ps_status;
 
 /* Shared between the solving core and the UI core. */

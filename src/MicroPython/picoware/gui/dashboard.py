@@ -9,7 +9,7 @@ from .status_bar import StatusBar, foreground
 
 
 # Coordinates use width/height, including one-pixel box outlines.
-INFO_RECT=(93,17,226,25)
+INFO_RECT=(139,17,180,25)
 CATEGORY_RECT=(1,43,318,18)
 MENU_RECT=(1,62,77,240)
 WIDGET_RECT=(79,62,240,240)
@@ -97,10 +97,10 @@ class Dashboard:
         fg,bg=vm.foreground_color,vm.background_color
         accent=vm.selected_color
         accent_fg=foreground(accent)
-        theme=(fg,bg)
+        theme=(fg,bg,accent)
         if theme!=self.theme:
             from picoware.assets import dashboard_logo
-            self.logo=dashboard_logo.decode(bg==0,bg)
+            self.logo=dashboard_logo.decode(bg==0,bg,accent,fg)
             self.theme=theme
         draw.fill_screen(bg)
         from picoware.assets import dashboard_logo
@@ -161,19 +161,22 @@ class Dashboard:
         board=self.info['board'].replace('Raspberry Pi ','')
         heading=board+' / %d MHz' % self.info['frequency']
         panel_x,panel_y,panel_width,_=INFO_RECT
-        start_x=panel_x+4
-        stride=(panel_width-8)//3
-        bar_width=stride-44
-        draw._text(start_x,panel_y+3,heading[:35],fg,FONT_XTRA_SMALL)
-        for index,(name,label) in enumerate((('Heap','H'),('PSRAM','P'),('SD','SD'))):
+        # Labels sized for their widest value ("SD100%"), right-aligned to their bar; equal bars share the rest.
+        gap=2
+        labels=(('Heap','H'),('PSRAM','P'),('SD','SD'))
+        label_widths=[draw.len(label+'100%',FONT_XTRA_SMALL)+2 for _,label in labels]
+        bar_width=(panel_width-6-2*gap-sum(label_widths))//3
+        draw._text(panel_x+4,panel_y+3,heading[:35],fg,FONT_XTRA_SMALL)
+        x=panel_x+3
+        for (name,label),label_width in zip(labels,label_widths):
             row=next((row for row in self.info['rows'] if row[0]==name),None)
             percent=None
             if row and row[2] is not None and row[3]:
                 percent=max(0,min(100,int(row[2]*100/row[3])))
-            x=start_x+index*stride
-            text=label+('--' if percent is None else '%d%%' % percent)
-            draw._text(x,panel_y+14,text,fg,FONT_XTRA_SMALL)
-            outline(draw,(x+37,panel_y+15,bar_width,6),fg)
+            text=label+('---%' if percent is None else '%03d%%' % percent)
+            draw._text(x+label_width-2-draw.len(text,FONT_XTRA_SMALL),panel_y+14,text,fg,FONT_XTRA_SMALL)
+            outline(draw,(x+label_width,panel_y+14,bar_width,8),fg)
             if percent is not None:
                 fill=((bar_width-2)*percent+50)//100
-                if fill: draw._fill_rectangle(x+38,panel_y+16,fill,4,accent)
+                if fill: draw._fill_rectangle(x+label_width+1,panel_y+15,fill,6,accent)
+            x+=label_width+bar_width+gap

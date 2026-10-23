@@ -57,6 +57,7 @@ def verify_sd(root):
     apps=root/'sd-card/picoware/apps'
     source=root/'builds/MicroPython/apps_unfrozen'
     entries={'Graph.mpy','Graph3D.mpy','PicoLAB.mpy'}
+    if (source/'Grapher.py').exists(): entries.add('Grapher.mpy')
     if (source/'Eggcel.py').exists(): entries.add('Eggcel.mpy')
     for name in ('Apps','PicoWord','PicoPaint','PicoDESK'):
         if (source/(name+'.py')).exists():entries.add(name+'.mpy')

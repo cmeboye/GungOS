@@ -1,4 +1,4 @@
-"""Beam Lab: model editor, section editor, diagrams, results and options in PicoLAB.
+"""BeamView: model editor, section editor, diagrams, results and options in PicoLAB.
 
 F1 Add, F2 Remove, F3 Options, F4 Plot, F5 Results and F6 Evaluate.
 Editing changes only geometry; only F6 invokes the solver. It stays in RAM while
@@ -26,7 +26,7 @@ ADD_OPTIONS = (
 )
 
 HELP = (
-    'BEAM VIEW / NODE EDITOR',
+    'BeamView / NODE EDITOR',
     'UP/DOWN scroll; LEFT/RIGHT page',
     'F9 / ESC close help; edits stay intact',
     'F1 Add at cursor  F2 Remove item',
@@ -1166,7 +1166,7 @@ class BeamLab:
         bottom=int(draw.size.y)-self.footer_height
         draw.fill_screen(p.BG)
         if self.help_open:
-            render.chrome(draw,p,'Help')
+            render.chrome(draw,p,'Help',title='BeamView',fallback=('modules','structural','BeamView'))
             render.help_box(draw,p,HELP,self.help_first,bottom)
             draw.swap()
             return
@@ -1189,7 +1189,9 @@ class BeamLab:
             elif self.page=='combo':
                 render.form(bounded,p,[r[:4] for r in self.combo_rows()],max(1,self.menu_index),None,70,bottom-7)
 
-        render.chrome(draw,p,subtitle.replace('Beam / ',''),self.message,self.error)
+        render.chrome(draw,p,subtitle.replace('Beam / ',''),self.message,self.error,
+                      title='BeamView',fallback=('modules','structural','BeamView'),
+                      title_bar=self.page!='model')
         box=self.menu_rect()
         if self.popup is not None:
             title,options,index,apply=self.popup
@@ -1311,14 +1313,9 @@ class BeamLab:
         section=self.section;rows=self.section_rows()
         self.section_row=min(self.section_row,len(rows)-1)
         field=rows[self.section_row][0]
-        render.panel(draw,p,render.PREVIEW_RECT,'SECTION PREVIEW',section['name'],p.PANEL)
-        preview=render.Viewport(draw,(14,64,306,157))
-        pp=theme.colors(p.PANEL,p.TEXT,p.ACCENT)
-        render.cross_section(preview,pp,section,field,(16,64,165,157),False)
-        draw._line(171,65,171,156,p.GRID)
-        render.section_panel(preview,pp,self.model,section,180,65)
-        footer=render.Viewport(draw,(16,164,304,182))
-        render.text(footer,16,165,section['shape']+'  |  dimensions in mm',p.MUTED)
+        render.section_preview(draw,p,section,field,render.PREVIEW_RECT,
+                               lambda target,pp,x,y:render.section_panel(target,pp,self.model,section,x,y),
+                               section['shape']+'  |  dimensions in mm')
         rect=self.properties_rect()
         render.panel(draw,p,rect,'SECTION PROPERTIES','%d/%d'%(self.section_row+1,len(rows)))
         form_rows=[('field',r[1],items.section_text(section,r),r[4]) for r in rows]

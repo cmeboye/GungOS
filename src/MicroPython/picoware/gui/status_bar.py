@@ -12,17 +12,18 @@ def foreground(background):
     return text_on(background)
 
 
-def bitmap(name, background):
+def bitmap(name, background, ink=None):
     """Composite the unscaled RGBA artwork into an RGB565 blit buffer.
 
-    A one-pixel charcoal edge on bright themes keeps white outlines visible.
+    With ink (RGB565), the artwork's colour is replaced by it and keeps its alpha.
+    Otherwise a one-pixel charcoal edge on bright themes keeps white outlines visible.
     The source pixels keep their supplied colours. Padding fits within the bar.
     """
     width, height, indices = ICONS[name]
     out_width, out_height = width + 2, height + 2
     raw = bytearray(bytes((background & 255, background >> 8)) * (out_width * out_height))
     from picoware.gui.appearance import is_light
-    if is_light(background):
+    if ink is None and is_light(background):
         # Only the shadow is added; the source PNGs remain untouched.
         for y in range(height):
             for x in range(width):
@@ -37,6 +38,8 @@ def bitmap(name, background):
             red, green, blue, alpha = PALETTE[indices[y * width + x]]
             if not alpha:
                 continue
+            if ink is not None:
+                red, green, blue = (ink >> 11) * 255 // 31, ((ink >> 5) & 63) * 255 // 63, (ink & 31) * 255 // 31
             offset = ((y + 1) * out_width + x + 1) * 2
             if alpha != 255:
                 under = raw[offset] | (raw[offset + 1] << 8)
@@ -76,12 +79,12 @@ class StatusBar:
                 vm.foreground_color, vm.background_color, vm.selected_color,
                 self._battery[1], bluetooth)
 
-    def _icon(self, kind, name, x, background):
+    def _icon(self, kind, name, x, background, ink):
         cached = self._icons.get(kind)
-        if cached is None or cached[0] != name or cached[1] != background:
-            cached = (name, background, bitmap(name, background))
+        if cached is None or cached[:3] != (name, background, ink):
+            cached = (name, background, ink, bitmap(name, background, ink))
             self._icons[kind] = cached
-        width, height, raw = cached[2]
+        width, height, raw = cached[3]
         self.vm.draw._bytearray(x, (HEIGHT - height) // 2, width, height, raw)
 
     def draw(self, state):
@@ -94,10 +97,10 @@ class StatusBar:
         clock = '%02d:%02d' % (current[4], current[5]) if current else '--:--'
         draw._text(8, y, clock, colour, FONT_XTRA_SMALL)
         percentage = state[1]
-        label = '%d%%' % percentage if percentage is not None else '--%'
+        label = '%03d%%' % percentage if percentage is not None else '---%'
         label_x = 320 - 8 - draw.len('100%', FONT_XTRA_SMALL)
         draw._text(320 - 8 - draw.len(label, FONT_XTRA_SMALL), y, label, colour, FONT_XTRA_SMALL)
         bluetooth_x = label_x - 8 - 14
         wifi_x = bluetooth_x - 8 - 14
-        self._icon('wifi', 'wifi_connected' if state[2] else 'wifi_disconnected', wifi_x, background)
-        self._icon('bluetooth', 'bluetooth_connected' if state[7] else 'bluetooth_disconnected', bluetooth_x, background)
+        self._icon('wifi', 'wifi_connected' if state[2] else 'wifi_disconnected', wifi_x, background, colour)
+        self._icon('bluetooth', 'bluetooth_connected' if state[7] else 'bluetooth_disconnected', bluetooth_x, background, colour)

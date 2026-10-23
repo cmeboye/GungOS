@@ -151,6 +151,7 @@ _SAFE = {
 }
 
 _state = ST_MENU
+_viewer_active = False
 _menu = None
 _preset_menu = None
 _help_box = None
@@ -342,32 +343,8 @@ def _cycle(seq, cur, step):
 
 def _compile_arithmetic(text):
     text = text.replace('math.', '').replace('^', '**').strip()
-    if not text or len(text) > 240:
-        raise ValueError('Use 1 to 240 characters')
-    i = 0
-    while i < len(text):
-        c = text[i]
-        if c.isdigit() or c == '.':
-            end = i+1
-            while end < len(text) and (text[end].isdigit() or text[end] == '.'):
-                end += 1
-            if end < len(text) and text[end] in 'eE':
-                end += 1
-                if end < len(text) and text[end] in '+-': end += 1
-                while end < len(text) and text[end].isdigit(): end += 1
-            float(text[i:end])
-            i = end
-        elif c.isalpha() or c == '_':
-            end = i+1
-            while end < len(text) and (text[end].isalpha() or text[end].isdigit() or text[end] == '_'):
-                end += 1
-            name = text[i:end]
-            if name.startswith('_') or name not in _SAFE and name not in ('x','y','z','r'):
-                raise ValueError('Unknown name: '+name)
-            i = end
-        elif c in ' +-*/%(),\t': i += 1
-        else: raise ValueError('Unsupported character: '+c)
-    code = compile(text,'<surface>','eval')
+    from .arithmetic import compile_expression
+    code = compile_expression(text, _SAFE, ('x', 'y', 'z', 'r'), 240, '<surface>')
     return _formula(text, code) or code
 
 
@@ -1687,6 +1664,7 @@ def _set_number(key, text):
 
 
 def start(view_manager, plot_spec=None) -> bool:
+    global _viewer_active, _aspect, _contours, _probe
     global _state, _dirty, _need_eval, _auto, _zs, _zs2
     global _pitch, _yaw, _zoom, _set_row, _hint_flash
     global _menu, _preset_menu, _help_box, _saved_menu
@@ -1709,7 +1687,10 @@ def start(view_manager, plot_spec=None) -> bool:
         _expr,_expr2 = expressions[0],expressions[1] if len(expressions)>1 else ''
         _range = float(plot_spec.get('range',2.0))
         _bounds = list(plot_spec['bounds']) if 'bounds' in plot_spec else None
-        _zrange = None
+        _zrange = plot_spec.get('zrange')
+        _aspect = plot_spec.get('aspect', 'equal')
+        _contours = plot_spec.get('contours', True)
+        _probe = [0, 0]
         _style = {'wire': 0, 'solid': 1, 'heatmap': 2}[plot_spec.get('style','solid')]
         requested_resolution = int(plot_spec.get('resolution',12))
         _grid_n = requested_resolution
@@ -1754,6 +1735,7 @@ def start(view_manager, plot_spec=None) -> bool:
         _draw_resolution_warning(view_manager.draw)
     else:
         _goto_plot(view_manager)
+    _viewer_active = True
     return True
 
 
@@ -2306,6 +2288,8 @@ def _load_session(storage):
 
 
 def stop(view_manager) -> None:
+    global _viewer_active
+    _viewer_active = False
     global _menu, _preset_menu, _help_box, _zs
     global _state, _auto, _dirty
 
@@ -2373,17 +2357,19 @@ class _PlotView:
         self.spec,self.previous = spec,None
 
     def start(self,vm):
-        self.previous = (_expr,_expr2,_range,_grid_n,_style,_bounds,_zrange,_aspect)
+        if _viewer_active:
+            raise ValueError('This 3D viewer is already open')
+        self.previous = (_expr,_expr2,_range,_grid_n,_style,_bounds,_zrange,_aspect,_contours,_saved,_probe)
         return start(vm,self.spec)
 
     def run(self,vm):
         run(vm)
 
     def stop(self,vm):
-        global _expr,_expr2,_range,_grid_n,_style,_embedded,_brand,_plot_title,_bounds,_zrange,_aspect
+        global _expr,_expr2,_range,_grid_n,_style,_embedded,_brand,_plot_title,_bounds,_zrange,_aspect,_contours,_saved,_probe
         stop(vm)
         if self.previous is not None:
-            _expr,_expr2,_range,_grid_n,_style,_bounds,_zrange,_aspect = self.previous
+            _expr,_expr2,_range,_grid_n,_style,_bounds,_zrange,_aspect,_contours,_saved,_probe = self.previous
         self.spec,self.previous = None,None
         _embedded,_brand,_plot_title = False,'GRAPH 3D',''
 

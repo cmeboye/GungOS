@@ -14,18 +14,21 @@ Status: **done** means accepted for the current app scope (release packaging
 is tracked separately); **partial** means usable but with work
 remaining; **new** means not started. Size compares an app with ones that
 exist: **S** is about Mohr circle, **M** about Shrink fit or Heat transfer 2D,
-**L** about Beam view or PicoSpice.
+**L** about BeamView or PicoSpice.
 
 ## Where things stand
 
-There are 35 apps: 8 done, 4 partial and 23 new.
+There are 36 apps: 8 done, 7 partial and 21 new.
 
 | Folder | App | Status | Today |
 |---|---|---|---|
-| Structural | BeamView | done | Beam view: beams and frames, sections, diagrams |
+| Structural | BeamView | done | BeamView: beams and frames, sections, diagrams |
 | | Mohr's circle | done | Mohr circle: 2D/3D stress, rotation, principal stresses |
 | | ShrinkFit | done | Shrink fit: rotating discs, thick cylinders, press fits |
-| | StressStrain, Buckling, FatigueLife, FractureLife | new | |
+| | StressStrain | partial | Section loads, stress maps and critical points, 3D/plane stress/plane strain, thermal strain, materials, cases and SI exports; rosettes and material curves remain |
+| | Buckling | partial | First pass: both axes, end conditions/custom K, six section types, yield screen, plots, cases and SI CSV; BeamView handoff remains |
+| | Section Properties | partial | Standalone first pass: six shape templates, live section/material editing, centroids, inertias, moduli, gyration, cases and reports; connections to other apps deferred |
+| | FatigueLife, FractureLife | new | |
 | Machine design | PicoCAD | partial | Analytic primitives, Booleans, `.pcad` projects; under Tools today |
 | | MeshGen, GearGen, WeldCalc, Materialprop | new | |
 | Dynamics | ModalHarmonics, TransientSolve, Multibody, TransferFunc | new | |
@@ -35,7 +38,7 @@ There are 35 apps: 8 done, 4 partial and 23 new.
 | Electrical | PicoSpice | partial | First pass built: operating point, DC sweep, transient. Not committed yet |
 | | SmithChart | new | |
 | Tools | SciCalc | done | Scientific calculator |
-| | Grapher | partial | Graph and Graph3D, as two tools |
+| | Grapher | partial | Unified 2D/3D workspace and versioned shared API; isolated fixtures first, solver migrations and data/field extensions pending |
 | | UnitConvert | done | UnitConverter accepted: 49 categories, 322 units, search, cases, favorites, history and SI CSV. Shared input parsing and exchange are separate follow-ups |
 | PicoDESK | EggCel, PicoWord, PicoPaint | done | `.egg`, `.pword`, `.ppaint` files; CSV in and out, TXT and BMP out |
 | | PicoPlayer, PicoBook, PicoMail | new | |
@@ -53,9 +56,17 @@ These follow from the hardware and from what already works.
    and decoders. About 668 KB of the firmware partition is free after
    `ps.Circuit`. This plan uses an estimated 60–90 KB of it and keeps the rest
    in reserve.
-3. **Same screens, same keys.** Every PicoLAB tool is built from
-   `engtools/ui/lab.py`: F3 options, F4 plots, F5 results, F6 calculate,
-   F9 help and Z undo. PicoDESK apps keep their own menus.
+3. **Same screens, same keys.** New PicoLAB tools follow
+   [PicoLAB keys](Keys.md): F1 Add, F2 Remove, F3 Options, F4 Plots,
+   F5 Results, F6 Build/Calculate/Evaluate and F9 Help. Arrows navigate
+   inputs; Tab switches input/preview focus; preview arrows navigate,
+   Space changes navigation mode and +/− zooms. Use the shared
+   `engtools/ui/lab.py` and `ui/tool.py` parts. The key guide audits
+   existing outliers and tracks their pending migration. PicoDESK apps
+   keep their own menus.
+   UnitConverter, StressStrain and Buckling now follow BeamView's tabbed
+   layout: Left/Right selects a section, Up/Down its fields. F9 presents
+   equations through the scientific calculator's math renderer first.
 4. **SI inside.** Models and exchange files store SI. Units change only at
    the screen and at input.
 5. **Shared libraries first.** A library that several apps need is built
@@ -80,9 +91,9 @@ and can then work with every other app that uses them.
 |---|---|---|---|---|
 | Table | `.csv` | Columns headed `name [unit]`, values in SI | every solver, Eggcel, SciCalc statistics, PropTable, Materialprop | Eggcel, Grapher, SciCalc statistics, PipeLoss (pump curves) |
 | Signal | `.csv`, time in the first column | A load or response history | PicoSpice, TransientSolve, Multibody, Eggcel | FatigueLife, FractureLife, TransientSolve (forcing), PicoSpice (PWL sources), Grapher |
-| Stress state | `.json` | σ and τ components (plane or 3D) and the point they belong to | StressStrain, Beam view (a point in a section), Shrink fit (a radius), MeshGen results | Mohr's circle, FatigueLife, FractureLife, WeldCalc |
-| Material | `.json` record | E, ν, ρ, strengths, endurance limit, K_Ic, Paris C and m, k, cp, α | Materialprop | Beam view, Shrink fit, StressStrain, Buckling, FatigueLife, FractureLife, WeldCalc, GearGen, PicoCAD, ThermalField, HeatExchanger |
-| Section | `.json` | A, I, centroid, extreme fibres and the outline | PicoCAD (a 2D profile), Beam view's section list | Beam view, Buckling, StressStrain |
+| Stress state | `.json` | σ and τ components (plane or 3D) and the point they belong to | StressStrain, BeamView (a point in a section), Shrink fit (a radius), MeshGen results | Mohr's circle, FatigueLife, FractureLife, WeldCalc |
+| Material | `.json` record | E, ν, ρ, strengths, endurance limit, K_Ic, Paris C and m, k, cp, α | Materialprop | BeamView, Shrink fit, StressStrain, Buckling, FatigueLife, FractureLife, WeldCalc, GearGen, PicoCAD, ThermalField, HeatExchanger |
+| Section | `.json` | A, I, centroid, extreme fibres and the outline | PicoCAD (a 2D profile), BeamView's section list | BeamView, Buckling, StressStrain |
 | Geometry | `.pcad` | A part or a 2D profile | PicoCAD, GearGen | PicoCAD, MeshGen |
 | Mesh | `.pmesh` | Nodes, triangles, boundary groups and results at the nodes | MeshGen | StressStrain, ThermalField, ModalHarmonics |
 | Linear model | `.json` | A transfer function (polynomials, or poles, zeros and gain), or a frequency response | TransferFunc, PicoSpice AC, ModalHarmonics | TransferFunc, SmithChart, TransientSolve, Grapher |
@@ -165,6 +176,9 @@ and need a new UF2. Phases 1, 2 and 6 are SD card updates.
 
 ### Phase 0: close the open work
 
+- Align existing PicoLAB controls using the [key audit](Keys.md#current-outlier-audit),
+  including the calculator modes and shared plot viewers. Update app help,
+  guides and simulator key checks as each app is migrated.
 - Commit the circuit kernel and PicoSpice. Rebuild the UF2, which brings the
   fix for transients started from zero.
 - Settle the open PicoSpice first-pass items:
@@ -194,7 +208,7 @@ the release is out.
   It holds the inputs, the main equations (in the renderer PicoWord and the
   calculator already share) and the results.
 - **Links between existing apps:**
-  - Beam view and Shrink fit send a stress state to Mohr's circle.
+  - BeamView and Shrink fit send a stress state to Mohr's circle.
   - Mohr's circle saves cases; today it only keeps its state in memory.
   - Every solver's CSV opens in Eggcel and Grapher.
   - SciCalc sends an expression to Grapher, and a value comes back.
@@ -203,6 +217,11 @@ the release is out.
 - **Grapher** (M): Graph and Graph3D merge into one tool with 2D and 3D
   modes. It adds plots of tables and signals, with several series, log axes
   and a cursor readout, and it receives every plot sent from another app.
+  - Foundation first: one workspace, a versioned sources/layers/axes/view API,
+    lazy renderer ownership and isolated tests. See [Grapher.md](Grapher.md).
+    Existing solver apps keep their plotting paths until the shared contract
+    and device budgets are verified. Log axes, probes, streaming, sampled
+    fields and exchange integration follow as independently tested capabilities.
 - **UnitConvert** (S): categories, prefixes, temperature offsets and compound
   units. Its library also serves every number field, so `2 in` typed into a
   length becomes 0.0508 m. PicoSpice keeps SPICE suffixes, where `m` means
@@ -212,7 +231,7 @@ the release is out.
     parsing and integration with shared number fields/exchange are pending.
 
 Done when every existing app sends or receives at least one kind, and one
-test drives Beam view → Mohr's circle → report → PicoWord by keys.
+test drives BeamView → Mohr's circle → report → PicoWord by keys.
 
 ### Phase 2: data libraries
 
@@ -234,7 +253,7 @@ test drives Beam view → Mohr's circle → report → PicoWord by keys.
 
   The viewer finds a state from any two properties, and tables open in
   Eggcel.
-- **Existing apps:** Beam view sections, Shrink fit and Heat transfer 2D take
+- **Existing apps:** BeamView sections, Shrink fit and Heat transfer 2D take
   their materials from the picker.
 - **PicoBook** (M), on the PicoDESK side, is an EPUB reader.
   - It unzips books with the firmware's `deflate` module and reflows the
@@ -272,13 +291,23 @@ test drives Beam view → Mohr's circle → report → PicoWord by keys.
   - It draws a stress–strain curve (Ramberg–Osgood) from the material.
   - It sends the stress state to Mohr's circle and FatigueLife.
   - A mode for plane finite elements comes in Phase 8.
+  - Available: [StressStrain.md](StressStrain.md). Section loads, stress maps,
+    a shared section/material editor, exact normal extrema,
+    sampled shear/von Mises maxima and isotropic
+    stress/strain conversion are ready for simulator feedback;
+    rosettes, Ramberg–Osgood curves and shared material/exchange integration
+    are pending.
 - **Buckling** (S) is Euler buckling.
   - It covers end conditions (the effective length factor), slenderness,
     critical load and stress, and the safety factor.
   - It warns when a member is short enough that yielding comes first.
-  - It takes a member from Beam view (length, section, axial force) and the
+  - It takes a member from BeamView (length, section, axial force) and the
     material from the picker.
   - Whole frames wait for the eigensolver in Phase 7.
+  - First pass available: [Buckling.md](Buckling.md). F9 starts with Euler's
+    equation; direct BeamView/member exchange remains pending.
+    Section and material editing now use BeamView's shared cross-section
+    preview, including live drafts, in a dedicated editor.
 - **FatigueLife** (M):
   - S–N curves from the material (Basquin), with surface, size and
     reliability factors;
@@ -373,7 +402,7 @@ test drives Beam view → Mohr's circle → report → PicoWord by keys.
 - **Firmware:** the eigensolver and the ODE integrator.
 - **ModalHarmonics** (L) finds natural frequencies and mode shapes.
   - It covers spring–mass chains, shear buildings and frames imported from
-    Beam view.
+    BeamView.
   - Modes are animated, and harmonic response with damping is plotted.
   - It sends modal data as a linear model.
   - Buckling then also covers frames.
@@ -413,7 +442,7 @@ test drives Beam view → Mohr's circle → report → PicoWord by keys.
 
 - **PicoCAD** (L), which is partial today, gains:
   - 2D profiles of lines and arcs, extruded or revolved;
-  - section properties of a profile, sent to Beam view as a section;
+  - section properties of a profile, sent to BeamView as a section;
   - mass properties with a material;
   - STL export;
   - fillets and chamfers, later.
@@ -436,6 +465,10 @@ test drives Beam view → Mohr's circle → report → PicoWord by keys.
 
 ## What each new app needs first
 
+Section Properties has a standalone first pass; see
+[SectionProperties.md](SectionProperties.md). Its UI/utility review comes
+before connecting it to BeamView, Buckling, StressStrain or PicoCAD.
+
 | App | Needs |
 |---|---|
 | every app | the exchange layer |
@@ -456,7 +489,7 @@ test drives Beam view → Mohr's circle → report → PicoWord by keys.
 Measure these with the device benchmark before each release.
 
 - **Code:** about 50 KB of `.mpy` or less for a calculator-style app, and
-  about 85 KB or less for an editor (Beam view is 82 KB, PicoSpice 48 KB).
+  about 85 KB or less for an editor (BeamView is 82 KB, PicoSpice 48 KB).
 - **Heap:** at least 150 KB free with the app open and a case solved, so
   that saving, exporting and Send to never run out of memory.
 - **Files:** case and exchange files of 32 KB or less, the same as today.
@@ -469,6 +502,6 @@ Measure these with the device benchmark before each release.
    Dynamics, and skips 6. This plan treats Machine design as its own folder.
    Is something else meant to be 6?
 2. Should menu labels use the list's names (BeamView, ThermalField) or stay
-   as they are now (Beam view, Heat transfer 2D)?
+   as they are now (BeamView, Heat transfer 2D)?
 3. Should PicoPlayer play in the background while other apps run?
 4. Which mail providers does PicoMail need to support first?

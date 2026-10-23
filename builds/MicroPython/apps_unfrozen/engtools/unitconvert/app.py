@@ -3,12 +3,16 @@ from picoware.system import buttons as k
 from picoware.system.font import FONT_SMALL as SM
 from engtools.ui import theme
 from engtools.ui.lab import chrome, panel, text, menu, prompt, Viewport, wrap
+from engtools.ui.lab import tabs as draw_tabs, form
+from engtools.ui.tool import Tabs, EquationHelp
+from picoware.system.font import FONT_XTRA_SMALL as XS
 from engtools.ui.forms import LineEdit, parse_number, erase_key
 from . import model, catalog
 
 TITLE = 'UNIT CONVERTER'
 PATH = ('tools', 'UnitConverter')
 PREFS = 'picoware/engineering/unitconvert.json'
+PRIMARY = ('convert', 'results', 'favorites', 'recent')
 OPTIONS = (('Swap units', 'Keep the quantity and reverse the conversion'),
            ('Add / remove favorite', 'Keep this pair for quick access'),
            ('Favorites', 'Saved unit pairs'), ('Recent conversions', 'Last 12 calculations'),
@@ -20,11 +24,12 @@ HELP = ('Getting started:', 'Type to search categories or unit names',
         'Converting:', 'UP/DOWN choose a field; ENTER edits',
         'Type a number to replace the value', 'Arithmetic works: 3/8, 2*pi, 1e-6',
         'ENTER applies; ESC cancels an edit',
-        'LEFT/RIGHT cycle the selected units',
+        'LEFT/RIGHT tabs; UP/DOWN selects a row',
         'S swaps units and preserves quantity',
         'F1 browse categories  F2 find a unit',
         'F3 options, favorites and saved cases', 'F4 conventions for this quantity',
         'F5 all equivalents  F6 calculate',
+        'ENTER opens a searchable unit list',
         'Z undo the last conversion change',
         'Units:', 'US and Imperial measures are distinct',
         'Temperature intervals have no offsets',
@@ -44,14 +49,25 @@ class Converter:
         from engtools import session
         self.state = dict(session.kept.get(model.TOOL) or model.new_state())
         self.favorites, self.recent = [], []
-        self.page, self.index, self.row = 'browse', 0, 1
+        self.page, self.index, self.row = 'convert', 0, 1
         self.search = LineEdit('', 32)
         self.edit, self.dialog = None, None
         self.unit_field = 'from'
         self.message, self.error = '', False
         self.undo = []
         self.files = []
+        self.tabs = Tabs(('Convert', 'All units', 'Favorites', 'Recent'))
+        self.help_view = EquationHelp()
         self.read_preferences()
+
+    def switch_tab(self, step):
+        self.tabs.index = PRIMARY.index(self.page)
+        selected = self.tabs.switch(step, self.row if self.page == 'convert' else self.index)
+        self.page = PRIMARY[self.tabs.index]
+        if self.page == 'convert':
+            self.row = selected if isinstance(selected, int) else 1
+        else:
+            self.index = selected if isinstance(selected, int) else 0
 
     def read_preferences(self):
         from json import loads
@@ -189,6 +205,12 @@ class Converter:
     def run(self, button):
         if button == k.BUTTON_NONE:
             return False
+        if self.help_view.opened:
+            self.help_view.key(button)
+            return True
+        if button == k.BUTTON_F9:
+            self.help_view.open('units', HELP)
+            return True
         try:
             self.handle(button)
         except (ValueError, TypeError, ZeroDivisionError, OverflowError, OSError, RuntimeError) as exc:
@@ -256,6 +278,24 @@ class Converter:
                 if self.search.text != before:
                     self.index = 0
             return
+        if self.page in PRIMARY and button in (k.BUTTON_LEFT, k.BUTTON_RIGHT):
+            self.switch_tab(-1 if button == k.BUTTON_LEFT else 1)
+            return
+        if self.page in PRIMARY:
+            if button == k.BUTTON_F1:
+                self.browse()
+                return
+            if button == k.BUTTON_F3:
+                self.page, self.index = 'options', 0
+                return
+            if button == k.BUTTON_F5:
+                self.page, self.index = 'results', 0
+                return
+            if button == k.BUTTON_F6:
+                model.result(self.state)
+                self.remember()
+                self.say('Converted')
+                return
         if self.page in ('options', 'favorites', 'recent', 'files', 'results'):
             if self.page == 'options':
                 count = len(OPTIONS)
@@ -297,12 +337,6 @@ class Converter:
             self.say('Converted')
         elif button in (k.BUTTON_UP, k.BUTTON_DOWN):
             self.row = (self.row + (1 if button == k.BUTTON_DOWN else -1)) % 4
-        elif button in (k.BUTTON_LEFT, k.BUTTON_RIGHT) and self.row in (2, 3):
-            field = 'from' if self.row == 2 else 'to'
-            choices = catalog.units(self.state['category'])
-            index = [u[0] for u in choices].index(self.state[field])
-            self.unit_field = field
-            self.apply_unit(choices[(index + (1 if button == k.BUTTON_RIGHT else -1)) % len(choices)][0])
         elif button == k.BUTTON_CENTER:
             if self.row == 0:
                 self.browse()
@@ -326,7 +360,15 @@ class Converter:
         p = theme.system_palette(self.vm)
         bottom = int(draw.size.y) - 12
         draw.fill_screen(p.BG)
-        if self.page in ('browse', 'units'):
+        if self.help_view.opened:
+            chrome(draw, p, 'Help', title=TITLE, fallback=PATH)
+            self.help_view.draw(draw, p)
+            draw.swap()
+            return
+        if self.page in PRIMARY:
+            self.draw_primary(draw, p, bottom)
+            status, hint = '', 'F9 Help'
+        elif self.page in ('browse', 'units'):
             heading = 'FIND A QUANTITY' if self.page == 'browse' else 'CHOOSE ' + self.unit_field.upper() + ' UNIT'
             panel(draw, p, (8, 43, 304, bottom-46), heading)
             draw._rectangle(14, 65, 292, 23, p.ACCENT)
@@ -350,63 +392,68 @@ class Converter:
                 text(draw, 20, 108, 'No matches. ESC clears the search.', p.MUTED)
             status = '%d found' % len(rows)
             hint = 'Type: search | Enter: open'
-        elif self.page == 'convert':
-            st = self.state
-            quantity = catalog.category(st['category'])
-            answer = model.shown(model.result(st))
-            panel(draw, p, (8, 43, 304, 56), 'RESULT', fill=p.PANEL)
-            clip = Viewport(draw, (16, 64, 304, 95))
-            text(clip, 18, 73, answer + ' ' + st['to'], p.TEXT, SM)
-            rows = (('Quantity', quantity[1]), ('Value', model.shown(st['value'])),
-                    ('From', st['from'] + ' - ' + model.unit(st['category'], st['from'])[1]),
-                    ('To', st['to'] + ' - ' + model.unit(st['category'], st['to'])[1]))
-            for i, (label, value) in enumerate(rows):
-                y = 106+i*36
-                if i == self.row:
-                    draw._fill_rectangle(8, y-2, 304, 34, p.SELECT)
-                    draw._rectangle(8, y-2, 304, 34, p.ACCENT)
-                text(draw, 16, y+1, label.upper(), p.ACCENT if i == self.row else p.MUTED)
-                bounded = Viewport(draw, (16, y+12, 304, y+32))
-                if i == 1 and self.edit is not None:
-                    self.edit.draw(bounded, 16, y+15, 280, p.TEXT, p.ACCENT, SM)
-                else:
-                    text(bounded, 16, y+15, value, p.TEXT, SM)
-            text(draw, 14, 260, 'S Swap   F2 Find unit   F5 All units', p.MUTED)
-            text(draw, 14, 274, 'F1 Categories   F3 Options   Z Undo', p.MUTED)
-            status, hint = 'Convert', 'F9 Help'
         else:
             if self.page == 'options':
                 rows, title = OPTIONS, 'OPTIONS'
-            elif self.page == 'files':
+            else:
                 rows = [(name, 'Saved conversion') for name in self.files]
                 title = 'OPEN CONVERSION'
-            elif self.page == 'results':
-                key = self.state['category']
-                value = model.to_si(key, self.state['from'], self.state['value'])
-                rows = []
-                for u in catalog.units(key):
-                    try:
-                        result = model.shown(model.from_si(key, u[0], value))
-                    except (ValueError, OverflowError, ZeroDivisionError):
-                        result = 'out of range'
-                    rows.append((result + ' ' + u[0], u[1]))
-                title = 'ALL EQUIVALENTS'
-            else:
-                rows = [(self.label(r), catalog.category(r['category'])[1] + ' | SI ' + model.shown(r['si']))
-                        for r in getattr(self, self.page)]
-                title = self.page.upper()
-            if not rows:
-                rows = [('Nothing saved yet', 'ESC returns to the converter')]
-            menu(draw, p, rows, self.index, title, bottom)
+            menu(draw, p, rows or [('Nothing saved yet', 'ESC returns')], self.index, title, bottom)
             status, hint = '', 'F9 Help'
         chrome(draw, p, status, self.message, self.error, title=TITLE, fallback=PATH, hint=hint)
         if self.dialog is not None:
             prompt(draw, p, 'SAVE CONVERSION', 'Choose a new case name', self.dialog, self.message, self.error)
         draw.swap()
 
+    def draw_primary(self, draw, p, bottom):
+        st = self.state
+        quantity = catalog.category(st['category'])
+        panel(draw, p, (8, 43, 304, 112), 'CONVERSION', quantity[1])
+        bounded = Viewport(draw, (17, 65, 303, 151))
+        text(bounded, 18, 73, model.shown(st['value'])+' '+st['from'], p.TEXT, SM)
+        text(bounded, 18, 96, '= '+model.shown(model.result(st))+' '+st['to'], p.ACCENT, SM)
+        text(bounded, 18, 135, 'S Swap   F1 Categories   F6 Calculate', p.MUTED)
+        self.tabs.index = PRIMARY.index(self.page)
+        draw_tabs(draw, p, (8, 161, 304, bottom-164), self.tabs.labels, self.tabs.index,
+                  [None]*len(self.tabs.labels), font=XS)
+        if self.page == 'convert':
+            rows = [('field', 'Quantity', quantity[1], True),
+                    ('field', 'Value', model.shown(st['value']), True),
+                    ('field', 'From', st['from']+' '+model.unit(st['category'], st['from'])[1], True),
+                    ('field', 'To', st['to']+' '+model.unit(st['category'], st['to'])[1], True)]
+            form(draw, p, rows, self.row, self.edit, 188, bottom-24, font=XS)
+        else:
+            if self.page == 'results':
+                key = st['category']
+                si = model.to_si(key, st['from'], st['value'])
+                rows = []
+                for u in catalog.units(key):
+                    try:
+                        value = model.shown(model.from_si(key, u[0], si))
+                    except (ValueError, OverflowError, ZeroDivisionError):
+                        value = 'out of range'
+                    rows.append((value+' '+u[0], u[1]))
+            else:
+                rows = [(self.label(r), catalog.category(r['category'])[1]) for r in getattr(self, self.page)]
+            if not rows:
+                text(draw, 20, 194, 'Nothing saved yet; F3 opens options', p.MUTED)
+            else:
+                self.index = min(self.index, len(rows)-1)
+                capacity = max(1, (bottom-24-188)//26)
+                first = min(max(0, self.index-capacity//2), max(0, len(rows)-capacity))
+                bounded = Viewport(draw, (14, 185, 306, bottom-23))
+                for i in range(first, min(len(rows), first+capacity)):
+                    y = 190+(i-first)*26
+                    if i == self.index:
+                        bounded._fill_rectangle(14, y-2, 292, 25, p.SELECT)
+                        bounded._rectangle(14, y-2, 292, 25, p.ACCENT)
+                    text(bounded, 20, y, rows[i][0], p.TEXT)
+                    text(bounded, 20, y+12, rows[i][1], p.MUTED)
+        text(draw, 16, bottom-17, 'LEFT/RIGHT tabs  UP/DOWN select  ENTER edit', p.MUTED)
+
 
 class ConverterView:
-    HELP = HELP
+    HELP = None
 
     def start(self, vm):
         global _active

@@ -1,5 +1,10 @@
 # Shared engineering plotting
 
+The unified **Grapher** workspace and new versioned `engtools.plots.show`
+API are documented in [Grapher.md](Grapher.md). New capabilities are tested
+there with isolated fixtures before migrating solver apps. The APIs below
+remain the compatibility interfaces used by existing callers.
+
 `Graph.py` and `Graph3D.py` now delegate to `engtools/plots/plot2d.py` and
 `plot3d.py`. Both standalone apps and PicoLAB use the same rendering
 code and `engtools/ui/theme.py` for their header, footer and menu styling.
@@ -13,8 +18,8 @@ Open **PicoLAB > Checks > Plot previews** in the simulator to compare:
 - 3D implicit surface: a sphere with equal XYZ units.
 
 The data examples are synthetic visual fixtures, not engineering solver results.
-The four engineering tools remain placeholders in source and are hidden from
-the release launcher. Calculator Solver and Matrix use their own numerical cores.
+Existing engineering tools retain their current plot integrations. Calculator
+Solver and Matrix use their own numerical cores.
 
 ```sh
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/run.py --viewer --board picocalc-pico2w --network offline --audio silent --app PicoLAB

@@ -30,9 +30,13 @@ core/   pure C, no MicroPython headers
                 reordering, skyline profile
   order.*       reverse Cuthill–McKee node ordering
   dense.*       hinge condensation and recovery on element systems
+  sparse.*      general sparse LU with partial pivoting (left-looking,
+                Gilbert–Peierls) and a minimum-degree column order
 fe/     element library and models
   beam.*        Euler–Bernoulli element: stiffness, consistent loads, exact sections
   model.*       beam model: build, prepare, solve, results
+  circuit.*     circuit model: modified nodal analysis, devices, operating
+                point, DC sweep and transient
 geom/   geometry for plots and contour views
   mesh.*        triangles from sampled surfaces and implicit isosurfaces
                 (marching tetrahedra)
@@ -235,6 +239,69 @@ codes, and the binding raises them as Python exceptions on core 0.
 
 Each load belongs to a load case (up to 255 per model).
 
+## Circuits
+
+`ps.Circuit` simulates a circuit by modified nodal analysis, for PicoSpice.
+Node 0 is ground; elements connect nodes and are numbered from 0.
+
+```python
+C = ps.Circuit
+c = C(nodes=4, elements=4, probes=2)          # values=: room for element values
+c.element(0, C.V, (1, 0), (0,))               # + - , dc value
+c.wave(0, C.PULSE, (0, 5, 0, 1e-9, 1e-9, 1e-3, 2e-3))   # or SIN, PWL
+c.element(1, C.R, (1, 2), (1e3,))
+c.element(2, C.C, (2, 0), (1e-6, 0))          # C, initial voltage (uic)
+c.element(3, C.D, (2, 3), (1e-14, 1))         # Is, N
+c.probe(0, C.VOLTAGE, 2)                      # V(2) - V(0)
+c.probe(1, C.CURRENT, 3, 0)                   # into element 3 at terminal 0
+c.op(); c.voltage(2); c.current(1, 0)         # operating point
+c.tran(5e-3, 501)                             # or c.dc(source, start, stop, points)
+while not c.run(30): show(c.progress())       # 30 ms slices; True when done
+c.trace(0, out)                               # array('f') of the samples so far
+```
+
+| Kind | Terminals | Values |
+|---|---|---|
+| R, C, L | a b | R; C, v0; L, i0 |
+| V, I | + − | dc value; waveform by `wave()` |
+| D | anode cathode | Is, N |
+| NPN, PNP | c b e | Is, BF, BR, VAF (0: none) |
+| NMOS, PMOS | d g s (body on s) | VTO, KP, LAMBDA |
+| E, G | + − c+ c− | gain; gm |
+| F, H | + − (`ctrl=` element with a branch) | gain; r |
+| OPAMP | in+ in− out | A (0: ideal) |
+| SW | + − c+ c− | Ron, Roff, Vt, Vh (smooth over Vt ± Vh) |
+
+Waveforms: `PULSE` (v1 v2 td tr tf pw per), `SIN` (vo va freq td theta
+phase), `PWL` (t0 v0 t1 v1 ...). Currents are positive into the element at
+the terminal asked for, so a source that supplies reads negative, as in
+SPICE. Problems raise `SolveError` naming the node or element (also
+`c.error()`).
+
+How it solves:
+
+- Each element stamps into a pattern fixed when the circuit is prepared;
+  ground entries go to one spare slot, so stamping has no branches.
+- The LU orders columns once by minimum degree and pivots on every
+  factorization, keeping the diagonal when it is within 1000× of the best.
+- Newton iterations follow SPICE: junction and MOSFET voltage limiting, and
+  convergence when node voltages (reltol 1e-3, 1 µV) and every device current
+  against its linearization have settled. An operating point that fails
+  tries gmin stepping, then source stepping.
+- Transients use the trapezoidal rule, with backward Euler for the step after
+  each source corner (breakpoint). The step size follows the truncation error
+  of capacitor voltages and inductor currents; a failed step is repeated
+  smaller. Outputs land exactly on the requested times.
+- Device models (diode, Ebers–Moll with Early effect, Shichman–Hodges level 1)
+  use the firmware's float32 `expf`, `logf` and `sinf`: about seven digits,
+  and no double transcendental functions in flash. Everything else is double.
+
+Memory: the model block (28 bytes per element plus 4 per value), then on the
+first analysis the pattern and order, the vectors and device states, the LU
+(grown by half whenever it asks) and the output (points × probes floats). A
+50-node, 83-element transient with 4 probes of 401 points uses 19.9 KB, 6.4 KB
+of it the output. Nothing is allocated while stepping.
+
 ## Tests
 
 `tests/run-tests.sh` builds the kernel with strict warnings and runs it on the
@@ -262,6 +329,15 @@ Every solved model must also satisfy two invariants:
 - each element's exact deflection curve and slope meet the solved node
   values at its far end.
 
+The circuit tests (`tests/test_circuit.c`) check the LU against dense
+elimination with partial pivoting on matrices with zero diagonals, and
+circuits against closed forms: dividers, every controlled source, ideal and
+finite-gain op-amps, a diode by bisection (also swept), BJT and MOSFET bias in
+both polarities and both MOSFET regions, a switch, RC, RL and LC transients,
+a filtered sine, a half-wave rectifier, a CMOS inverter, a 50-node ladder that
+must grow its LU block, running in slices and cancelling, and every error
+path. `simulator/test_picosolve_circuit.py` drives the same through Python.
+
 The tests are also run under AddressSanitizer and UBSan.
 
 ## Next
@@ -273,6 +349,7 @@ The tests are also run under AddressSanitizer and UBSan.
    members, axial only) and inclined supports next.
 4. Formulas as solver inputs: load functions w(x) and other user-written
    data for the suites, through `Formula`.
-5. Later solvers: banded/dense LU with pivoting, real and complex (circuits);
-   matrix-free preconditioned CG (2-D thermal grids); time-stepping, Newton
-   and eigen drivers.
+5. ~~Sparse LU with pivoting for circuits~~: done (`ps.Circuit`: operating
+   point, DC sweep, transient). AC analysis (complex LU) next.
+6. Later solvers: matrix-free preconditioned CG (2-D thermal grids) and
+   eigen drivers.

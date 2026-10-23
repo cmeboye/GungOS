@@ -4,6 +4,10 @@ Every GungOS screen is built from the same few parts, so a key or a box means
 the same thing everywhere. New screens use these parts instead of drawing
 their own.
 
+For PicoLAB's function keys, input/preview focus and the audit of existing
+outliers, follow [PicoLAB keys](Keys.md). That guide defines the target for
+new apps and tracks migration of current controls.
+
 ## Keys on every screen
 
 | Key | Action |

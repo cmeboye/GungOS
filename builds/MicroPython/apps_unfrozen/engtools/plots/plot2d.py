@@ -96,36 +96,8 @@ def finite(value):
 def expression_code(text, variables):
     """Restrict eval to arithmetic, known functions and named plot variables."""
     text = text.strip().replace('^', '**')
-    if not text or len(text) > 180:
-        raise ValueError('Use 1 to 180 characters')
-    i = 0
-    while i < len(text):
-        c = text[i]
-        if c.isdigit() or c == '.':
-            end = i + 1
-            while end < len(text) and (text[end].isdigit() or text[end] == '.'):
-                end += 1
-            if end < len(text) and text[end] in 'eE':
-                end += 1
-                if end < len(text) and text[end] in '+-':
-                    end += 1
-                while end < len(text) and text[end].isdigit():
-                    end += 1
-            float(text[i:end])
-            i = end
-        elif c.isalpha() or c == '_':
-            end = i + 1
-            while end < len(text) and ((text[end].isalpha() or text[end].isdigit()) or text[end] == '_'):
-                end += 1
-            name = text[i:end]
-            if name.startswith('_') or name not in SAFE and name not in variables:
-                raise ValueError('Unknown name: ' + name)
-            i = end
-        elif c in ' +-*/%(),\t':
-            i += 1
-        else:
-            raise ValueError('Unsupported character: ' + c)
-    return compile(text, '<graph>', 'eval')
+    from .arithmetic import compile_expression
+    return compile_expression(text, SAFE, variables, 180, '<graph>')
 
 
 class Expression:
@@ -486,7 +458,9 @@ class GraphApp:
             for _ in range(12):
                 if value > upper: break
                 p = self.pixel(value,0) if vertical else self.pixel(0,value)
-                if self.grid:
+                # redraw() laid the grid down before the series. The final
+                # labels pass must preserve curves coincident with gridlines.
+                if self.grid and not labels:
                     if vertical: self.line((p[0],self.top),(p[0],self.bottom),self.palette.GRID)
                     else: self.line((self.left,p[1]),(self.right,p[1]),self.palette.GRID)
                 if labels and abs(value) > step*0.01:
@@ -1071,7 +1045,10 @@ class GraphApp:
                         self.begin_edit(('number',target),'',label,button)
                 elif self.state=='expressions' and self.row<len(self.items):
                     if button==BUTTON_SPACE: self.items[self.row].visible=not self.items[self.row].visible; self.dirty=True
-                    elif button in (BUTTON_D,BUTTON_DELETE,BUTTON_BACKSPACE,inp._key_back) and not self.data_only: self.items.pop(self.row); self.row=min(self.row,len(self.items)); self.dirty=True
+                    elif button in (BUTTON_D,BUTTON_DELETE,BUTTON_BACKSPACE,inp._key_back) and not self.data_only:
+                        if len(self.items) <= getattr(self, 'minimum_items', 0):
+                            raise ValueError('Keep at least one layer; edit it or choose a preset')
+                        self.items.pop(self.row); self.row=min(self.row,len(self.items)); self.dirty=True
             except Exception as exc:
                 self.message=str(exc); self.error=True; self.dirty=True
         if self.state=='plot':

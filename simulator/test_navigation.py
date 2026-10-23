@@ -57,19 +57,18 @@ key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);assert vm.current_view.name=='app_PicoLA
 import PicoLAB
 vm.draw.screenshot('/private/tmp/gungos-nav-lab.bmp')
 key(k.BUTTON_BACK);key(k.BUTTON_DELETE);assert vm.current_view.name=='app_PicoLAB' and PicoLAB._page=='root'
-# Standalone Graph returns to the same lab folder and follows the system accent.
+# Unified Grapher returns to its folder and follows the system accent.
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
 assert PicoLAB._page=='tools'
-key(k.BUTTON_CENTER);assert vm.current_view.name=='app_Graph'
-from engtools.plots import plot2d
-assert plot2d._app.palette.ACCENT==vm.selected_color
-key(k.BUTTON_ESCAPE);assert plot2d._app.state=='menu'
-key(k.BUTTON_ESCAPE);assert vm.current_view.name=='app_PicoLAB' and PicoLAB._selected==0
-key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);assert vm.current_view.name=='app_Graph3D'
-from engtools.plots import plot3d
-assert plot3d.C_ACCENT==vm.selected_color
-vm.draw.screenshot('/private/tmp/gungos-nav-graph3d.bmp')
-key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE);assert vm.current_view.name=='app_PicoLAB' and PicoLAB._selected==1
+key(k.BUTTON_CENTER);assert vm.current_view.name=='eng_grapher'
+from engtools.plots import runtime
+assert runtime._active.controller.app.palette.ACCENT==vm.selected_color
+key(k.BUTTON_F2)
+assert runtime._active.mode=='3d'
+assert runtime._active.engine.C_ACCENT==vm.selected_color
+vm.draw.screenshot('/private/tmp/gungos-nav-grapher.bmp')
+key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE)
+assert vm.current_view.name=='app_PicoLAB' and PicoLAB._selected==0
 key(k.BUTTON_ESCAPE);assert PicoLAB._page=='root'
 key(k.BUTTON_ESCAPE);assert vm.current_view.name=='desktop_view'
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);assert vm.current_view.name=='games'

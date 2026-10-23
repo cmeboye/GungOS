@@ -50,46 +50,43 @@ key(k.BUTTON_ESCAPE);assert lab._page=='gallery'
 key(k.BUTTON_ESCAPE);assert lab._page=='checks' and lab._selected==1
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==0
 pick('Tools');path('tools');shot('tools')
-assert [r[1] for r in lab.MENUS['tools']]==['Graph','Graph3D','Scientific calculator','PicoCAD','UnitConverter']
+assert [r[1] for r in lab.MENUS['tools']]==['Grapher','Scientific calculator','PicoCAD','UnitConverter']
 pick('UnitConverter');assert vm.current_view.name=='unitconvert_view'
 path('tools','UnitConverter')
-key(k.BUTTON_CENTER)  # Length
+key(k.BUTTON_F1);key(k.BUTTON_CENTER)  # Length
 key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE)
-assert lab._page=='tools' and lab._selected==4;path('tools')
+assert lab._page=='tools' and lab._selected==3;path('tools')
 pick('Scientific calculator');assert vm.current_view.name=='eng_calculator'
 path('tools','Scientific calculator');shot('calculator')
 from engtools.calculator import app as calc
 key(k.BUTTON_F2);assert calc._active.page=='modes';path('tools','Scientific calculator')
 key(k.BUTTON_ESCAPE);exit_child()
-assert lab._page=='tools' and lab._selected==2;path('tools')
-# Graph's own menus, drawing progress and inline editor retain the route.
-pick('Graph');assert vm.current_view.name=='app_Graph';path('tools','Graph')
-from engtools.plots import plot2d
+assert lab._page=='tools' and lab._selected==1;path('tools')
+# The unified workspace keeps the route through mode changes and editors.
+pick('Grapher');assert vm.current_view.name=='eng_grapher';path('tools','Grapher')
+from engtools.plots import runtime
 for _ in range(2000):
     key(k.BUTTON_NONE)
-    if plot2d._app.completed:break
+    if runtime._active.controller.app.completed:break
 key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)
-# Editing happens in place under the shared title bar: no on-screen keyboard.
-assert plot2d._app.state=='input' and plot2d._app.edit is not None
-assert not hasattr(plot2d._app,'_keyboard')
-path('tools','Graph');shot('graph-editor')
-key(k.BUTTON_2);path('tools','Graph')
-exit_child();assert lab._page=='tools' and lab._selected==0;path('tools')
-assert breadcrumbs.current(vm,'app_Graph') is None
-pick('Graph3D');assert vm.current_view.name=='app_Graph3D';path('tools','Graph3D')
-from engtools.plots import plot3d
+assert runtime._active.controller.app.state=='input'
+assert runtime._active.controller.app.edit is not None
+path('tools','Grapher');shot('grapher-editor')
+key(k.BUTTON_2);path('tools','Grapher')
+key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE);key(k.BUTTON_F2)
 for _ in range(2000):
     key(k.BUTTON_NONE)
-    if plot3d._state==plot3d.ST_PLOT and not plot3d._dirty:break
+    engine=runtime._active.engine
+    if engine._state==engine.ST_PLOT and not engine._dirty:break
 key(k.BUTTON_CENTER)
-assert plot3d._state==plot3d.ST_INPUT and plot3d._edit is not None,(plot3d._state,vm.current_view.name)
-path('tools','Graph3D');shot('graph3d-editor')
-exit_child();assert lab._page=='tools' and lab._selected==1
-assert plot3d._edit is None and breadcrumbs.current(vm,'app_Graph3D') is None
+assert engine._state==engine.ST_INPUT and engine._edit is not None
+path('tools','Grapher');shot('grapher-3d-editor')
+exit_child();assert lab._page=='tools' and lab._selected==0
+assert engine._edit is None and breadcrumbs.current(vm,'eng_grapher') is None
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==1
 pick('Modules');path('modules');shot('modules')
 assert [r[1] for r in lab.MENUS['modules']]==['Structural','Dynamics','Thermal','Electrical','Fluids']
-for label in ('Dynamics','Electrical','Fluids'):
+for label in ('Dynamics','Fluids'):
     pick(label);path('modules',label.lower())
     assert lab.MENUS[lab._page]==()
     page=lab._page
@@ -97,13 +94,39 @@ for label in ('Dynamics','Electrical','Fluids'):
     assert lab._page==page and vm.current_view.name=='lab'
     shot(label.lower())
     key(k.BUTTON_ESCAPE);assert lab._page=='modules'
+# Electrical holds PicoSpice, opened with its breadcrumb; ESC returns.
+pick('Electrical');path('modules','electrical')
+assert [r[1] for r in lab.MENUS['electrical']]==['PicoSpice']
+pick('PicoSpice');assert vm.current_view.name=='spice_view';path('modules','electrical','PicoSpice')
+shot('picospice')
+exit_child();assert lab._page=='electrical' and lab._selected==0
+key(k.BUTTON_ESCAPE);assert lab._page=='modules'
 pick('Structural');path('modules','structural');shot('structural')
-pick('Beam view');assert vm.current_view.name=='beam_lab';path('modules','structural','Beam view')
+pick('Section Properties');assert vm.current_view.name=='sectionprops_view'
+path('modules','structural','Section Properties')
+from engtools.sectionprops import app as sectionprops
+assert sectionprops._active.solution['A'] > 0
+key(k.BUTTON_F9);assert sectionprops._active.help_view.opened
+key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE)
+assert lab._page=='structural' and lab._selected==5
+pick('Buckling');assert vm.current_view.name=='buckling_view';path('modules','structural','Buckling')
+key(k.BUTTON_F6)
+from engtools.buckling import app as buckling
+assert buckling._active.solution is not None
+key(k.BUTTON_F9);assert buckling._active.help_view.opened
+key(k.BUTTON_ESCAPE)
+key(k.BUTTON_ESCAPE);assert lab._page=='structural' and lab._selected==4
+pick('StressStrain');assert vm.current_view.name=='stressstrain_view';path('modules','structural','StressStrain')
+key(k.BUTTON_F6)
+from engtools.stressstrain import app as stressstrain
+assert stressstrain._active.solution is not None
+key(k.BUTTON_ESCAPE);assert lab._page=='structural' and lab._selected==3
+pick('BeamView');assert vm.current_view.name=='beam_lab';path('modules','structural','BeamView')
 from engtools.beamlab import app as beam
 key(k.BUTTON_CENTER);assert beam._active.solution is None
 key(k.BUTTON_F6);assert beam._active.solution is not None
 shot('beam-view')
-key(k.BUTTON_F9);assert beam._active.help_open;path('modules','structural','Beam view')
+key(k.BUTTON_F9);assert beam._active.help_open;path('modules','structural','BeamView')
 shot('beam-help')
 key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE)
 assert lab._page=='structural' and lab._selected==0
@@ -120,12 +143,16 @@ assert vm.current_view.name=='parent' and not breadcrumbs._paths
 assert lab._page=='root' and not lab._resume and not lab._suspended
 # Full and legacy simulator routes resolve through the new folders.
 for route in ('PicoLAB/checks/Numerics check','PicoLAB/checks/Plot previews',
-              'PicoLAB/tools/Graph','PicoLAB/tools/Graph3D','PicoLAB/tools/Scientific calculator','PicoLAB/tools/UnitConverter',
-              'PicoLAB/modules/structural/Beam view','PicoLAB/modules/thermal',
+              'PicoLAB/tools/Grapher','PicoLAB/tools/Graph','PicoLAB/tools/Graph3D','PicoLAB/tools/Scientific calculator','PicoLAB/tools/UnitConverter',
+              'PicoLAB/modules/structural/BeamView','PicoLAB/modules/thermal',
+              'PicoLAB/modules/structural/StressStrain',
+              'PicoLAB/modules/structural/Buckling',
+              'PicoLAB/modules/structural/Section Properties',
+              'PicoLAB/modules/electrical/PicoSpice',
               'Apps/PicoLAB/Graph','PicoLAB/Beam Lab'):
     sim_runtime._keys=[];sim_runtime.request_open(route);assert sim_runtime._keys
 try:sim_runtime.request_open('PicoLAB/modules/structural/Missing')
 except sim_runtime.LaunchTargetError:pass
 else:raise AssertionError('Invalid nested path accepted')
-print('PASS: Checks/Tools/Modules hierarchy, planned disciplines, selection restoration, Beam view rename, native keyboard bounds and logo breadcrumbs throughout')
+print('PASS: Checks/Tools/Modules hierarchy, planned disciplines, selection restoration, BeamView rename, native keyboard bounds and logo breadcrumbs throughout')
 print('PASS: managed path inheritance, child cleanup, Home cleanup and full/legacy simulator routes')

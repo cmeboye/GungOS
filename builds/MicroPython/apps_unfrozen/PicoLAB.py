@@ -10,19 +10,22 @@ MENUS = {
              ('modules','Modules','Engineering disciplines')),
     'checks': (('bench','Numerics check','Accuracy and timings for the math core'),
                ('gallery','Plot previews','Shared 2D and 3D viewer examples')),
-    'tools': (('Graph','Graph','2D expressions, curves and shading'),
-              ('Graph3D','Graph3D','3D surfaces and implicit expressions'),
+    'tools': (('grapher','Grapher','2D / 3D expressions, curves and surfaces'),
               ('calculator','Scientific calculator','Expressions, statistics, solver and matrices'),
               ('picocad','PicoCAD','Analytic primitives and Boolean part previews'),
               ('unitconvert','UnitConverter','Search everyday and engineering units')),
     'modules': (('structural','Structural','Beams, frames, sections and stress'),
                 ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','Heat conduction and temperature fields'),
-                ('electrical','Electrical','No tools yet'),('fluids','Fluids','No tools yet')),
-    'structural': (('beam','Beam view','Supports, loads, sections and diagrams'),
+                ('electrical','Electrical','PicoSpice circuit simulator'),('fluids','Fluids','No tools yet')),
+    'structural': (('beam','BeamView','Supports, loads, sections and diagrams'),
                    ('discs','Shrink fit','Rotating discs, thick cylinders, press fits'),
-                   ('mohr','Mohr circle','2D/3D stress, element rotation, principal')),
+                   ('mohr','Mohr circle','2D/3D stress, element rotation, principal'),
+                   ('stressstrain','StressStrain','Section loads and stress / strain conversion'),
+                   ('buckling','Buckling','Euler columns, slenderness and yield checks'),
+                   ('sectionprops','Section Properties','Cross-sections, centroids, inertias and materials')),
     'thermal': (('heat2d','Heat transfer 2D','Steady and transient conduction in a plate'),),
-    'dynamics': (), 'electrical': (), 'fluids': (),
+    'electrical': (('spice','PicoSpice','Circuits: operating point, DC sweep, transient'),),
+    'dynamics': (), 'fluids': (),
 }
 PARENTS = {'checks':'root','tools':'root','modules':'root','structural':'modules',
            'dynamics':'modules','thermal':'modules','electrical':'modules','fluids':'modules',
@@ -121,21 +124,38 @@ def _launch(view_manager,target):
     global _resume,_error,_dirty
     from engtools.ui import breadcrumbs
     before=view_manager.current_view
-    name={'Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
-          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view','heat2d':'thermal_view',
-          'unitconvert':'unitconvert_view'}[target]
-    path={'beam':('modules','structural','Beam view'),'mohr':('modules','structural','Mohr circle'),
+    name={'grapher':'eng_grapher','Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
+          'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view','heat2d':'thermal_view','spice':'spice_view',
+          'unitconvert':'unitconvert_view','stressstrain':'stressstrain_view','buckling':'buckling_view',
+          'sectionprops':'sectionprops_view'}[target]
+    path={'beam':('modules','structural','BeamView'),'mohr':('modules','structural','Mohr circle'),
           'discs':('modules','structural','Shrink fit'),'heat2d':('modules','thermal','Heat transfer 2D'),
-          'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD'),
-          'unitconvert':('tools','UnitConverter')}.get(target,('tools',target))
+          'spice':('modules','electrical','PicoSpice'),
+          'grapher':('tools','Grapher'), 'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD'),
+          'unitconvert':('tools','UnitConverter'),
+          'stressstrain':('modules','structural','StressStrain'),
+          'buckling':('modules','structural','Buckling'),
+          'sectionprops':('modules','structural','Section Properties')}.get(target,('tools',target))
     breadcrumbs.bind(view_manager,path,name)
     _resume=True
     try:
-        if target in ('Graph','Graph3D'):
+        if target == 'grapher':
+            from engtools.plots import grapher
+            grapher.show(view_manager)
+        elif target in ('Graph','Graph3D'):
             from picoware.applications.library import launch
             launch(view_manager,target)
         elif target=='calculator':
             from engtools.calculator import app
+            app.show(view_manager)
+        elif target=='sectionprops':
+            from engtools.sectionprops import app
+            app.show(view_manager)
+        elif target=='buckling':
+            from engtools.buckling import app
+            app.show(view_manager)
+        elif target=='stressstrain':
+            from engtools.stressstrain import app
             app.show(view_manager)
         elif target=='unitconvert':
             from engtools.unitconvert import app
@@ -151,6 +171,9 @@ def _launch(view_manager,target):
             app.show(view_manager)
         elif target=='heat2d':
             from engtools.thermal import app
+            app.show(view_manager)
+        elif target=='spice':
+            from engtools.spice import app
             app.show(view_manager)
         else:
             from engtools.beamlab import app

@@ -49,6 +49,8 @@
 
 MP_DEFINE_EXCEPTION(SolveError, ValueError)
 
+extern const mp_obj_type_t picosolve_circuit_type; /* mp/circuit_mp.c */
+
 #define PRECISION_AUTO (-1)
 /* Average skyline column height from which float32 pays off: below it the
  * refinement vectors outweigh the halved matrix. Calibrated on the device. */
@@ -1053,6 +1055,7 @@ static const mp_rom_map_elem_t picosolve_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_Beam), MP_ROM_PTR(&picosolve_beam_type)},
     {MP_ROM_QSTR(MP_QSTR_Frame), MP_ROM_PTR(&picosolve_frame_type)},
     {MP_ROM_QSTR(MP_QSTR_Formula), MP_ROM_PTR(&picosolve_formula_type)},
+    {MP_ROM_QSTR(MP_QSTR_Circuit), MP_ROM_PTR(&picosolve_circuit_type)},
     {MP_ROM_QSTR(MP_QSTR_SolveError), MP_ROM_PTR(&mp_type_SolveError)},
     {MP_ROM_QSTR(MP_QSTR_UY), MP_ROM_INT(PS_UY)},
     {MP_ROM_QSTR(MP_QSTR_RZ), MP_ROM_INT(PS_RZ)},

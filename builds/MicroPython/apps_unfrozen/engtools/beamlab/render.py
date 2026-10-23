@@ -1,4 +1,4 @@
-"""Beam Lab drawing: the structure sketch, cross-sections, property lists,
+"""BeamView drawing: the structure sketch, cross-sections, property lists,
 diagrams and dialogs. Functions draw into the back buffer; the app swaps
 once per frame.
 """
@@ -21,8 +21,8 @@ CASE_COLORS = (None, theme.AMBER, 0xF81F, 0x07E0, 0xFFE0, 0xA51F)
 # more room and lists three properties at a time.
 PREVIEW_RECT = (8, 43, 304, 142)
 PROPERTIES_TOP = 191
-MODEL_PREVIEW = (8, 43, 304, 184)
-MODEL_BOX = (35, 104, 285, 186)  # the structure is fitted and centred here
+MODEL_PREVIEW = (8, 23, 304, 204)
+MODEL_BOX = (35, 84, 285, 186)  # the structure is fitted and centred here
 MODEL_PROPERTIES_TOP = 230
 MODEL_TAB_HEIGHT = 14
 MODEL_ROW_HEIGHT = 12
@@ -367,79 +367,20 @@ def summary_box(draw, p, lines, bad, rect):
 # ---------------------------------------------------------------- cross-sections
 
 def section_parts(shape, dims):
-    """Rectangles (x, y, w, h, part) in metres from the top left, or circles
-    ('circle', radius, part) about the centre; part 'hole' is cut out."""
-    if shape == 'Rectangle':
-        return [(0, 0, dims['b'], dims['h'], 'all')], dims['b'], dims['h']
-    if shape == 'I-section':
-        h, b, tw, tf = dims['h'], dims['b'], dims['tw'], dims['tf']
-        return [(0, 0, b, tf, 'tf'), (0, h - tf, b, tf, 'tf'), ((b - tw) / 2, tf, tw, h - 2 * tf, 'tw')], b, h
-    if shape == 'T-section':
-        h, b, tw, tf = dims['h'], dims['b'], dims['tw'], dims['tf']
-        return [(0, 0, b, tf, 'tf'), ((b - tw) / 2, tf, tw, h - tf, 'tw')], b, h
-    if shape == 'Hollow rect':
-        h, b, t = dims['h'], dims['b'], dims['t']
-        return [(0, 0, b, h, 't'), (t, t, b - 2 * t, h - 2 * t, 'hole')], b, h
-    if shape == 'Circle':
-        return [('circle', dims['d'] / 2, 'all')], dims['d'], dims['d']
-    if shape == 'Tube':
-        return [('circle', dims['d'] / 2, 't'), ('circle', dims['d'] / 2 - dims['t'], 'hole')], dims['d'], dims['d']
-    return [], 0, 0
+    from engtools.ui.section import section_parts as parts
+    return parts(shape, dims)
 
 
 def cross_section(draw, p, section, field, box, border=True):
-    """The section to scale in box, the size being edited highlighted."""
-    left, top, right, bottom = box
-    if border:draw._rectangle(left, top, right - left, bottom - top, p.GRID)
-    shape = section['shape']
-    if shape == 'Direct':
-        centre_text(draw, (left + right) // 2, (top + bottom) // 2 - 8, 'Direct values:', p.MUTED, XS, left, right)
-        centre_text(draw, (left + right) // 2, (top + bottom) // 2 + 2, 'no shape to draw', p.MUTED, XS, left, right)
-        return
-    try:
-        bm.properties(shape, section['dims'])
-    except ValueError as exc:
-        for i, line in enumerate(wrap(str(exc), (right - left) // 6 - 1)[:5]):
-            text(draw, left + 4, top + 6 + 10 * i, line, p.ERROR)
-        return
-    parts, width, height = section_parts(shape, section['dims'])
-    room_w, room_h = right - left - 34, bottom - top - 30
-    scale = min(room_w / width, room_h / height)
-    w_px, h_px = width * scale, height * scale
-    ox = left + 22 + (room_w - w_px) / 2
-    oy = top + 8 + (room_h - h_px) / 2
-    base = mix(p.BG, p.TEXT, 2, 5)
-    part = field[4:] if field and field.startswith('dim:') else None
-    for item in parts:
-        name = item[-1]
-        color = p.BG if name == 'hole' else (p.ACCENT if part == name else base)
-        if item[0] == 'circle':
-            draw._fill_circle(int(ox + w_px / 2), int(oy + h_px / 2), max(1, int(item[1] * scale + 0.5)), color)
-        else:
-            x, y, w, h = item[:4]
-            draw._fill_rectangle(int(ox + x * scale + 0.5), int(oy + y * scale + 0.5),
-                                 max(2, int(w * scale + 0.5)), max(2, int(h * scale + 0.5)), color)
-    # Neutral axis through the centroid.
-    centroid = bm.centroid_from_top(shape, section['dims'])
-    ny = int(oy + (centroid if centroid is not None else height / 2) * scale)
-    for x in range(int(ox) - 6, int(ox + w_px) + 7, 4):
-        draw._line(x, ny, x + 1, ny, theme.AMBER)
-    # Dimension lines: depth on the left, width (or diameter) below.
-    depth_color = p.ACCENT if part in ('h', 'd') else p.MUTED
-    width_color = p.ACCENT if part in ('b', 'd') else p.MUTED
-    dx = int(ox) - 8
-    draw._line(dx, int(oy), dx, int(oy + h_px), depth_color)
-    draw._line(dx - 2, int(oy), dx + 2, int(oy), depth_color)
-    draw._line(dx - 2, int(oy + h_px), dx + 2, int(oy + h_px), depth_color)
-    label = units.number(units.from_si(height, 'mm'), 3)[:5]
-    for i, ch in enumerate(label):
-        text(draw, left + 3, int(oy + h_px / 2) - len(label) * 4 + 8 * i, ch, depth_color)
-    dy = int(oy + h_px) + 6
-    draw._line(int(ox), dy, int(ox + w_px), dy, width_color)
-    draw._line(int(ox), dy - 2, int(ox), dy + 2, width_color)
-    draw._line(int(ox + w_px), dy - 2, int(ox + w_px), dy + 2, width_color)
-    centre_text(draw, ox + w_px / 2, dy + 3, units.number(units.from_si(width, 'mm'), 3) + ' mm', width_color, XS,
-                left + 2, right - 2)
+    from engtools.ui.section import cross_section as paint
+    return paint(draw, p, section, field, box, border, validate=bm.properties,
+                 centroid_from_top=bm.centroid_from_top)
+
+
+def section_preview(draw, p, section, field, rect, details, footer):
+    from engtools.ui.section import preview
+    return preview(draw, p, section, field, rect, details, footer, validate=bm.properties,
+                   centroid_from_top=bm.centroid_from_top)
 
 
 def section_panel(draw, p, model, section, x, top):

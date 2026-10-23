@@ -1,19 +1,35 @@
 # PicoLAB engineering tools
 
+Before building a new tool or changing controls, read
+[PicoLAB keys](../../../../guides/Keys.md). It defines the shared function keys,
+input/preview focus and navigation, and records existing outliers awaiting
+migration. Use it with [Screens and controls](../../../../guides/UI.md).
+
+`sectionprops/` is the standalone Section Properties first pass: live shape
+and material editing with the shared BeamView preview, geometric results,
+saved sections and SI reports. Other section-using apps are not connected yet.
+See [SectionProperties.md](../../../../guides/SectionProperties.md).
+
 `PicoLAB.py` provides a plotting preview gallery, a native Numerics checks page,
-and a keyboard-driven scientific calculator with six numerical modes. Checks contains numerics validation and plot previews. Tools contains Graph,
-Graph3D, the scientific calculator, PicoCAD and UnitConverter. UnitConverter
+and a keyboard-driven scientific calculator with six numerical modes. Checks contains numerics validation and plot previews. Tools contains Grapher,
+the scientific calculator, PicoCAD and UnitConverter. UnitConverter
 (`unitconvert/`) provides searchable offline everyday and engineering units;
 see [UnitConverter.md](../../../../guides/UnitConverter.md).
-Modules contains Structural → Beam view
+Modules contains Structural → BeamView
+and StressStrain (`stressstrain/`, see [StressStrain.md](../../../../guides/StressStrain.md)),
+plus Buckling (`buckling/`, see [Buckling.md](../../../../guides/Buckling.md)),
 Thermal → Heat transfer 2D (`thermal/`, see [HeatTransfer.md](../../../../guides/HeatTransfer.md)),
-and empty planned folders for Dynamics, Electrical and Fluids. See
+Electrical → PicoSpice (`spice/`, see [PicoSpice.md](../../../../guides/PicoSpice.md)),
+and empty planned folders for Dynamics and Fluids. See
 [ScientificCalculator.md](../../../../guides/ScientificCalculator.md) for
 its input rules and current mode/precision limits.
 Statistics now provides one-/two-variable data, frequencies, descriptive
 statistics and linear fits through the shared `numerics/statistics.py` module.
 See [Statistics.md](../../../../guides/Statistics.md).
-`plots/plot2d.py` and `plot3d.py` now
+`plots/grapher.py` provides the unified 2D/3D workspace. The versioned
+`engtools.plots.show` API separates sources, layers, axes and view settings;
+see [Grapher.md](../../../../guides/Grapher.md). It is tested with isolated
+fixtures before migrating existing apps. `plots/plot2d.py` and `plot3d.py`
 contain the shared viewers used by both PicoLAB and the standalone
 Graph/Graph3D entry apps. `ui/theme.py` owns their common styling.
 
@@ -22,7 +38,7 @@ PicoCalc firmware builds. `numerics/backend.py` checks its capabilities and
 guards QR workspace; `numerics/bench.py` tests known answers and reports check
 timings/allocation deltas. See [the ulab guide](../../../../src/MicroPython/ulab/README.md).
 
-Beam view, formerly Beam Lab (`beamlab/`) is the first complete engineering tool; see
+BeamView, formerly Beam Lab (`beamlab/`) is the first complete engineering tool; see
 [BeamLab.md](../../../../guides/BeamLab.md). It implements the shared
 `units.py` (fixed engineering SI display units), `cases.py` (verified JSON
 cases, streamed CSV) and `ui/forms.py` (single-line input). `jobs.py` remains

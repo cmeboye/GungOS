@@ -1,6 +1,6 @@
-# Beam view
+# BeamView
 
-Open **PicoLAB → Modules → Structural → Beam view**. Choose a beam/frame
+Open **PicoLAB → Modules → Structural → BeamView**. Choose a beam/frame
 template, **Triangular bridge**, **Blank structure**, or a saved model.
 Only **F6 Evaluate** runs the built-in `picosolve` solver. Editing redraws
 geometry and clears the old solution; opening a file and undoing also leave
@@ -9,8 +9,9 @@ Navigation preserves an existing solution.
 
 ## Layout and keys
 
-The preview remains at `(8,43)`, **304 × 184** pixels, above the scrolling
-properties box starting at `(8,230)`. Its centered tab labels use the 5×8
+The model preview starts at `(8,23)`, **304 × 204** pixels, directly below
+the PicoLAB breadcrumb. The redundant app/model title strip is omitted on
+this page. The scrolling properties box starts at `(8,230)`. Its centered tab labels use the 5×8
 font in a 14-pixel strip; 12-pixel property rows use the same font, fitting
 a node/member heading and all three fields without scrolling. Node IDs J1… and member IDs L1… are
 shown on the sketch; with several sections, each member ID is followed by

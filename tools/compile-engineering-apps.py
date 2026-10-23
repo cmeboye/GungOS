@@ -32,7 +32,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     version = runpy.run_path(str(root/'src/MicroPython/picoware/system/features.py'))['FIRMWARE_VERSION']
     source = root / 'builds/MicroPython/apps_unfrozen'
-    files = [source / name for name in ('Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py')]
+    files = [source / name for name in ('Grapher.py', 'Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py')]
     files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','misc/screensavers/Lenia.py','misc/Benchmark.py','games/Tetris.py')]
     files += [path for path in sorted((source / 'engtools').rglob('*.py')) if 'tools' not in path.relative_to(source).parts]
     files += sorted((source / 'desktopapps').rglob('*.py'))
@@ -86,7 +86,7 @@ def main():
                 archive.write(staging / relative, 'picoware/apps/' + relative.as_posix())
             archive.writestr('INSTALL.txt',
                              'Copy/merge the picoware folder onto the root of your SD card.\n'
-                             'Graph, Graph3D and PicoLAB require the complete engtools folder.\n'
+                             'Grapher, Graph, Graph3D and PicoLAB require the complete engtools folder.\n'
                              f'GungOS v{version}: Apps > PicoDESK > Eggcel/PicoWord/PicoPaint. Requires the updated UF2.\n'
                              'Desktop apps live in desktopapps, separate from engineering engtools.\n'
                              'Eggcel workbooks are saved explicitly under picoware/documents/eggcel.\n'

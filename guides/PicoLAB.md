@@ -1,5 +1,9 @@
 # PicoLAB
 
+New apps follow [PicoLAB keys](Keys.md) for function keys and input/preview
+focus. It also audits existing outliers; the app guides linked below describe
+the controls currently implemented.
+
 Open Apps → PicoLAB. The launcher is organised as:
 
 ```text
@@ -8,25 +12,28 @@ PicoLAB
 │   ├── Numerics check
 │   └── Plot previews
 ├── Tools
-│   ├── Graph
-│   ├── Graph3D
+│   ├── Grapher
 │   ├── Scientific calculator
 │   ├── PicoCAD
 │   └── UnitConverter
 └── Modules
     ├── Structural
-    │   ├── Beam view
+    │   ├── BeamView
     │   ├── Shrink fit
-    │   └── Mohr circle
+    │   ├── Mohr circle
+    │   ├── StressStrain
+    │   ├── Buckling
+    │   └── Section Properties
     ├── Dynamics
     ├── Thermal
     │   └── Heat transfer 2D
     ├── Electrical
+    │   └── PicoSpice
     └── Fluids
 ```
 
-Dynamics, Electrical and Fluids are empty folders labelled as planned.
-Beam view is the former Beam Lab; its saved models, solver, controls and CSV
+Dynamics and Fluids are empty folders labelled as planned.
+BeamView is the former Beam Lab; its saved models, solver, controls and CSV
 exports keep their existing formats and locations.
 
 Up/Down chooses an entry, Enter opens it, and Esc returns one level. Returning
@@ -35,24 +42,43 @@ PicoLAB. Home exits the full stack and clears the launcher session.
 
 The PicoLAB logo remains in the header, followed by a slash-separated path,
 for example `/ tools / Scientific calculator` or
-`/ modules / structural / Beam view`. The logo follows the system accent.
+`/ modules / structural / BeamView`. The logo follows the system accent.
 The header remains visible in tool subpages, help and graph text editors.
-The calculator and Beam view use the top 18-pixel strip; their mode bars and
-content panels remain below it. Beam view, Mohr circle, Graph and Graph3D share the same
+The calculator and BeamView use the top 18-pixel strip. BeamView's model
+preview sits directly below it, without a second app/model title bar.
+BeamView, Mohr circle and Grapher share the same
 title bar, panels, property forms, editor panel and F9 help box
 (`engtools/ui/lab.py`); values are typed in place, with no on-screen keyboard.
 
-See [PicoCAD](PicoCAD.md), [Beam view](BeamLab.md), [Shrink fit](ShrinkFit.md), [Mohr circle](MohrCircle.md), [Heat transfer 2D](HeatTransfer.md), [Scientific calculator](ScientificCalculator.md),
-[Graph](Graph.md), [Graph3D](Graph3D.md), [UnitConverter](UnitConverter.md) and [plot previews](SharedPlots.md).
+UnitConverter, StressStrain and Buckling follow BeamView's preview-above,
+tabs-below layout. Left/Right switches input sections and restores the selected
+row in each tab; Up/Down moves within the active section. Their F9 pages
+show equations first using the scientific calculator's actual mathematical
+renderer, followed by definitions and controls. This is shared SD-app UI in
+`engtools/ui/tool.py`; it requires no firmware change.
+Buckling's Section tab opens a dedicated section/material editor using the
+same preview renderer as BeamView (`engtools/ui/section.py`). Buckling's
+column preview remains 184 pixels high; BeamView's model preview is now 204.
 
-The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Graph,
-Graph3D and the complete `engtools` package together; this UI update does not
+See [PicoCAD](PicoCAD.md), [BeamView](BeamLab.md), [Shrink fit](ShrinkFit.md), [Mohr circle](MohrCircle.md), [Heat transfer 2D](HeatTransfer.md), [PicoSpice](PicoSpice.md), [Scientific calculator](ScientificCalculator.md),
+[Grapher](Grapher.md), the legacy [Graph](Graph.md) and [Graph3D](Graph3D.md) entry points, [UnitConverter](UnitConverter.md),
+[StressStrain](StressStrain.md), [Buckling](Buckling.md),
+[Section Properties](SectionProperties.md) and [plot previews](SharedPlots.md).
+
+Grapher provides one workspace with independent 2D and 3D plots: F2 switches
+modes; F3 opens its menu. Existing solver apps retain their current plots while
+the shared API is tested in isolation.
+
+The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Grapher,
+Graph, Graph3D and the complete `engtools` package together; this UI update does not
 require another UF2.
 
 For simulator shortcuts, full paths work, for example:
 
 ```sh
-builds/MicroPython/desktop/micropython -X heapsize=16M simulator/run.py --viewer --board picocalc-pico2w --network offline --audio silent --open 'Apps/PicoLAB/modules/structural/Beam view'
+builds/MicroPython/desktop/micropython -X heapsize=16M simulator/run.py --viewer --board picocalc-pico2w --network offline --audio silent --open 'Apps/PicoLAB/modules/structural/BeamView'
 ```
 
-Older simulator shortcuts such as `Apps/PicoLAB/Graph` remain aliases.
+Older simulator shortcuts such as `Apps/PicoLAB/Graph` and
+`Apps/PicoLAB/Graph3D` open the corresponding Grapher mode. Direct legacy
+entry points and their saved sessions remain available separately.

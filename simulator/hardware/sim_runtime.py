@@ -992,22 +992,28 @@ def request_open(name):
     if parts and parts[0] not in ("apps", "system", "comms", "utils"):
         raise LaunchTargetError("Menu route not found: " + str(name))
     lab_indices=None
+    lab_plot_mode=None
     if len(parts)>2 and parts[:2]==['apps','picolab']:
         # Routes are queued before boot puts the SD apps folder on sys.path.
         import sys
         if apps_source not in sys.path:sys.path.append(apps_source)
         import PicoLAB as lab
         tail=parts[2:]
-        aliases={'graph':('tools','graph'),'graph3d':('tools','graph3d'),
+        aliases={'grapher':('tools','grapher'),'graph':('tools','graph'),'graph3d':('tools','graph3d'),
                  'scientific calculator':('tools','scientific calculator'),
                  'plot previews':('checks','plot previews'),
                  'numerics checks':('checks','numerics check'),
                  'numerics check':('checks','numerics check'),
-                 'beam lab':('modules','structural','beam view'),
-                 'beam view':('modules','structural','beam view'),
+                 'beam lab':('modules','structural','beamview'),
+                 'beam view':('modules','structural','beamview'),
+                 'beamview':('modules','structural','beamview'),
                  'mohr circle':('modules','structural','mohr circle'),
                  'shrink fit':('modules','structural','shrink fit')}
         if len(tail)==1:tail=list(aliases.get(tail[0],tail))
+        if tail and tail[-1] in ('beam lab','beam view'):tail[-1]='beamview'
+        if tail and tail[-1] in ('graph','graph3d'):
+            lab_plot_mode=1 if tail[-1]=='graph' else 2
+            tail[-1]='grapher'
         page='root';lab_indices=[]
         for item in tail:
             entries=lab.MENUS.get(page,())
@@ -1037,6 +1043,10 @@ def request_open(name):
     if lab_indices is not None:
         for index in lab_indices:
             for _ in range(index):push_key(KEY_NAMES['down'])
+            push_key(KEY_NAMES['enter'])
+        if lab_plot_mode is not None:
+            push_key(KEY_NAMES['f3'])
+            for _ in range(lab_plot_mode):push_key(KEY_NAMES['down'])
             push_key(KEY_NAMES['enter'])
     elif len(parts)>2:
         for _ in range(choices.index(parts[2])):push_key(KEY_NAMES['down'])

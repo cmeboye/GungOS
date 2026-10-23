@@ -111,7 +111,8 @@ def option(index):
     key(k.BUTTON_CENTER)
 
 
-assert a.page == 'browse'
+assert a.page == 'convert'
+key(k.BUTTON_F1)
 search('length')
 assert a.page == 'convert'
 # Use only keys to choose inch -> mm and enter a fractional inch.
@@ -147,7 +148,7 @@ assert a.state['category'] == 'temperature'
 text('-1'); key(k.BUTTON_CENTER)
 assert a.error and a.edit is not None and a.state['value'] == 1
 key(k.BUTTON_ESCAPE); assert a.edit is None
-key(k.BUTTON_F9); assert vm.current_view.help
+key(k.BUTTON_F9); assert a.help_view.opened
 key(k.BUTTON_ESCAPE)
 sim_runtime.lcd_screenshot('/private/tmp/gungos-unitconvert-screen.bmp')
 # Stop / restart reads favorites from SD and keeps conversion state in-session.

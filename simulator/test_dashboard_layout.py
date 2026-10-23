@@ -27,8 +27,8 @@ key(k.BUTTON_NONE);home=desktop._dashboard
 assert INFO_RECT[1]>=16 and INFO_RECT[1]+INFO_RECT[3]<=CATEGORY_RECT[1]
 assert dashboard_logo.Y>=16 and dashboard_logo.Y+dashboard_logo.HEIGHT<=CATEGORY_RECT[1]
 assert abs(dashboard_logo.X-(INFO_RECT[0]-dashboard_logo.X-dashboard_logo.WIDTH))<=1
-assert dashboard_logo.Y==20
-assert INFO_RECT==(93,17,226,25)
+assert dashboard_logo.Y==17
+assert INFO_RECT==(139,17,180,25)
 assert WIDGET_SURFACE[2:]==(238,238)
 assert MENU_RECT[0]+MENU_RECT[2]+1==WIDGET_RECT[0]
 assert WIDGET_RECT[0]+WIDGET_RECT[2]==319
