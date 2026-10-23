@@ -185,7 +185,7 @@ assert home.widget.module is not None,home.widget.error
 home.focus='widget'; home.widget.focused=True
 import PicoLAB
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)  # Tools
-key(k.BUTTON_DOWN);key(k.BUTTON_DOWN)  # Scientific calculator
+key(k.BUTTON_DOWN)  # Scientific calculator
 key(k.BUTTON_CENTER)
 assert home.widget.context.current_view.name=='eng_calculator'
 assert len(home.widget.context.stack)==1 and vm._view_count==1

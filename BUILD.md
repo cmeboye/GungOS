@@ -1,4 +1,4 @@
-# Building GungOS v1.33
+# Building GungOS v1.34
 
 The release vendors its source dependencies. Building does not fetch from the
 network. Use the pinned sources in `vendor/`; no `git submodule update` is needed.
@@ -25,8 +25,8 @@ The script builds a matching `mpy-cross`, host picotool and the RP2350 firmware,
 compiles the shipped applications, regenerates clean SD contents and records
 checksums. Output:
 
-- `firmware/GungOS-v1.33-PicoCalc-Pico2W.uf2`
-- `sd-card/` and `GungOS-v1.33-SD.zip`
+- `firmware/GungOS-v1.34-PicoCalc-Pico2W.uf2`
+- `sd-card/` and `GungOS-v1.34-SD.zip`
 - `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
 
 Intermediate files live in `.build/` and can be deleted after building. To place

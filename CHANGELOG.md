@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## v1.34 — 2026-10-23
+
+- Expanded PicoLAB with Grapher, PicoSpice, Section Properties, StressStrain
+  and Buckling, shared tool controls and updated dashboard artwork.
+- Added PicoSolve circuit simulation with operating-point, DC sweep and
+  transient analyses.
 
 - Heat transfer 2D in PicoLAB → Modules → Thermal: conduction in a plate,
   steady or transient, with fixed-temperature, convection, heat-flux and
