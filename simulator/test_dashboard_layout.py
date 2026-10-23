@@ -84,9 +84,16 @@ assert next(row for row in snapshot(Context())['rows'] if row[0]=='SD')==('SD',N
 home.info={'board':'Raspberry Pi Pico 2 W','frequency':240,'simulator':True,
            'rows':[('Heap',0,100,100),('Flash',None,None,None),('SD',50,50,100),('PSRAM',None,None,None),('SRAM',None,None,520*1024)]}
 home.draw()
-assert fb.pixel(136,34)==vm.selected_color
-assert fb.pixel(208,34)==vm.background_color
-assert fb.pixel(280,34)==vm.selected_color and fb.pixel(304,34)==vm.background_color
+panel_x,panel_y,panel_width,_=INFO_RECT
+label_widths=[vm.draw.len(label+'100%',FONT_XTRA_SMALL)+2 for label in ('H','P','SD')]
+bar_width=(panel_width-6-4-sum(label_widths))//3
+x=panel_x+3
+for label_width,percent in zip(label_widths,(100,None,50)):
+    left=x+label_width+1
+    fill=0 if percent is None else ((bar_width-2)*percent+50)//100
+    for offset in range(bar_width-2):
+        assert fb.pixel(left+offset,panel_y+17)==(vm.selected_color if offset<fill else vm.background_color)
+    x+=label_width+bar_width+2
 key(k.BUTTON_F1);assert vm._overlay is not None
 assert fb.pixel(overlay.RECT[0],overlay.RECT[1])==vm.selected_color
 for _ in range(8):key(k.BUTTON_DOWN)
