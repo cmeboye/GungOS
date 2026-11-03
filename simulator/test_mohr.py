@@ -119,12 +119,13 @@ assert a.state['s'][1] == -30.0
 key(k.BUTTON_DOWN); text('40'); key(k.BUTTON_CENTER)
 assert a.state['s'][3] == 40.0
 # Arrows turn the element; P lands on the principal axes, S on max shear.
-key(k.BUTTON_RIGHT); key(k.BUTTON_RIGHT); assert a.state['theta'] == 2.0
+key(k.BUTTON_TAB); key(k.BUTTON_RIGHT); key(k.BUTTON_RIGHT); assert a.state['theta'] == 2.0
 text(']'); assert a.state['theta'] == 17.0
 text('p'); near(a.result['tij'], 0.0, 1e-4); near(a.result['si'], a.result['p1'])
 text('p'); near(a.result['si'], a.result['p2'])
 text('s'); near(abs(a.result['tij']), a.result['radius'])
 text('r'); assert a.state['theta'] == 0.0
+key(k.BUTTON_TAB)
 # Worked-out rows refuse editing with a message instead of an error box.
 while row_label() != 'von Mises':
     key(k.BUTTON_DOWN)
@@ -144,7 +145,7 @@ for name in ('Normal sz', 'Shear tyz', 'Shear tzx', 'About axis', 'Principal s3'
 text('a'); assert a.state['axis'] == 'x'
 assert "Rotated sy'" in [r[1] for r in a.rows()]
 # F3 examples fill a state.
-key(k.BUTTON_F3); assert a.popup is not None
+key(k.BUTTON_F3); key(k.BUTTON_CENTER); assert a.popup is not None
 for _ in range(4): key(k.BUTTON_DOWN)
 key(k.BUTTON_CENTER); assert a.state['s'] == [60.0, 20.0, -30.0, 25.0, 10.0, -15.0]
 text('m'); assert a.state['mode'] == '2D' and a.message

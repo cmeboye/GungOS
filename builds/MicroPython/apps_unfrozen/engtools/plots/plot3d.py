@@ -36,6 +36,7 @@ from picoware.system.buttons import (
     BUTTON_F,
     BUTTON_C,
     BUTTON_BACKSPACE,
+    BUTTON_F1, BUTTON_F2, BUTTON_F3, BUTTON_F4, BUTTON_F6,
     BUTTON_F9,
     BUTTON_L,
     BUTTON_NONE,
@@ -1798,12 +1799,43 @@ def run(view_manager) -> None:
             else: _draw_settings(draw); _dirty=False
         return
 
-    if button == BUTTON_F9 and _edit is None and _state not in (ST_HELP, ST_RES_WARNING):
+    if button == BUTTON_F9 and _state not in (ST_HELP, ST_RES_WARNING):
         inp.reset()
         _auto = False
         _help_return = _state
         _state = ST_HELP
         _make_help(view_manager)
+        return
+
+    if _state in (ST_PLOT, ST_ERROR):
+        if button == BUTTON_F1:
+            if _clean_expr(_expr2):
+                _toast, _toast_error = 'Two surfaces maximum; edit g in Options', True
+                _dirty = True
+                return
+            inp.reset()
+            _state = ST_INPUT2
+            _begin_input(view_manager, True)
+            return
+        if button == BUTTON_F2:
+            inp.reset()
+            _state = ST_INPUT2
+            _begin_input(view_manager, True)
+            _edit_note = 'Clear the second surface to remove it'
+            return
+        if button == BUTTON_F3:
+            inp.reset()
+            _state = ST_MENU
+            _make_menu(view_manager)
+            return
+        if button == BUTTON_F6:
+            inp.reset()
+            _need_eval = True
+            _goto_plot(view_manager)
+            return
+    if button == BUTTON_F4 and _edit is None and _state not in (ST_HELP, ST_SAMPLING):
+        inp.reset()
+        _goto_plot(view_manager)
         return
 
     if _state == ST_MENU:
@@ -1982,7 +2014,9 @@ def run(view_manager) -> None:
             inp.reset()
             _kill_menu("help")
             back = _help_return
-            if back in (ST_PLOT, ST_SLICE, ST_ERROR) or _embedded:
+            if _edit is not None:
+                _state, _dirty = back, True
+            elif back in (ST_PLOT, ST_SLICE, ST_ERROR) or _embedded:
                 _state = back if back in (ST_SLICE, ST_ERROR) else ST_PLOT
                 if _state == ST_PLOT: _goto_plot(view_manager)
                 else: _dirty = True

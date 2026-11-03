@@ -18,7 +18,18 @@ exist: **S** is about Mohr circle, **M** about Shrink fit or Heat transfer 2D,
 
 ## Where things stand
 
-There are 36 apps: 8 done, 7 partial and 21 new.
+Updated **30 October 2026**. There are **37 apps: 8 done, 9 partial and
+20 new**. PicoReader is the app previously planned as PicoBook; PicoDict is
+an additional PicoDESK app.
+
+The committed baseline is **GungOS v1.34**. PicoDict and PicoReader are local,
+uncommitted additions with simulator checks and compiled preview app bundles;
+they are not yet part of a committed release. Physical PicoCalc SD latency,
+peak memory and responsiveness checks remain pending for both.
+
+Overall, Phase 0 cleanup and Phase 1 foundations remain open. PicoReader's
+standalone first pass was brought forward from Phase 2. Later-phase first
+passes do not mean their shared-library or exchange dependencies are complete.
 
 | Folder | App | Status | Today |
 |---|---|---|---|
@@ -29,19 +40,38 @@ There are 36 apps: 8 done, 7 partial and 21 new.
 | | Buckling | partial | First pass: both axes, end conditions/custom K, six section types, yield screen, plots, cases and SI CSV; BeamView handoff remains |
 | | Section Properties | partial | Standalone first pass: six shape templates, live section/material editing, centroids, inertias, moduli, gyration, cases and reports; connections to other apps deferred |
 | | FatigueLife, FractureLife | new | |
-| Machine design | PicoCAD | partial | Analytic primitives, Booleans, `.pcad` projects; under Tools today |
+| Machine design | PicoCAD | partial | Analytic primitives, Booleans, `.pcad` projects; under Modules → Machine design |
 | | MeshGen, GearGen, WeldCalc, Materialprop | new | |
 | Dynamics | ModalHarmonics, TransientSolve, Multibody, TransferFunc | new | |
 | Fluids | FlowRegimes, PipeLoss, BoundaryDrag, 1DNetSolve | new | |
 | Thermal | ThermalField | partial | Heat transfer 2D: a rectangular plate of one material, steady or transient |
 | | HeatExchanger, Cycles, PropTable | new | |
-| Electrical | PicoSpice | partial | First pass built: operating point, DC sweep, transient. Not committed yet |
+| Electrical | PicoSpice | partial | First pass committed in v1.34: operating point, DC sweep and transient; AC and second-pass features remain |
 | | SmithChart | new | |
 | Tools | SciCalc | done | Scientific calculator |
 | | Grapher | partial | Unified 2D/3D workspace and versioned shared API; isolated fixtures first, solver migrations and data/field extensions pending |
 | | UnitConvert | done | UnitConverter accepted: 49 categories, 322 units, search, cases, favorites, history and SI CSV. Shared input parsing and exchange are separate follow-ups |
 | PicoDESK | EggCel, PicoWord, PicoPaint | done | `.egg`, `.pword`, `.ppaint` files; CSV in and out, TXT and BMP out |
-| | PicoPlayer, PicoBook, PicoMail | new | |
+| | PicoDict | partial | Offline English/Italian single-word lookup, separate SD dictionary data, bounded reads and simulator checks; local first pass, device checks and release pending |
+| | PicoReader | partial | EPUB and TXT library, text reflow, pages and chapters, saved position, bookmarks, font choice, incremental SD page index and sample books; physical-device checks and release remain |
+| | PicoPlayer, PicoMail | new | |
+
+### Next milestone: finish the PicoDESK first passes
+
+1. PicoReader's reading essentials are implemented locally: persistent last
+   position, bookmarks, an incremental SD page index, selectable font sizes
+   and TXT support, with extra-small as the default. See
+   [PicoReader.md](PicoReader.md) for formats and size limits.
+2. Check PicoReader and [PicoDict](PicoDict.md) on physical PicoCalc hardware:
+   SD access, peak memory, navigation responsiveness and exit cleanup.
+   Simulator results do not establish device performance.
+3. Commit the reviewed PicoDESK additions and produce the matching SD app
+   update, with PicoDict data kept as a separate package. The current apps
+   use existing firmware capabilities; no new native module is required.
+
+The next shared foundation is Phase 1's exchange layer, streaming CSV reader,
+clipboard and reports. Materialprop and PropTable remain unstarted; the
+standalone reader and dictionary do not depend on those libraries.
 
 ## Ground rules
 
@@ -61,8 +91,8 @@ These follow from the hardware and from what already works.
    F5 Results, F6 Build/Calculate/Evaluate and F9 Help. Arrows navigate
    inputs; Tab switches input/preview focus; preview arrows navigate,
    Space changes navigation mode and +/− zooms. Use the shared
-   `engtools/ui/lab.py` and `ui/tool.py` parts. The key guide audits
-   existing outliers and tracks their pending migration. PicoDESK apps
+   `engtools/ui/lab.py` and `ui/tool.py` parts. The key guide records
+   the local control alignment and deliberate editing exceptions. PicoDESK apps
    keep their own menus.
    UnitConverter, StressStrain and Buckling now follow BeamView's tabbed
    layout: Left/Right selects a section, Up/Down its fields. F9 presents
@@ -80,6 +110,10 @@ These follow from the hardware and from what already works.
    - memory figures from the device benchmark.
 
 ## How apps exchange data
+
+This section describes the **planned shared exchange layer**. The registry,
+Send to/Import flow, shared clipboard and generated PicoWord reports are not
+implemented yet; existing app-specific files and CSV exports remain in use.
 
 Apps don't convert data pair by pair. Every app reads and writes a few
 shared **exchange kinds**. An app supports the kinds that make sense for it
@@ -105,7 +139,7 @@ Outside formats are used only at the edges:
 
 - STL out of PicoCAD and MeshGen;
 - MP3 and WAV in PicoPlayer;
-- EPUB and TXT in PicoBook;
+- EPUB and TXT in PicoReader;
 - attachments in PicoMail.
 
 Every JSON kind carries `kind`, `version`, `from` (the tool that wrote it)
@@ -143,7 +177,10 @@ PicoLAB keeps it loaded when a tool closes.
 | `picoware/documents/<app>/` | Unchanged |
 | `picoware/pictures/` | Numbered Alt+S screenshots. Today there is a single `screenshot.bmp` at the root, overwritten each time |
 | `picoware/library/` | Materialprop and PropTable data, plus the user's own materials |
-| `picoware/music/`, `books/`, `mail/` | PicoPlayer, PicoBook and PicoMail |
+| `picoware/documents/picoreader/` | PicoReader EPUB and TXT books |
+| `picoware/settings/picoreader/` | PicoReader position, bookmarks, font and page index |
+| `picoware/dictionary/` | PicoDict English/Italian lookup data, installed separately from app code |
+| `picoware/music/`, `mail/` | Planned PicoPlayer and PicoMail storage |
 
 ## Shared kernels and libraries
 
@@ -164,8 +201,9 @@ PicoLAB keeps it loaded when a tool closes.
 
 ## Phases
 
-Phases 0–2 come first because everything after them depends on them. After
-that, the only fixed orders are:
+Phases 0–2 establish the shared foundations for later integrations. Standalone
+first passes can be built earlier where those foundations are not required,
+as with PicoReader and PicoDict. The remaining fixed orders are:
 
 - Electrical before Dynamics, so TransferFunc can read PicoSpice's AC results;
 - Fluids before Thermal, for the heat transfer correlations;
@@ -176,25 +214,39 @@ and need a new UF2. Phases 1, 2 and 6 are SD card updates.
 
 ### Phase 0: close the open work
 
-- Align existing PicoLAB controls using the [key audit](Keys.md#current-outlier-audit),
-  including the calculator modes and shared plot viewers. Update app help,
-  guides and simulator key checks as each app is migrated.
-- Commit the circuit kernel and PicoSpice. Rebuild the UF2, which brings the
-  fix for transients started from zero.
+**Partial.** The circuit kernel and PicoSpice first pass are committed in the
+v1.34 baseline, and a v1.34 UF2 has been built. Control alignment is implemented
+locally with simulator regressions. Folder reorganization is also implemented
+locally; the remaining first-pass PicoSpice UI review is still open. This
+status does not claim fresh physical-device qualification.
+
+- Local control alignment covers the [key contract](Keys.md#current-alignment),
+  including all calculator modes, preview focus, help and shared plot viewers.
+  App help, guides and simulator checks follow the revised bindings. Changes
+  remain uncommitted; physical Shift+F and device validation are pending.
+- Completed in the v1.34 baseline: commit the circuit kernel and PicoSpice
+  and build the UF2, including the fix for transients started from zero.
 - Settle the open PicoSpice first-pass items:
   - symbol art;
   - where transistors and the op-amp are drawn;
   - how a new element picks its nodes.
-- Rearrange PicoLAB into the folders of this plan: Structural,
-  Machine design, Dynamics, Fluids, Thermal, Electrical and Tools.
-  - PicoCAD moves from Tools to Machine design.
-  - A folder without tools lists its planned apps instead of
-    "No tools yet".
+- Local folder organization keeps Checks and Tools at the top level and
+  orders Modules as Structural, Machine design, Dynamics, Fluids, Thermal
+  and Electrical.
+  - PicoCAD is under Machine design; its project files and formats are unchanged.
+  - Dynamics and Fluids list their planned apps as muted informational rows,
+    with no launch action.
+  - Simulator routes and app breadcrumbs follow the moved tool, and the former
+    simulator shortcut remains accepted. See [PicoLAB.md](PicoLAB.md).
 
 Done when everything is committed, the menu test follows the new folders and
 the release is out.
 
 ### Phase 1: exchange layer and tools
+
+**Partial.** UnitConverter's first pass is accepted and Grapher has a shared
+workspace/API foundation. The exchange layer, shared clipboard, streaming
+CSV reader, report generation and end-to-end app handoffs remain pending.
 
 - **Exchange layer** (M):
   - the kinds, the registry, Send to and Import;
@@ -235,6 +287,9 @@ test drives BeamView → Mohr's circle → report → PicoWord by keys.
 
 ### Phase 2: data libraries
 
+**Started through PicoReader.** The reader first pass is available locally;
+Materialprop, PropTable and their shared pickers remain planned.
+
 - **Materialprop** (M), typical values for many material classes:
   steels, cast irons, aluminium, titanium, copper alloys, polymers, timber,
   concrete and more.
@@ -255,13 +310,37 @@ test drives BeamView → Mohr's circle → report → PicoWord by keys.
   Eggcel.
 - **Existing apps:** BeamView sections, Shrink fit and Heat transfer 2D take
   their materials from the picker.
-- **PicoBook** (M), on the PicoDESK side, is an EPUB reader.
-  - It unzips books with the firmware's `deflate` module and reflows the
-    XHTML into text in the system fonts.
-  - It keeps a page index on the SD card, bookmarks, the last position and a
-    font size choice.
-  - It also reads TXT, and only DRM-free books.
-  - It is all Python, with no firmware change.
+- **PicoReader** (M), previously called PicoBook in this plan, is the
+  PicoDESK EPUB/TXT reader. See [PicoReader.md](PicoReader.md).
+  - Available: SD library, stored/DEFLATE EPUB reading using the firmware's
+    `deflate` module, XHTML text reflow, page turning and chapter navigation.
+    UTF-8 TXT files are split into bounded parts at line breaks.
+  - Position, bookmarks (24 per book) and the reading font (extra small,
+    small, medium) persist in `picoware/settings/picoreader/state.json`.
+    The saved position and bookmarks store word offsets, so they survive a
+    font change. An incremental page index caches per-chapter page counts and
+    drives the whole-book progress display; it is rebuilt when the file size
+    or font changes.
+  - Extra-small system text is the default; colours follow the system theme.
+    Three original dummy EPUBs and one TXT sample exercise reading, chapter
+    boundaries, wrapping, bookmarks and accented text. Generate them with
+    `tools/build-reader-samples.py`.
+  - Simulator checks cover archive and TXT parsing, bounds, malformed/corrupt
+    books, reading order, library opening, navigation, fonts, bookmarks,
+    position/index restore, corrupt saved state, help and file cleanup. The
+    app compiles with the firmware-compatible MicroPython compiler.
+  - Current scope is UTF-8, text-only, DRM-free EPUB. Images, CSS layout and
+    encrypted resources are unsupported. Physical SD/display/memory checks
+    and a committed release remain pending.
+  - All Python, using existing firmware capabilities; no firmware change.
+- **PicoDict**, an additional standalone PicoDESK first pass, provides offline
+  English/Italian single-word lookup. See [PicoDict.md](PicoDict.md).
+  - Available: direction switching, input editing, normalization and bounded
+    binary-search lookup in separately installed SD dictionary data.
+  - Model/data and keyboard-driven simulator checks pass. Device SD latency,
+    available heap and release integration remain pending.
+  - Suggestions, stemming, conjugation tables and sentence translation are
+    deferred; they are not part of the implemented first pass.
 
 ### Phase 3: Electrical
 
@@ -471,7 +550,7 @@ before connecting it to BeamView, Buckling, StressStrain or PicoCAD.
 
 | App | Needs |
 |---|---|
-| every app | the exchange layer |
+| app-to-app handoffs and shared reports | the exchange layer; standalone PicoReader and PicoDict first passes do not require it |
 | StressStrain, Buckling, FatigueLife, FractureLife, WeldCalc, GearGen | Materialprop |
 | FlowRegimes, PipeLoss, BoundaryDrag, HeatExchanger, Cycles | PropTable |
 | SmithChart, TransferFunc imports | PicoSpice AC |

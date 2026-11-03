@@ -6,7 +6,7 @@ body can spin, carry pressure inside and outside, and be pressed or shrunk
 onto its neighbour. Every change solves the model again.
 
 The keys follow Beam view: **F1** Add, **F2** Remove, **F3** Options, **F4**
-Plot, **F5** Results, **F6** Preview, **F9** Help.
+Plot, **F5** Results, **F6** Refresh, **F9** Help.
 
 ## Given and Find
 
@@ -65,13 +65,14 @@ the material to Custom.
 
 ## Keys
 
-| Key | List | Preview (F6) |
+| Key | List | Preview (Tab) |
 |---|---|---|
-| Left / Right | Bodies / Loads / Fits tabs | 3D: turn; section: next body |
-| Up / Down | choose a row | 3D: tilt |
+| Left / Right | Bodies / Loads / Fits tabs | Orbit: turn; Move/section: pan |
+| Up / Down | choose a row | Orbit: tilt; Move/section: pan |
 | Enter | edit or choose | switch section / 3D |
 | digits, `-`, `.` | type a value (arithmetic works) | |
-| SPACE | Given / Find | |
+| SPACE | Given / Find | Switch Move / Orbit in 3D |
+| Tab | Focus preview | Return to the same input row |
 | `+` / `-` | | zoom |
 | R | | reset the view |
 | V | switch section / 3D | switch section / 3D |
@@ -80,7 +81,7 @@ the material to Custom.
 | F1 / F2 | add a body / remove the selected body | |
 | Esc | leave Shrink fit | back to the list |
 
-While F6 is active the preview's outline turns the accent colour, the same way
+While the preview has focus the preview's outline turns the accent colour, the same way
 the desktop shows a focused widget. F1 offers a ring outside and, when body 1
 has a bore, a solid shaft or ring inside. Each new interface is a new fit
 whose contact pressure is Find.

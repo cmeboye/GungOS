@@ -970,7 +970,7 @@ def request_open(name):
     """Queue a route through the category sidebar and its submenu."""
     global open_target
     sync_menu_routes()
-    nested={'picodesk':('eggcel','picoword','picopaint'),
+    nested={'picodesk':('eggcel','picoword','picopaint','picodict','picoreader'),
             'picolab':('graph','graph3d','plot previews','numerics checks','scientific calculator'),
             'misc':('screensavers','engtool render benchmark')}
     open_target = name
@@ -999,7 +999,8 @@ def request_open(name):
         if apps_source not in sys.path:sys.path.append(apps_source)
         import PicoLAB as lab
         tail=parts[2:]
-        aliases={'grapher':('tools','grapher'),'graph':('tools','graph'),'graph3d':('tools','graph3d'),
+        aliases={'picocad':('modules','machine design','picocad'),
+                 'grapher':('tools','grapher'),'graph':('tools','graph'),'graph3d':('tools','graph3d'),
                  'scientific calculator':('tools','scientific calculator'),
                  'plot previews':('checks','plot previews'),
                  'numerics checks':('checks','numerics check'),
@@ -1010,6 +1011,7 @@ def request_open(name):
                  'mohr circle':('modules','structural','mohr circle'),
                  'shrink fit':('modules','structural','shrink fit')}
         if len(tail)==1:tail=list(aliases.get(tail[0],tail))
+        if tail==['tools','picocad']:tail=['modules','machine design','picocad']
         if tail and tail[-1] in ('beam lab','beam view'):tail[-1]='beamview'
         if tail and tail[-1] in ('graph','graph3d'):
             lab_plot_mode=1 if tail[-1]=='graph' else 2

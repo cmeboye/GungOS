@@ -48,8 +48,6 @@ The model and files use SI; the screen uses m, mm, kN, GPa, MPa and mm4.
 | Key | Action |
 |---|---|
 | Left/Right | Change input tab; restore its selected row |
-| F1 | Set the same end condition for both axes |
-| F2 | Open the section editor at its material picker |
 | F3 | Examples, saved cases and CSV export |
 | F4 | Euler stress versus effective slenderness plot |
 | F5 | Per-axis results and yield screen |

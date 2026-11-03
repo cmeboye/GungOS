@@ -27,11 +27,9 @@ Names are edited with Enter and may contain up to 24 printable characters.
 | Left/Right | Tabs; move the cursor during an inline edit |
 | Up/Down | Select a field or result |
 | Enter | Edit or accept |
-| F1 | Shape picker |
-| F2 | Material picker |
 | F3 | Examples, saved sections, CSV/JSON reports, New |
 | F4 | Enlarged section view; press again to return |
-| Tab | Toggle centroid/axis overlay |
+| A | Toggle centroid/axis overlay |
 | F5 | Full results list |
 | F6 | Refresh properties (accepted edits already update them) |
 | F9 | Calculator-style equations, definitions and controls |

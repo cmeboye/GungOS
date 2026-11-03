@@ -151,12 +151,12 @@ text('1000'); key(k.BUTTON_CENTER); near(a.solution['mass_per_length'], 2.4)
 key(k.BUTTON_RIGHT); assert a.tabs.label == 'Properties'
 key(k.BUTTON_CENTER); assert a.edit is None and not a.error
 key(k.BUTTON_LEFT); assert a.rows()[a.row][4] == ('material', 'rho')
-key(k.BUTTON_F2)
+a.select_tab('Material'); a.row=0; key(k.BUTTON_CENTER)
 while a.choice[2] != 1:
     key(k.BUTTON_DOWN)
 key(k.BUTTON_CENTER)
 near(a.state['material']['rho'], 2700)
-key(k.BUTTON_F1)
+a.select_tab('Geometry'); a.row=0; key(k.BUTTON_CENTER)
 for _ in range(5):
     key(k.BUTTON_DOWN)
 assert a.state['shape'] == 'rectangle' and a.draft()[0]['shape'] == 'tee'
@@ -167,7 +167,7 @@ key(k.BUTTON_F4); assert a.page == 'view'
 sim_runtime.lcd_screenshot('/private/tmp/gungos-sectionprops-view.bmp')
 old_axes = a.axes
 before = [bytes(vm.draw._read_row(y)) for y in range(67, 280)]
-key(k.BUTTON_TAB); assert a.axes != old_axes
+key(k.BUTTON_A); assert a.axes != old_axes
 assert before != [bytes(vm.draw._read_row(y)) for y in range(67, 280)]
 key(k.BUTTON_ESCAPE); assert a.page == 'model'
 key(k.BUTTON_F5); assert a.page == 'results'

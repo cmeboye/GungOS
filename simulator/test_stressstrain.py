@@ -282,7 +282,7 @@ key(k.BUTTON_F6); key(k.BUTTON_F4); assert a.page == 'plots'
 scan = a.section_map
 assert scan is not None and a.map_cache is not None
 for _ in range(4):
-    key(k.BUTTON_TAB)
+    key(k.BUTTON_P)
 assert a.state['point']['z'] == .02 and a.solution is not None
 assert a.section_map is scan
 key(k.BUTTON_F6)
@@ -317,7 +317,7 @@ key(k.BUTTON_F6); assert a.error and 'Torsion' in a.message and a.solution is No
 field(('loads', 'T')); text('0'); key(k.BUTTON_CENTER)
 key(k.BUTTON_F6); assert a.solution is not None
 # Switch analysis and direction by keys; conversion preserves current state.
-key(k.BUTTON_F1); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
+a.select_tab('Analysis'); a.row=0; key(k.BUTTON_CENTER); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
 assert a.state['mode'] == 'constitutive'
 choose(('condition',), 1)
 key(k.BUTTON_F6); expected = list(a.solution['stress'])
@@ -328,7 +328,7 @@ for got, want in zip(a.solution['stress'], expected):
 field(('material', 'nu')); text('0.5'); key(k.BUTTON_CENTER)
 assert a.edit is not None and a.error
 key(k.BUTTON_ESCAPE)
-key(k.BUTTON_F2); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
+choose(('material',), 1)
 assert a.state['material']['E'] == 70e9 and a.solution is None
 key(k.BUTTON_F6); key(k.BUTTON_F4)
 sim_runtime.lcd_screenshot('/private/tmp/gungos-stressstrain-tensor.bmp')
@@ -355,7 +355,7 @@ key(k.BUTTON_F9); assert a.help_view.opened
 key(k.BUTTON_ESCAPE)
 # A tube's hole remains background in the cached map, in every field.
 a.changed(m.example(2)); a.page = 'model'
-key(k.BUTTON_F4)
+key(k.BUTTON_F6); key(k.BUTTON_F4)
 for i in range(3):
     a.map_kind = i; a.draw()
     cache_key, raw = a.map_cache
@@ -366,7 +366,7 @@ sim_runtime.lcd_screenshot('/private/tmp/gungos-stressstrain-map-tube.bmp')
 # A direct A/I record has point results, but no invented map or extrema.
 custom = m.example(0); custom['shape'] = 'custom'; custom['loads']['T'] = 0
 a.changed(custom); a.page = 'model'
-key(k.BUTTON_F4)
+key(k.BUTTON_F6); key(k.BUTTON_F4)
 assert a.solution is not None and a.section_map is None
 key(k.BUTTON_F8); assert a.error and 'boundary' in a.message
 key(k.BUTTON_ESCAPE)

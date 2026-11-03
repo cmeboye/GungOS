@@ -71,7 +71,7 @@ HELP = (
     'C\tsmooth or banded colours',
     'Evaluating:',
     'F6\tevaluate: the only solve command',
-    'SPACE\tpause or resume; evaluates when there is no field',
+    'F7\tpause / resume; F6 starts a fresh solve',
     'Edits clear the field; F4 and F5 need F6 first.',
     'Pages:',
     'F3\toptions: examples, save, open, CSV',
@@ -79,8 +79,9 @@ HELP = (
     'F5\tresults',
     'ESC\tback to the model',
     'Plots:',
+    'TAB model preview / inputs; arrows probe',
     'arrows\tmove the cursor one cell',
-    'TAB\thottest, coldest, then pinned points',
+    'P\thottest, coldest, then pinned points',
     'ENTER\tpin the cursor (up to 8, listed in F5)',
     'D\tfield, profiles, history (transient)',
     'Results:',
@@ -128,6 +129,7 @@ class Heat:
         self.bands = False
         self.message, self.error = '', False
         self.plate, self.problem, self.running = None, '', False
+        self.preview_focus = False
         self.probe = [self.state['W'] / 2, self.state['H'] / 2]
         self.pins = []
         self.peak, self.note = -1, ''
@@ -150,6 +152,7 @@ class Heat:
     def drop(self):
         """Clear the field after an edit; never solve."""
         self.plate, self.problem, self.running = None, '', False
+        self.preview_focus = False
         self.result_cache = None
         from gc import collect
         collect()
@@ -180,7 +183,7 @@ class Heat:
 
     def toggle_run(self):
         if self.plate is None or self.plate.done:
-            self.evaluate()
+            self.say('F6 starts a fresh solve')
             return
         self.running = not self.running
         self.say('Running' if self.running else 'Paused')
@@ -429,13 +432,17 @@ class Heat:
         if button == keys.BUTTON_F6:
             self.evaluate()
             return
-        if button == keys.BUTTON_SPACE or c == ' ':
+        if button == keys.BUTTON_F7:
             self.toggle_run()
             return
         page = {keys.BUTTON_F3: 'options', keys.BUTTON_F4: 'plots', keys.BUTTON_F5: 'results'}.get(button)
         if page:
             self.menu_index = 0
             self.page = page
+            return
+        if esc and self.running:
+            self.running = False
+            self.say('Paused')
             return
         if self.page != 'model' and esc:
             self.page = 'options' if self.page in ('examples', 'open') else 'model'
@@ -444,6 +451,13 @@ class Heat:
         getattr(self, 'key_' + self.page)(button, esc, c)
 
     def key_model(self, button, esc, c):
+        if button == keys.BUTTON_TAB and self.plate is not None:
+            self.preview_focus = not getattr(self, 'preview_focus', False)
+            return
+        if getattr(self, 'preview_focus', False):
+            if esc:self.preview_focus = False
+            else:self.key_plots(button, esc, c)
+            return
         if esc:
             if self.running:
                 self.running = False
@@ -487,7 +501,7 @@ class Heat:
         return self.plate.cell(*self.probe)
 
     def peaks(self):
-        """(label, x, y) points TAB steps through: hottest, coldest, pins."""
+        """(label, x, y) points P steps through: hottest, coldest, pins."""
         plate = self.plate
         stats = plate.stats()
         out = [('Hottest',) + plate.centre(*stats['hot']), ('Coldest',) + plate.centre(*stats['cold'])]
@@ -506,7 +520,7 @@ class Heat:
             j, i = min(max(j, 0), plate.ny - 1), min(max(i, 0), plate.nx - 1)
             self.probe = list(plate.centre(j, i))
             self.peak, self.note = -1, ''
-        elif button == keys.BUTTON_TAB:
+        elif c == 'p':
             peaks = self.peaks()
             self.peak = (self.peak + 1) % len(peaks)
             label, x, y = peaks[self.peak]
@@ -770,7 +784,7 @@ class Heat:
     def draw_model(self, draw, p):
         x, y, w, h = render.PREVIEW
         plate = self.plate
-        panel(draw, p, render.PREVIEW, 'PLATE' if plate is None else 'TEMPERATURE', self.status(), p.PANEL)
+        panel(draw, p, render.PREVIEW, 'PROBE' if self.preview_focus else 'PLATE' if plate is None else 'TEMPERATURE', self.status(), p.PANEL)
         preview = Viewport(draw, (x + 5, y + 17, x + w - 5, y + h - 3))
         fit = render.Fit(self.state, render.PLATE_BOX)
         side, patch = self.chosen()
@@ -798,11 +812,19 @@ class Heat:
             hx, hy = plate.centre(j, i)
             text(preview, x + 8, y + h - 12, 'max %s C at %s, %s mm  mean %s C' % (
                 number(stats['max'], 4), number(hx, 3), number(hy, 3), number(stats['mean'], 4)), p.MUTED)
+        if getattr(self, 'preview_focus', False):
+            draw._rectangle(*render.PREVIEW, p.ACCENT)
+            if plate is not None:
+                j, i = self.probe_cell()
+                hx, hy = plate.centre(j, i)
+                px, py = fit.x(hx), fit.y(hy)
+                preview._line(px-4, py, px+4, py, p.TEXT)
+                preview._line(px, py-4, px, py+4, p.TEXT)
         rect = self.properties_rect()
         rows = self.rows()
         self.current()
         tabs(draw, p, rect, items.TABS, self.tab, [None] * len(items.TABS), font=XS, height=render.TAB_HEIGHT)
-        form(draw, p, [row[:4] for row in rows], self.row, self.edit, rect[1] + render.TAB_HEIGHT + 4,
+        form(draw, p, [row[:4] for row in rows], -1 if self.preview_focus else self.row, self.edit, rect[1] + render.TAB_HEIGHT + 4,
              rect[1] + rect[3] - 5, font=XS, row_height=render.ROW_HEIGHT)
 
     def draw_plots(self, draw, p, bottom):

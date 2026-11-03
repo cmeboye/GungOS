@@ -738,7 +738,8 @@ class GraphApp:
 
     def set_state(self, state):
         if state == 'help' and self.state != 'help':
-            self.help_return = self.state if self.state not in ('input', 'help') else 'plot'
+            self.help_return = self.state
+            self.help_row = self.row
             self.help_first = 0
         self.state,self.row,self.dirty = state,0,True
         self.job,self.refine = None,None
@@ -981,7 +982,7 @@ class GraphApp:
         inp=self.vm.input_manager
         button=self.vm.button
         if self.data_only and button==inp._key_esc: button=BUTTON_ESCAPE
-        if self.state=='input':
+        if self.state=='input' and button!=BUTTON_F9:
             if button!=BUTTON_NONE:
                 inp.reset()
                 self.edit_key(button)
@@ -992,7 +993,7 @@ class GraphApp:
             self.message, self.error = '', False
             try:
                 if button==BUTTON_F9 or (self.state=='help' and button in (BUTTON_ESCAPE,BUTTON_CENTER)):
-                    if self.state=='help': self.state,self.dirty=self.help_return,True
+                    if self.state=='help': self.state,self.row,self.dirty=self.help_return,self.help_row,True
                     else: self.set_state('help')
                 elif self.state=='help':
                     capacity=lab.help_capacity(self.height-lab.FOOT)
@@ -1000,6 +1001,26 @@ class GraphApp:
                     if button in (BUTTON_UP,BUTTON_DOWN): self.help_first+=1 if button==BUTTON_DOWN else -1
                     elif button in (BUTTON_LEFT,BUTTON_RIGHT): self.help_first+=capacity if button==BUTTON_RIGHT else -capacity
                     self.help_first=min(max(self.help_first,0),last); self.dirty=True
+                elif button==BUTTON_F1 and self.state in ('plot','expressions'):
+                    if not self.data_only:
+                        if len(self.items)>=MAX_EXPRESSIONS:raise ValueError('Six expressions maximum')
+                        self.set_state('expressions')
+                        self.row=len(self.items)
+                        self.activate()
+                elif button==BUTTON_F2 and self.state in ('plot','expressions'):
+                    if self.state=='plot':
+                        self.set_state('expressions')
+                        self.message='Select an item; F2 removes it'
+                    elif not self.data_only and self.items:
+                        if len(self.items)<=getattr(self,'minimum_items',0):raise ValueError('Keep at least one layer; edit it or choose a preset')
+                        self.items.pop(min(self.row,len(self.items)-1))
+                        self.row=min(self.row,len(self.items));self.dirty=True
+                elif button==BUTTON_F3:
+                    self.set_state('menu')
+                elif button==BUTTON_F4:
+                    self.set_state('plot')
+                elif button==BUTTON_F6:
+                    if self.state=='plot':self.redraw(True)
                 elif self.state=='plot':
                     if button in (BUTTON_LEFT,BUTTON_RIGHT,BUTTON_UP,BUTTON_DOWN):
                         b=self.bounds[:]; dx=(b[1]-b[0])*0.12; dy=(b[3]-b[2])*0.12

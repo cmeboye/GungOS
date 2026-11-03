@@ -34,9 +34,10 @@ appear in red. Preview drawing is clipped without another framebuffer.
 | F6 (Shift+F1 on PicoCalc) | Evaluate and validate |
 | Shift+E | Open the selected member's section editor |
 | Z | Undo (12 steps) |
-| Tab | Next member |
+| Tab | Focus the model preview / return to the same input row |
+| Space in preview | Switch Move / Probe |
 | , / . | Previous/next position on the active member |
-| + / - | Preview zoom |
+| + / - | Zoom while the preview has focus |
 | F9 / ? | Scrollable help |
 | Esc | Cancel edit, collapse properties, or return |
 
@@ -171,16 +172,16 @@ Sections are shared: every member using one changes with it.
 
 - LEFT/RIGHT move the cursor one pixel; `,` and `.` move ten.
 - UP/DOWN jump to the previous or next point.
-- TAB steps through the selected beam's peaks; ENTER pins the cursor position
+- P steps through the selected beam's peaks; ENTER pins the cursor position
   with its beam context (see F5). At a shared joint, pinned values come from
   that beam's side and reopening the pin selects the same beam. Repinning a
   physical point from another beam updates that pin's beam context.
-- `V` or SPACE shows the next load case or combination.
+- `V` shows the next load case or combination.
 - `D` changes the third panel: deflection, slope, normal force (frames) and
   axial displacement u, the movement along the member, positive toward its end.
   With that panel showing, the readout gives u in place of the last value.
 - `]` or `M` switches to the next individual beam; `[` switches to the
-  previous beam, wrapping at either end. TAB retains its peak-stepping role.
+  previous beam, wrapping at either end. P retains its peak-stepping role.
 - The top-left indicator identifies the selected beam, for example **L2/3**.
   `x` is the distance from that beam's start. Plots, vertical scales, peak
   stepping and cursor movement cover only that beam, including when several

@@ -146,7 +146,7 @@ def text(value):
 
 key(k.BUTTON_CENTER)
 calc = app._active
-key(k.BUTTON_F2); key(k.BUTTON_RIGHT); key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=2; key(k.BUTTON_CENTER); key(k.BUTTON_RIGHT); key(k.BUTTON_CENTER)
 assert calc.page == 'stats' and calc.statistics.page == 'start'
 ws = calc.statistics
 vm.draw.screenshot('/private/tmp/picoware-statistics-start.bmp')
@@ -160,7 +160,7 @@ assert ws.dataset.get(1,'X') == 2
 text('3'); key(k.BUTTON_CENTER)
 assert ws.dataset.get(2,'X') == 3
 vm.draw.screenshot('/private/tmp/picoware-statistics-data.bmp')
-key(k.BUTTON_F4)
+key(k.BUTTON_F5)
 assert ws.page == 'summary'
 key(k.BUTTON_DOWN)
 vm.draw.screenshot('/private/tmp/picoware-statistics-summary.bmp')
@@ -168,7 +168,7 @@ key(k.BUTTON_CENTER)
 assert calc.page == 'calc' and calc.variables['Ans'] == 2
 text('a=mean(X)+2*std(X)'); key(k.BUTTON_CENTER)
 close(calc.answer,4); assert calc.variables['a'] == 4
-key(k.BUTTON_F3); assert calc.page == 'stats' and ws.page == 'data'
+key(k.BUTTON_F3); calc.selected=6; key(k.BUTTON_CENTER); assert calc.page == 'stats' and ws.page == 'data'
 key(k.BUTTON_UP); key(k.BUTTON_CENTER)
 assert ws.editing
 key(vm.input_manager._key_esc)
@@ -190,12 +190,12 @@ assert ws.editing and ws.editor.parents[-1][2] == 1 and not ws.editor.row
 text('5'); key(k.BUTTON_RIGHT); key(k.BUTTON_TAB)
 assert not ws.editing
 close(ws.dataset.get(3,'X'),2.321928)
-key(k.BUTTON_F6); ws.selected = OPTIONS.index('Frequency'); key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=8; key(k.BUTTON_CENTER); ws.selected = OPTIONS.index('Frequency'); key(k.BUTTON_CENTER)
 assert ws.dataset.frequency and ws.page == 'data'
 ws.row,ws.column = 0,1
 text('2'); key(k.BUTTON_TAB)
 assert ws.dataset.get(0,'Freq') == 2 and ws.row == 1 and ws.column == 0
-key(k.BUTTON_F6); ws.selected = OPTIONS.index('Save CSV'); key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=8; key(k.BUTTON_CENTER); ws.selected = OPTIONS.index('Save CSV'); key(k.BUTTON_CENTER)
 assert ws.message.startswith('Saved ') and ws.page == 'data'
 assert len(vm.storage.listdir(SAVE_DIRECTORY)) == 1
 original_csv = ws.dataset.to_csv()
@@ -204,7 +204,7 @@ filename = vm.storage.listdir(SAVE_DIRECTORY)[0]
 old_write = Storage.write
 Storage.write = lambda self,path,value,mode='w': True
 try:
-    key(k.BUTTON_F6); ws.selected = OPTIONS.index('Save CSV'); key(k.BUTTON_CENTER)
+    key(k.BUTTON_F3); calc.selected=8; key(k.BUTTON_CENTER); ws.selected = OPTIONS.index('Save CSV'); key(k.BUTTON_CENTER)
     assert 'verification' in calc.error and ws.dataset.to_csv() == original_csv
 finally: Storage.write = old_write
 assert len(vm.storage.listdir(SAVE_DIRECTORY)) == 1
@@ -212,10 +212,10 @@ key(k.BUTTON_CENTER)
 assert ws.page == 'data' and ws.message.startswith('Saved ') and not calc.error
 assert len(vm.storage.listdir(SAVE_DIRECTORY)) == 2
 key(vm.input_manager._key_esc)
-key(k.BUTTON_F6); ws.selected = OPTIONS.index('Clear dataset'); key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=8; key(k.BUTTON_CENTER); ws.selected = OPTIONS.index('Clear dataset'); key(k.BUTTON_CENTER)
 assert ws.page == 'confirm'
 key(vm.input_manager._key_esc); assert ws.dataset.to_csv() == original_csv
-key(k.BUTTON_F6); ws.selected = OPTIONS.index('Load CSV'); key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=8; key(k.BUTTON_CENTER); ws.selected = OPTIONS.index('Load CSV'); key(k.BUTTON_CENTER)
 assert ws.page == 'load'
 key(k.BUTTON_CENTER)
 assert ws.page == 'data' and ws.dataset.to_csv() == original_csv
@@ -252,16 +252,16 @@ for x,y in ((1,3),(2,5),(3,7)):
     text(str(y)); key(k.BUTTON_TAB)
 assert ws.dataset.summary()['n'] == 3
 vm.draw.screenshot('/private/tmp/picoware-statistics-paired.bmp')
-key(k.BUTTON_F5)
+key(k.BUTTON_F3); calc.selected=7; key(k.BUTTON_CENTER)
 assert ws.page == 'fit'
 vm.draw.screenshot('/private/tmp/picoware-statistics-fit.bmp')
 ws.selected = len(ws.results())-1; key(k.BUTTON_CENTER)
 assert ws.predicting and ws.editing
 text('4'); key(k.BUTTON_CENTER)
 assert not ws.predicting and ws.page == 'fit' and calc.answer == 9
-key(k.BUTTON_F2); calc.selected = 0; key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=2; key(k.BUTTON_CENTER); calc.selected = 0; key(k.BUTTON_CENTER)
 assert calc.page == 'calc' and ws.dataset.summary()['n'] == 3
-key(k.BUTTON_F2); calc.selected = 1; key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=2; key(k.BUTTON_CENTER); calc.selected = 1; key(k.BUTTON_CENTER)
 assert calc.page == 'stats' and ws.page == 'fit'
 key(vm.input_manager._key_esc); key(k.BUTTON_CENTER)
 assert ws.dataset is saved_one
@@ -274,7 +274,7 @@ try:
     key(vm.input_manager._key_esc); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
     assert calc.page == 'stats' and 'ulab' in calc.error
 finally: numeric.require = old_require
-key(k.BUTTON_F2); calc.selected = 0; key(k.BUTTON_CENTER)
+key(k.BUTTON_F3); calc.selected=2; key(k.BUTTON_CENTER); calc.selected = 0; key(k.BUTTON_CENTER)
 key(vm.input_manager._key_esc)
 assert vm.current_view.name == 'lab' and calc.statistics is None and app._active is None
 print('PASS: table keys/math slots, summary/fit/Ans, mode retention, explicit CSV save/load and missing firmware')

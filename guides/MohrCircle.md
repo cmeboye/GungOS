@@ -41,16 +41,18 @@ turning about the chosen axis.
 | Enter | edit the value, or choose the mode or axis |
 | digits, `-`, `.` | type a new value straight away; arithmetic works (`120*0.8`) |
 | Enter / Tab, Esc | apply or cancel; Up/Down applies and moves on |
-| Left / Right | turn the element by 1° |
-| `[` / `]` | turn by 15° |
-| P | principal axes; press again to put s2 on the first axis |
-| S | maximum-shear axes; press again for the other pair |
-| R | θ back to 0 |
+| Tab | Focus the rotation preview / return to inputs |
+| Left / Right in preview | turn the element by 1° |
+| `[` / `]` in preview | turn by 15° |
+| P in preview | principal axes; press again to put s2 on the first axis |
+| S in preview | maximum-shear axes; press again for the other pair |
+| R in preview | θ back to 0 |
 | M | switch between 2D and 3D (3D values are kept) |
 | A | next rotation axis, x → y → z (3D only) |
-| F3 | examples: pure shear, uniaxial tension, shaft under bending and torsion, thin pressure vessel, a 3D state, hydrostatic, clear |
-| F9 or `?` | help |
-| Esc | leave Mohr circle |
+| F3 → Examples | examples: pure shear, uniaxial tension, shaft under bending and torsion, thin pressure vessel, a 3D state, hydrostatic, clear |
+| F9 | help, preserving the current edit or picker |
+| F6 | Refresh the live results |
+| Esc | Leave preview focus, cancel the innermost edit/picker, then exit |
 
 Rows that are worked out (rotated stresses, principal values, checks) can't be
 edited. Pressing Enter on one shows a note in the footer.

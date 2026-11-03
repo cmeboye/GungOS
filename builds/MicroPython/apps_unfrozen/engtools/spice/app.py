@@ -59,7 +59,7 @@ HELP = (
     'Pages:',
     'F3\toptions: new, examples, save, open, CSV',
     'F4\twaveforms: LEFT/RIGHT cursor, , and . step 10',
-    'UP/DOWN\tchoose the probe; TAB its maximum and minimum',
+    'UP/DOWN\tchoose the probe; P its maximum and minimum',
     'F5\tresults: final, extremes, mean, RMS, peak to peak',
     'ENTER\ton an extreme: show it in the waveforms',
     'Models:',
@@ -582,23 +582,31 @@ class Spice:
             return
         getattr(self, 'key_' + self.page)(button, esc, c)
 
+    def leave_preview(self):
+        self.view = False
+        kept = getattr(self, 'preview_input', None)
+        if kept is not None:
+            self.tab, self.sel, self.tab_selections, self.last_node = kept
+            self.preview_input = None
+
     def key_model(self, button, esc, c):
-        if c in ('+', '='):
+        if self.view and c in ('+', '='):
             self.set_zoom(1)
-        elif c == '-':
+        elif self.view and c == '-':
             self.set_zoom(-1)
         elif c == 'z':
             self.undo_last()
         elif button == keys.BUTTON_F1:
+            self.preview_input = None
             self.add()
         elif button == keys.BUTTON_F2:
+            self.preview_input = None
             self.remove()
         elif button == keys.BUTTON_TAB:
-            self.view = not self.view
-            if self.view and self.sel:
-                point = self.point_of(self.sel[0])
-                if point is not None:
-                    self.cursor = list(point)
+            if self.view:self.leave_preview()
+            else:
+                self.preview_input = (self.tab, self.sel, self.tab_selections[:], self.last_node)
+                self.view = True
             self.say('Schematic: arrows move, ENTER selects' if self.view else '')
         elif self.view:
             self.key_view(button, esc)
@@ -623,7 +631,7 @@ class Spice:
 
     def key_view(self, button, esc):
         if esc:
-            self.view = False
+            self.leave_preview()
             return
         step = {keys.BUTTON_LEFT: (-1, 0), keys.BUTTON_RIGHT: (1, 0), keys.BUTTON_UP: (0, -1),
                 keys.BUTTON_DOWN: (0, 1)}.get(button)
@@ -658,7 +666,7 @@ class Spice:
         elif button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
             self.active = (self.active + (1 if button == keys.BUTTON_DOWN else -1)) % len(self.circuit['probes'])
             self.peak = -1
-        elif button == keys.BUTTON_TAB:
+        elif c == 'p':
             st = sim.stats(self.active)
             self.peak = (self.peak + 1) % 2
             self.at = st['at_max'] if self.peak == 0 else st['at_min']

@@ -20,9 +20,8 @@ class Workspace:
         return value
 
     def common(self,button):
-        if button==k.BUTTON_F2:
-            self.calc.open_page('modes'); return True
-        if button==k.BUTTON_F4 and self.editing:
+        if button in (k.BUTTON_F1,k.BUTTON_F2,k.BUTTON_F4):return True
+        if button==k.BUTTON_F8 and self.editing:
             self.calc.open_page('variables'); return True
         if button==k.BUTTON_F7 and self.editing:
             self.calc.open_page('templates'); return True
@@ -36,11 +35,11 @@ class Workspace:
     def entry(self,button,commit):
         if button==self.calc.vm.input_manager._key_esc:
             self.editing=False; self.calc.error=''; return
-        if button==k.BUTTON_CENTER:
+        if button in (k.BUTTON_CENTER,k.BUTTON_F6):
             if self.editor.focus_missing(): raise ValueError('Complete the highlighted slot')
             commit(source(self.editor.root))
             self.editing=False; self.calc.error=''
-        elif button==k.BUTTON_F5: self.editor.clear()
+        elif button==k.BUTTON_F10: self.editor.clear()
         else: self.calc.edit_key(self.editor,button)
 
     def chrome(self,draw,title,hint):
@@ -49,7 +48,7 @@ class Workspace:
         r=self.calc.renderer(draw,(0,18,width,height))
         r.fill(0,18,width,24,self.calc.palette.PANEL)
         r.text(9,25,title,self.calc.accent,SMALL)
-        self.calc.footer(r,width,height,hint,'F2 Modes F4 Vars F9 Hide ESC returns')
+        self.calc.footer(r,width,height,hint,'F3 Options F8 Vars F9 Help ESC returns')
         return r,width,height
 
     def input(self,draw,width,height):
@@ -115,17 +114,17 @@ class BaseWorkspace(Workspace):
                 elif self.selected==1: self.bits=(8,16,32)[((8,16,32).index(self.bits)+direction)%3]
                 else: self.signed=not self.signed
             return
-        if button==k.BUTTON_CENTER:
+        if button in (k.BUTTON_CENTER,k.BUTTON_F6):
             text=source(self.editor.root)
             if not text.strip(): return
             self.value,name=IntegerParser(text,self.calc.variables,self.base,self.bits,self.signed).calculate()
             self.calc.answer,self.calc.assignment=self.value,name
             self.editor.clear(); self.calc.error=''
-        elif button==k.BUTTON_F5: self.editor.clear(); self.calc.error=''
+        elif button==k.BUTTON_F10: self.editor.clear(); self.calc.error=''
         else: self.calc.edit_key(self.editor,button)
     def draw(self,draw,width,height):
         from .base_n import display,LABELS,RADICES
-        r,_,_=self.chrome(draw,'BASE-N / %d-bit %s'%(self.bits,'signed' if self.signed else 'unsigned'),'F3 Base/sign  F5 Clear  F7 Ops  ENTER =')
+        r,_,_=self.chrome(draw,'BASE-N / %d-bit %s'%(self.bits,'signed' if self.signed else 'unsigned'),'F3 Options  F10 Clear  F7 Ops  ENTER =')
         if self.page=='operators':
             rows=tuple(zip(('AND','OR','XOR','NOT','<<','>>'),('Bitwise and','Bitwise or','Bitwise xor','Bitwise complement','Shift left','Shift right')))
             editing=self.editing; self.editing=False
@@ -214,7 +213,13 @@ class SolverWorkspace(Workspace):
                 self.job.close(); self.job=None; self.calc.error='Cancelled'
             return
         if self.common(button): return
+        if button==k.BUTTON_F5 and not self.editing:
+            if self.results and self.page!='results':self.return_page=self.page;self.page='results';self.selected=0
+            return
         if self.editing: self.entry(button,self.commit); return
+        if button==k.BUTTON_F6 and self.page not in ('start',):
+            if self.page=='results':self.page=self.return_page
+            self.solve();return
         if button==self.calc.vm.input_manager._key_esc:
             if self.page=='results': self.page=self.return_page; self.selected=0
             elif self.page!='start': self.page='start'; self.selected=0
@@ -225,7 +230,7 @@ class SolverWorkspace(Workspace):
             elif button==k.BUTTON_CENTER: self.page=('equation','polynomial','system')[self.selected]; self.selected=0
         elif self.page=='results':
             if button in (k.BUTTON_UP,k.BUTTON_DOWN): self.selected=(self.selected+(-1 if button==k.BUTTON_UP else 1))%len(self.results)
-        elif button==k.BUTTON_F5: self.solve()
+        elif button==k.BUTTON_F6: self.solve()
         elif button==k.BUTTON_F3 and self.page in ('polynomial','system'):
             if self.page=='polynomial':
                 self.degree=2+(self.degree-1)%3
@@ -249,7 +254,7 @@ class SolverWorkspace(Workspace):
             elif button==k.BUTTON_CENTER: self.begin(values[self.selected])
     def draw(self,draw,width,height):
         title='SOLVER / '+self.page.upper()
-        r,_,_=self.chrome(draw,title,'ENTER edit  F5 Solve  F3 Degree/size')
+        r,_,_=self.chrome(draw,title,'ENTER edit  F6 Solve  Options: degree/size')
         if self.page=='start': rows=(('Equation in x','General form, bounded numerical root'),('Polynomial','Degree 2..4; real or complex roots'),('Linear system','2..4 unknowns; native QR solve'))
         elif self.page=='results': rows=self.results
         elif self.page=='equation': rows=[('Equation',self.expression)]+list(zip(('Lower bound','Upper bound','Initial guess'),(format_value(v) for v in self.bounds)))
@@ -368,6 +373,10 @@ class MatrixWorkspace(Workspace):
         self.matrices[self.name][self.selected//self.columns,self.selected%self.columns]=self.scalar(text)
     def run(self,button):
         if self.common(button): return
+        if button==k.BUTTON_F5:
+            if self.editing and self.page=='cells':return
+            if self.result is not None:self.page='result';self.editing=False
+            return
         if button==self.calc.vm.input_manager._key_esc:
             if self.page=='entry': self.calc.vm.back()
             elif self.page=='cells' and self.editing: self.editing=False; self.calc.error=''
@@ -379,7 +388,7 @@ class MatrixWorkspace(Workspace):
                 self.editor.clear()
             self.page,self.selected,self.editing='names',0,False; return
         if self.page=='entry':
-            if button==k.BUTTON_CENTER:
+            if button in (k.BUTTON_CENTER,k.BUTTON_F6):
                 if self.editor.focus_missing(): raise ValueError('Complete the highlighted slot')
                 value=self.evaluate(source(self.editor.root))
                 if self.is_matrix(value):
@@ -388,7 +397,7 @@ class MatrixWorkspace(Workspace):
                     self.calc.answer=value; self.calc.variables['Ans']=value
                     self.result=None
                 self.editor.clear(); self.calc.error=''
-            elif button==k.BUTTON_F5: self.editor.clear()
+            elif button==k.BUTTON_F10: self.editor.clear()
             else: self.calc.edit_key(self.editor,button)
         elif self.page=='names':
             if button in (k.BUTTON_UP,k.BUTTON_DOWN): self.selected=(self.selected+(-1 if button==k.BUTTON_UP else 1))%4
@@ -440,7 +449,7 @@ class MatrixWorkspace(Workspace):
                 r.text(12,217,'Saved as MatAns; ENTER returns',self.calc.palette.MUTED,TINY)
         else:
             r.text(12,53,'Scalar answer: '+format_value(self.calc.answer),self.calc.accent,TINY)
-            hints=('F3 defines MatA..MatD, sizes 1..4','MatA+MatB  MatA*MatB  2*MatA','inv(MatA) det(MatA) trn(MatA)','MatA^2  trace(MatA) identity(3)','MatB=inv(MatA)  MatAns*MatA')
+            hints=('Options defines MatA..MatD, sizes 1..4','MatA+MatB  MatA*MatB  2*MatA','inv(MatA) det(MatA) trn(MatA)','MatA^2  trace(MatA) identity(3)','MatB=inv(MatA)  MatAns*MatA')
             if self.calc.show_hints:
                 for i,text in enumerate(hints): r.text(12,78+i*19,text,self.calc.palette.MUTED,TINY)
             self.input(draw,width,height)

@@ -147,7 +147,7 @@ for record in a.cache:assert record[0][0]==render.LEFT and record[0][-1]==render
 sim_runtime.lcd_screenshot('/private/tmp/gungos-beamlab-plot-beam2.bmp')
 # Peak stepping and cursor movement remain inside the selected beam.
 for _ in range(len(a.peak_list())+1):
-    key(k.BUTTON_TAB);assert 3<=a.ds<=6
+    key(k.BUTTON_P);assert 3<=a.ds<=6
 key(k.BUTTON_CENTER);assert (0,a.ds) in a.pins
 key(k.BUTTON_F5)
 rows=a.result_rows();a.menu_index=next(i for i,r in enumerate(rows) if r[4] and r[4][0]=='pin')
@@ -169,7 +169,7 @@ key(k.BUTTON_F4);assert a.dmember==1 and a.ds==3
 model['loads']=[]
 a.replace_model(model);assert a.evaluate()
 a.focus(('member',1));key(k.BUTTON_F4)
-key(k.BUTTON_TAB);assert a.ds==3 and a.dmember==1 and a.tab==0
+key(k.BUTTON_P);assert a.ds==3 and a.dmember==1 and a.tab==0
 key(k.BUTTON_ESCAPE)
 a.replace_model(bm.template(1));assert a.evaluate();key(k.BUTTON_F4)
 key(vm.input_manager._key_to_button(ord('m')))

@@ -1,7 +1,7 @@
 """PicoLAB: organised checks, tools and engineering modules."""
 
 HELP = ('PicoLAB:', 'UP/DOWN\tchoose an entry', 'ENTER\topen it', 'ESC\tback one level',
-        'Numerics check:', 'ENTER\trun the checks again')
+        'Numerics check:', 'F6 / ENTER\trun the checks again')
 
 # Keys are stable route IDs; labels are the visible names.
 MENUS = {
@@ -12,29 +12,43 @@ MENUS = {
                ('gallery','Plot previews','Shared 2D and 3D viewer examples')),
     'tools': (('grapher','Grapher','2D / 3D expressions, curves and surfaces'),
               ('calculator','Scientific calculator','Expressions, statistics, solver and matrices'),
-              ('picocad','PicoCAD','Analytic primitives and Boolean part previews'),
               ('unitconvert','UnitConverter','Search everyday and engineering units')),
     'modules': (('structural','Structural','Beams, frames, sections and stress'),
-                ('dynamics','Dynamics','No tools yet'),('thermal','Thermal','Heat conduction and temperature fields'),
-                ('electrical','Electrical','PicoSpice circuit simulator'),('fluids','Fluids','No tools yet')),
+                ('machine','Machine design','Parts and machine components'),
+                ('dynamics','Dynamics','Planned: vibration and response'),
+                ('fluids','Fluids','Planned: flow, losses and networks'),
+                ('thermal','Thermal','Heat conduction and temperature fields'),
+                ('electrical','Electrical','PicoSpice circuit simulator')),
     'structural': (('beam','BeamView','Supports, loads, sections and diagrams'),
                    ('discs','Shrink fit','Rotating discs, thick cylinders, press fits'),
                    ('mohr','Mohr circle','2D/3D stress, element rotation, principal'),
                    ('stressstrain','StressStrain','Section loads and stress / strain conversion'),
                    ('buckling','Buckling','Euler columns, slenderness and yield checks'),
                    ('sectionprops','Section Properties','Cross-sections, centroids, inertias and materials')),
+    'machine': (('picocad','PicoCAD','Analytic parts and Boolean previews'),),
     'thermal': (('heat2d','Heat transfer 2D','Steady and transient conduction in a plate'),),
     'electrical': (('spice','PicoSpice','Circuits: operating point, DC sweep, transient'),),
     'dynamics': (), 'fluids': (),
 }
+# Informational rows only: these apps have no launch targets or imports.
+PLANNED = {
+    'dynamics': (('ModalHarmonics','Planned: modes and harmonic response'),
+                 ('TransientSolve','Planned: time-domain response'),
+                 ('Multibody','Planned: connected-body motion'),
+                 ('TransferFunc','Planned: linear systems and control')),
+    'fluids': (('FlowRegimes','Planned: flow classification'),
+               ('PipeLoss','Planned: pressure losses in pipes'),
+               ('BoundaryDrag','Planned: external flow and drag'),
+               ('1DNetSolve','Planned: hydraulic networks')),
+}
 PARENTS = {'checks':'root','tools':'root','modules':'root','structural':'modules',
-           'dynamics':'modules','thermal':'modules','electrical':'modules','fluids':'modules',
+           'machine':'modules','dynamics':'modules','thermal':'modules','electrical':'modules','fluids':'modules',
            'gallery':'checks','bench':'checks'}
 PATHS = {'root':(), 'checks':('checks',), 'tools':('tools',), 'modules':('modules',),
          'structural':('modules','structural'), 'gallery':('checks','Plot previews'),
          'bench':('checks','Numerics check')}
-for _name in ('dynamics','thermal','electrical','fluids'):
-    PATHS[_name]=('modules',_name)
+for _name in ('machine','dynamics','thermal','electrical','fluids'):
+    PATHS[_name]=('modules','machine design' if _name=='machine' else _name)
 
 _selected = 0
 _gallery_selected = 0
@@ -99,8 +113,10 @@ def _draw(view_manager):
     breadcrumbs.bind(view_manager,PATHS[_page])
     if _page in MENUS:
         entries=MENUS[_page]
-        rows=[(label,detail) for _,label,detail in entries] if entries else [('No tools yet','This module is planned; ESC returns')]
-        theme.menu(view_manager.draw,rows,_selected if entries else -1,'',message=_error,palette=palette,error=bool(_error))
+        rows=[(label,detail) for _,label,detail in entries] if entries else PLANNED[_page]
+        colors=None if entries else [(palette.MUTED,palette.MUTED)]*len(rows)
+        theme.menu(view_manager.draw,rows,_selected if entries else -1,'',message=_error,
+                   row_colors=colors,palette=palette,error=bool(_error))
     elif _page == 'gallery':
         from engtools.plots.gallery import CHOICES
         theme.menu(view_manager.draw,CHOICES,_gallery_selected,'',message=_error,palette=palette,error=bool(_error))
@@ -131,7 +147,7 @@ def _launch(view_manager,target):
     path={'beam':('modules','structural','BeamView'),'mohr':('modules','structural','Mohr circle'),
           'discs':('modules','structural','Shrink fit'),'heat2d':('modules','thermal','Heat transfer 2D'),
           'spice':('modules','electrical','PicoSpice'),
-          'grapher':('tools','Grapher'), 'calculator':('tools','Scientific calculator'),'picocad':('tools','PicoCAD'),
+          'grapher':('tools','Grapher'), 'calculator':('tools','Scientific calculator'),'picocad':('modules','machine design','PicoCAD'),
           'unitconvert':('tools','UnitConverter'),
           'stressstrain':('modules','structural','StressStrain'),
           'buckling':('modules','structural','Buckling'),
@@ -188,7 +204,7 @@ def _launch(view_manager,target):
 
 def run(view_manager):
     global _selected,_gallery_selected,_dirty,_resume,_error,_bench
-    from picoware.system.buttons import BUTTON_UP,BUTTON_DOWN,BUTTON_CENTER,BUTTON_ESCAPE
+    from picoware.system.buttons import BUTTON_UP,BUTTON_DOWN,BUTTON_CENTER,BUTTON_ESCAPE,BUTTON_F6
     button=view_manager.button
     if button==BUTTON_ESCAPE:
         if _page=='root':view_manager.back();return
@@ -224,7 +240,7 @@ def run(view_manager):
                     plot3d.show(view_manager,spec)
                 return
             except Exception as exc:_resume,_error,_dirty=False,str(exc),True
-    elif _page=='bench' and button==BUTTON_CENTER:_start_bench()
+    elif _page=='bench' and button in (BUTTON_CENTER,BUTTON_F6):_start_bench()
     if _page=='bench' and _bench is not None:
         try:_bench_rows.append(next(_bench))
         except StopIteration:_bench=None

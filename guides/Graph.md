@@ -93,3 +93,10 @@ builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_graph.py
 ```
 
 Shared plotting and deployment now require the engtools package. See [SharedPlots.md](SharedPlots.md); use its bundle/build command when updating Graph.
+
+F9 also works inside expression and numeric editors. Closing help restores
+the same draft, caret and selection. F3 opens Options, F4 returns to the plot,
+and F6 refreshes it. F1 adds an expression (2D) or second surface (3D); F2
+opens item selection in 2D or the second-surface editor in 3D. Clear the second
+surface to remove it. Z in Graph3D remains its documented range shortcut; it
+is a viewer action, distinct from model-editor undo.

@@ -43,7 +43,7 @@ HELP = ('Symbols:', 'E Young modulus; I second moment of area',
         'Section tab: ENTER edits section/material',
         'Section editor shares Beam view preview',
         'Valid typed dimensions preview before ENTER',
-        'F1 both end conditions; F2 section material',
+        'Ends / material: ENTER on their fields',
         'F3 examples, cases and CSV',
         'F4 Euler / slenderness plot',
         'F5 results; F6 calculate; F9 help')
@@ -350,13 +350,8 @@ class Buckling:
             self.say('Undone; F6 calculates')
         elif button == k.BUTTON_F6:
             self.calculate()
-        elif button == k.BUTTON_F1:
-            self.select_tab('Ends')
-            self.open_choice(('both',))
-        elif button == k.BUTTON_F2:
-            self.select_tab('Section')
-            self.open_section(material=True)
-            self.open_choice(('material',))
+        elif button in (k.BUTTON_F1, k.BUTTON_F2):
+            return
         elif button == k.BUTTON_F3:
             self.close_section()
             self.page, self.index = 'options', 0

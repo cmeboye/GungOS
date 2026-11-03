@@ -149,14 +149,14 @@ def text(value):
     for char in value:key(vm.input_manager._key_to_button(ord(char)))
 finish()
 assert c.show_built and not c.error and hasattr(c.geometry,'circles')
-assert breadcrumbs.current(vm)==('tools','PicoCAD') or breadcrumbs.current(vm) is None
+assert breadcrumbs.current(vm)==('modules','machine design','PicoCAD') or breadcrumbs.current(vm) is None
 snap('built-example')
 assert c.geometry is not None
 assert 'Solid + wire' not in app.VIEWS and 'Wireframe' not in app.VIEWS
 # F3 contains the requested file/quality/projection options only.
 cached=c.geometry;unchanged=dm.clone(c.model);dirty=c.dirty
 key(k.BUTTON_F3)
-assert c.popup==('Save','Save as','Open','New','Curve Quality','Projection')
+assert c.popup==('Save','Save as','Open','New','Curve Quality','Projection','Camera views')
 snap('options')
 choose('Projection');assert c.popup==('Perspective','Isometric') and c.menu_index==0
 choose('Isometric')
@@ -210,8 +210,8 @@ key(k.BUTTON_F);snap('orbit')
 key(k.BUTTON_SPACE);before=c.camera.pan_x;key(k.BUTTON_LEFT)
 assert c.camera.pan_x<before and c.geometry is cached
 key(k.BUTTON_ESCAPE);assert c.focus=='editor'
-key(k.BUTTON_F5);choose('Top');assert c.geometry is cached;snap('top')
-key(k.BUTTON_F5);choose('Isometric')
+key(k.BUTTON_F3);choose('Camera views');choose('Top');assert c.geometry is cached;snap('top')
+key(k.BUTTON_F3);choose('Camera views');choose('Isometric')
 # Edit the cutter radius through real keys; dimensions change only on commit.
 key(k.BUTTON_DOWN);assert c.selected==1
 key(k.BUTTON_CENTER);assert c.tab==1
@@ -225,11 +225,11 @@ text('-2');key(k.BUTTON_CENTER)
 assert c.model['features'][1]['x']==-2 and c.camera.zoom==zoom
 key(k.BUTTON_Z);assert c.model['features'][1]['x']==0 and c.model['features'][1]['a']==6
 # Partial rebuilds never replace the old cache; Esc retains edited primitives.
-c.input(k.BUTTON_F4);assert c.job is not None
+c.input(k.BUTTON_F6);assert c.job is not None
 c.input(k.BUTTON_ESCAPE);assert c.job is None and c.geometry is cached and c.model['features'][1]['a']==6
-key(k.BUTTON_F4);finish();assert c.geometry is not cached and c.show_built
+key(k.BUTTON_F6);finish();assert c.geometry is not cached and c.show_built
 # A finished build is labelled with the model it was given, not the current one.
-built=dm.clone(c.model);c.input(k.BUTTON_F4)
+built=dm.clone(c.model);c.input(k.BUTTON_F6)
 edited=dm.clone(c.model);edited['features'][1]['a']=5;c.transact(edited);finish()
 assert c.built_model==built and not c.show_built
 c.undo_edit();assert c.show_built and c.model==built
@@ -337,12 +337,12 @@ print('PASS: XYZ guide, parallel/perspective projection, six-item options, blank
 # Launch the real PicoLAB route and return with its selection/breadcrumb intact.
 import PicoLAB as lab
 vm.add(View('lab',lab.run,lab.start,lab.stop));vm.switch_to('lab')
-lab._enter('tools');lab._selected=next(i for i,row in enumerate(lab.MENUS['tools']) if row[0]=='picocad')
+lab._enter('machine');lab._selected=next(i for i,row in enumerate(lab.MENUS['machine']) if row[0]=='picocad')
 key(k.BUTTON_CENTER);c=app._active
-assert vm.current_view.name=='picocad_view' and breadcrumbs.current(vm)==('tools','PicoCAD')
+assert vm.current_view.name=='picocad_view' and breadcrumbs.current(vm)==('modules','machine design','PicoCAD')
 finish();snap('picolab-launch')
 key(k.BUTTON_ESCAPE)
-assert vm.current_view.name=='lab' and lab._page=='tools'
-sim_runtime._keys=[];sim_runtime.request_open('Apps/PicoLAB/tools/PicoCAD');assert sim_runtime._keys
-print('PASS: PicoLAB Tools route, logo breadcrumb, selection restoration and managed resource cleanup')
+assert vm.current_view.name=='lab' and lab._page=='machine'
+sim_runtime._keys=[];sim_runtime.request_open('Apps/PicoLAB/modules/Machine design/PicoCAD');assert sim_runtime._keys
+print('PASS: PicoLAB Machine design route, logo breadcrumb, selection restoration and managed resource cleanup')
 print('Screenshots: '+preview)

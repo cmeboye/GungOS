@@ -43,7 +43,7 @@ def _hatch(draw, x0, y0, x1, y1, color, flip, gap=5):
             d += gap
 
 
-def section(draw, p, model, box, selected, zoom=1.0):
+def section(draw, p, model, box, selected, zoom=1.0, pan=(0, 0)):
     """The stack cut through its axis: material hatched, the bore empty,
     the axis dash-dotted, with pressures and speed marked."""
     left, top, right, bottom = box
@@ -52,6 +52,7 @@ def section(draw, p, model, box, selected, zoom=1.0):
     tmax = max(b['t'] for b in bodies)
     s = min((right - left - 24) / (2 * R[-1]), (bottom - top - 30) / tmax) * zoom
     cx, cy = (left + right) // 2, (top + bottom) // 2 - 4
+    cx, cy = cx+pan[0], cy+pan[1]
     chosen_body = selected[1] if selected and selected[0] == 'body' else None
     chosen_fit = selected[1] if selected and selected[0] == 'fit' else None
     for k, b in enumerate(bodies):
@@ -107,7 +108,7 @@ def section(draw, p, model, box, selected, zoom=1.0):
     text(draw, left + 2, y + 5, 'dia mm', p.MUTED)
 
 
-def wireframe(draw, p, model, box, yaw, pitch, zoom, selected):
+def wireframe(draw, p, model, box, yaw, pitch, zoom, selected, pan=(0, 0)):
     """The stack as a wireframe, turned by yaw about its axis and tilted by
     pitch (0 side on, 90 face on)."""
     left, top, right, bottom = box
@@ -119,6 +120,7 @@ def wireframe(draw, p, model, box, yaw, pitch, zoom, selected):
     size = max(2 * R[-1], tmax)
     s = min(right - left, bottom - top) / (1.15 * size) * zoom
     cx, cy = (left + right) / 2, (top + bottom) / 2
+    cx, cy = cx+pan[0], cy+pan[1]
     chosen_body = selected[1] if selected and selected[0] == 'body' else None
     chosen_fit = selected[1] if selected and selected[0] == 'fit' else None
 

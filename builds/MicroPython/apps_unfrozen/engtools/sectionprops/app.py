@@ -31,8 +31,8 @@ HELP = ('Axes and properties:', 'Origin: outer box bottom-left', 'y right, z up;
         'E sets bending rigidity; G is isotropic',
         'Keys:', 'LEFT/RIGHT tabs; UP/DOWN chooses a row',
         'ENTER edits; type numbers to replace', 'Valid drafts preview before ENTER',
-        'ENTER applies; ESC cancels or goes back', 'F1 shape; F2 material; F3 files/examples',
-        'F4 enlarged section; TAB toggles axes', 'F5 full results; F6 refresh; F9 equations', 'Z undo',
+        'ENTER applies; ESC cancels or goes back', 'Shape/material: ENTER on their fields; F3 options',
+        'F4 enlarged section; A toggles axes', 'F5 full results; F6 refresh; F9 equations', 'Z undo',
         'First-pass scope:', 'Six templates; no composite/CAD profiles',
         'Saved sections stay within this app', 'Connections to other apps come later')
 _active = None
@@ -282,10 +282,8 @@ class SectionProperties:
             self.solution = model.solve(self.state)
             self.row = min(self.row, len(self.rows())-1)
             self.say('Undone')
-        elif button == k.BUTTON_F1:
-            self.page = 'model'; self.select_tab('Geometry'); self.row = 0; self.begin()
-        elif button == k.BUTTON_F2:
-            self.page = 'model'; self.select_tab('Material'); self.row = 0; self.begin()
+        elif button in (k.BUTTON_F1, k.BUTTON_F2):
+            return
         elif button == k.BUTTON_F3:
             self.page, self.index = 'options', 0
         elif button == k.BUTTON_F4:
@@ -294,7 +292,7 @@ class SectionProperties:
             self.page, self.index = 'results', 0
         elif button == k.BUTTON_F6:
             self.solution = model.solve(self.state); self.say('Properties refreshed')
-        elif button == k.BUTTON_TAB and self.page in ('model', 'view'):
+        elif button == k.BUTTON_A and self.page in ('model', 'view'):
             self.axes = not self.axes
         elif self.page in ('options', 'files', 'examples', 'results'):
             count = len(OPTIONS) if self.page == 'options' else len(self.files) if self.page == 'files' else len(model.EXAMPLES) if self.page == 'examples' else len(property_rows(self.solution))

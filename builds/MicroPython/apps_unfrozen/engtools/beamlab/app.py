@@ -41,7 +41,7 @@ HELP = (
     'ENTER on choice: live preview list',
     '[ / ] or UP/DOWN previews choices',
     'ENTER accepts; ESC restores the choice',
-    'TAB next member; , / . steps points',
+    'TAB preview / inputs; SPACE Move / Probe',
     '+ / - preview zoom; I result summary',
     '', 'Nodes:',
     'X,Y in metres; Type Rigid / Pinned',
@@ -89,8 +89,8 @@ HELP = (
     '', 'Plots:',
     '[ / ] next/previous member; indicator L#',
     'LEFT/RIGHT cursor; UP/DOWN stops',
-    'TAB peaks; ENTER pins (up to 8)',
-    'V / SPACE next case or combination',
+    'P peaks; ENTER pins (up to 8)',
+    'V next case or combination',
     'D changes quantity; F whole-frame view',
     '', 'Text and files:',
     'ENTER apply; ESC cancel; TAB apply',
@@ -139,6 +139,9 @@ class BeamLab:
         self.section, self.section_row = None, 0
         self.help_first = 0
         self.zoom = 0
+        self.preview_focus, self.navigation = False, 'Move'
+        self.preview_input = None
+        self.pan = [0, 0]
         self.help_open = False
         self.info = False  # result summary box over the preview (I)
         self.solution, self.problem = None, None
@@ -363,6 +366,7 @@ class BeamLab:
         if self.model is not None:
             self.snapshot()
         self.model = model
+        self.preview_focus, self.preview_input, self.pan = False, None, [0, 0]
         self.model_tab, self.tab_selections = 0, [None] * len(MODEL_TABS)
         self.pin_beams = {}
         self.view, self.pins, self.ds, self.dline, self.zoom = len(model['cases']), [], 0.0, 0, 0
@@ -611,6 +615,7 @@ class BeamLab:
         page = {keys.BUTTON_F3: 'options', keys.BUTTON_F4: 'diagrams',
                 keys.BUTTON_F5: 'results'}.get(button)
         if page and self.model is not None:
+            if self.preview_focus:self.leave_preview()
             if page in ('options', 'results'):
                 self.menu_index = 0
             if page == 'diagrams' and self.page == 'model' and self.model['members']:
@@ -621,6 +626,7 @@ class BeamLab:
             self.open_help()
             return
         if button==keys.BUTTON_F1 and self.page=='model':
+            self.preview_focus, self.preview_input = False, None
             if self.model_tab==0:self.add_node()
             elif self.model_tab==1:self.add_member()
             else:
@@ -644,7 +650,34 @@ class BeamLab:
         if refs:self.focus(refs[0])
         self.say('Removed / Z undo / F6 evaluate')
 
+    def leave_preview(self):
+        self.preview_focus = False
+        if self.preview_input is not None:
+            self.model_tab, self.sel, self.tab_selections = self.preview_input
+            self.preview_input = None
+
     def key_model(self,button,esc):
+        if button == keys.BUTTON_F2:
+            self.preview_focus, self.preview_input = False, None
+        if button == keys.BUTTON_TAB:
+            if self.preview_focus:self.leave_preview()
+            else:
+                self.preview_input = (self.model_tab, self.sel, self.tab_selections[:])
+                self.preview_focus = True
+            return
+        if self.preview_focus:
+            if esc:self.leave_preview()
+            elif button == keys.BUTTON_SPACE:self.navigation = 'Probe' if self.navigation == 'Move' else 'Move'
+            elif self.navigation == 'Move' and button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT, keys.BUTTON_UP, keys.BUTTON_DOWN):
+                self.pan[0] += 8*((button == keys.BUTTON_RIGHT)-(button == keys.BUTTON_LEFT))
+                self.pan[1] += 8*((button == keys.BUTTON_DOWN)-(button == keys.BUTTON_UP))
+            elif self.navigation == 'Probe' and button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT):
+                self.move_point(1 if button == keys.BUTTON_RIGHT else -1)
+            elif self.navigation == 'Probe' and button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
+                self.cycle_member(1 if button == keys.BUTTON_DOWN else -1)
+            elif self.char(button) in ('+', '='):self.zoom=min(self.zoom+1,len(ZOOMS)-1)
+            elif self.char(button) == '-':self.zoom=max(0,self.zoom-1)
+            return
         if esc:
             if self.sel and self.sel[1] is not None:self.focus(self.sel[0])
             else:self.vm.back()
@@ -657,7 +690,6 @@ class BeamLab:
             row=self.current()
             if row and row[0]=='field' and row[5][2]=='choice':self.cycle_choice(-1 if c=='[' else 1)
             else:self.cycle_member(-1 if c=='[' else 1)
-        elif button==keys.BUTTON_TAB:self.cycle_member(1)
         elif c in (',','.','<','>'):self.move_point(1 if c in ('.','>') else -1)
         elif button==keys.BUTTON_CENTER:
             row=self.current()
@@ -670,8 +702,6 @@ class BeamLab:
             self.open_section(self.model['sections'][self.model['members'][m]['section']])
         elif c=='z':self.undo_last()
         elif c=='i':self.info=not self.info
-        elif c in ('+','='):self.zoom=min(self.zoom+1,len(ZOOMS)-1)
-        elif c=='-':self.zoom=max(0,self.zoom-1)
         elif erase_key(self.vm,button):
             row=self.current()
             if row and row[0]=='field' and row[5][2]=='num':self.begin_edit();self.edit.key(self.vm,button)
@@ -777,7 +807,7 @@ class BeamLab:
                 earlier = [p for p in points if p < self.ds - 1e-9]
                 self.ds = earlier[-1] if earlier else start
             self.note, self.tab = '', -1
-        elif button == keys.BUTTON_TAB:
+        elif c == 'p':
             peaks = self.peak_list()
             self.tab = (self.tab + 1) % len(peaks)
             label, s, q = peaks[self.tab]
@@ -790,7 +820,7 @@ class BeamLab:
                 self.pins.sort()
             self.pin_beams[(self.dline,self.ds)] = self.dmember
             self.note = 'Pinned: see F5 Results'
-        elif c == 'v' or button == keys.BUTTON_SPACE:
+        elif c == 'v':
             self.next_view()
         elif c == 'd':
             if self.whole:
@@ -1260,10 +1290,13 @@ class BeamLab:
         x,y,w,h=render.MODEL_PREVIEW
         here=self.cursor_position();member=self.cursor_member();runs=bm.lines(self.model)
         evaluated=self.solution is not None
-        render.panel(draw,p,render.MODEL_PREVIEW,'FRAME PREVIEW',self.cursor_label()+' / '+('evaluated' if evaluated else 'geometry'),p.PANEL)
+        render.panel(draw,p,render.MODEL_PREVIEW,('FRAME / '+self.navigation.upper()) if self.preview_focus else 'FRAME PREVIEW',self.cursor_label()+' / '+('evaluated' if evaluated else 'geometry'),p.PANEL)
         preview=render.Viewport(draw,(x+5,y+17,x+w-5,y+h-15))
         pp=theme.colors(p.PANEL,p.TEXT,p.ACCENT)
         view=render.View(self.model,render.MODEL_BOX,ZOOMS[self.zoom],here)
+        view.ox += self.pan[0];view.oy += self.pan[1]
+        if self.preview_focus:
+            draw._rectangle(*render.MODEL_PREVIEW,p.ACCENT)
         shape=self.picture(('deflected',self.view,view.scale,view.ox,view.oy),
                            lambda:render.deflected(self.model,self.solution,view,self.view)) if evaluated else None
         run=runs[self.line] if runs else []

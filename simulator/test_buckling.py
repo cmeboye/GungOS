@@ -183,7 +183,7 @@ text('z'); assert a.state == original
 # Invalid sizes stay in the editor until corrected/cancelled.
 text('0'); key(k.BUTTON_CENTER); assert a.edit is not None and a.error
 key(k.BUTTON_ESCAPE)
-key(k.BUTTON_F2); assert a.page == 'section' and a.choice[3] == ('material',)
+a.open_section(material=True); key(k.BUTTON_CENTER); assert a.page == 'section' and a.choice[3] == ('material',)
 key(k.BUTTON_ESCAPE)  # cancel preset chooser; E follows material in this view
 key(k.BUTTON_DOWN); assert a.rows()[a.row][4] == ('material', 'E')
 text('210')
@@ -196,10 +196,8 @@ key(k.BUTTON_ESCAPE); assert a.page == 'model'
 field(('length',)); text('2*2'); key(k.BUTTON_CENTER)
 assert a.solution is None; near(a.state['length'], 4)
 text('z'); near(a.state['length'], 2)
-key(k.BUTTON_F1)
-for _ in range(3):
-    key(k.BUTTON_DOWN)
-key(k.BUTTON_CENTER)
+choose(('ends_y',), 3)
+choose(('ends_z',), 3)
 assert a.state['ends_y'] == a.state['ends_z'] == 3
 key(k.BUTTON_F6); near(a.solution['critical'], expected/4)
 choose(('ends_y',), 4)
@@ -209,7 +207,7 @@ key(k.BUTTON_ESCAPE)
 text('1.25'); key(k.BUTTON_CENTER)
 key(k.BUTTON_F6); assert a.solution is not None
 choose(('shape',), 3)
-key(k.BUTTON_F2); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
+choose(('material',), 1)
 assert a.state['shape'] == 'tube' and a.state['material']['E'] == 70e9
 key(k.BUTTON_F6)
 key(k.BUTTON_F5); assert a.page == 'results'

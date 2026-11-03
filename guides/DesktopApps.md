@@ -1,6 +1,6 @@
 # Desktop apps: PicoPaint and PicoWord
 
-Open **Apps → PicoDESK**, then choose Eggcel, PicoWord or PicoPaint.
+Open **Apps → PicoDESK**, then choose Eggcel, PicoWord, PicoPaint [PicoDict](PicoDict.md) or [PicoReader](PicoReader.md).
 PicoLAB is a separate engineering app, including Graph and Graph3D. The new
 hierarchy, shared firmware theme and Esc-only navigation are included in v1.2 and later.
 Review changes in the simulator before building/flashing firmware.

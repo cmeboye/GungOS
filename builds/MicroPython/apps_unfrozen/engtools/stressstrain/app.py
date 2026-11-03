@@ -29,11 +29,11 @@ HELP = ('Inputs:', 'UP/DOWN choose; ENTER edit or choose',
         'Section view: Geometry / Material / Properties',
         'Valid dimension drafts preview before ENTER',
         'ESC cancels an edit, then returns to inputs',
-        'F1 analysis mode  F2 material preset',
+        'Mode / material: ENTER on their fields',
         'F3 files, examples and assumptions',
         'F4 stress map / tensor view', 'F5 results  F6 calculate  F9 help',
         'Section view:', 'Arrows move the point by 5% of size',
-        'TAB cycles edge points and centre', 'Probe movement updates calculated results',
+        'P cycles edge points and centre', 'Probe movement updates calculated results',
         'F7 cycles sx / shear / von Mises maps',
         'F8 jumps through four critical points',
         'Max/min sx: exact within the section model',
@@ -71,6 +71,7 @@ class StressStrain:
         from engtools import session
         self.state = model.copy(session.kept.get(model.TOOL) or model.new_state())
         self.page, self.row, self.index = 'model', 0, 0
+        self.preview_focus = False
         self.edit, self.choice, self.dialog = None, None, None
         self.solution = None
         self.section_map, self.map_cache = None, None
@@ -359,7 +360,7 @@ class StressStrain:
     def move_point(self, button):
         s = model.copy(self.state)
         p = model.section(s)
-        if button == k.BUTTON_TAB:
+        if button == k.BUTTON_P:
             points = [(0.0, p['rz']), (p['ry'], 0.0), (0.0, -p['rz']), (-p['ry'], 0.0)]
             if s['shape'] != 'tube':
                 points.append((0.0, 0.0))
@@ -441,6 +442,21 @@ class StressStrain:
                     self.move(-1 if action == 'up' else 1)
             return
         self.message, self.error = '', False
+        if self.page == 'model' and self.state['mode'] == 'section' and self.solution is not None:
+            if button == k.BUTTON_TAB:
+                self.preview_focus = not self.preview_focus
+                return
+            if self.preview_focus:
+                if esc:
+                    self.preview_focus = False
+                elif button in (k.BUTTON_LEFT, k.BUTTON_RIGHT, k.BUTTON_UP, k.BUTTON_DOWN, k.BUTTON_P):
+                    self.move_point(button)
+                elif button not in (k.BUTTON_F3, k.BUTTON_F4, k.BUTTON_F5, k.BUTTON_F6):
+                    return
+                else:
+                    self.preview_focus = False
+                if button not in (k.BUTTON_F3, k.BUTTON_F4, k.BUTTON_F5, k.BUTTON_F6):
+                    return
         if esc:
             if self.page == 'section':
                 self.close_section()
@@ -464,13 +480,13 @@ class StressStrain:
             self.page, self.index = 'options', 0
         elif button == k.BUTTON_F4:
             if self.page != 'plots' and self.solution is None:
-                self.calculate()
+                raise ValueError('F6 Calculate before plotting')
             self.close_section()
             self.page = 'model' if self.page == 'plots' else 'plots'
         elif button in (k.BUTTON_F7, k.BUTTON_F8) and self.page == 'plots' and self.state['mode'] == 'section':
             if button == k.BUTTON_F7:
                 if self.solution is None:
-                    self.calculate()
+                    raise ValueError('F6 Calculate before plotting')
                 if self.section_map is None:
                     raise ValueError('A custom section has no boundary to map')
                 self.map_kind = (self.map_kind+1)%3
@@ -480,17 +496,8 @@ class StressStrain:
         elif button == k.BUTTON_F5:
             self.close_section()
             self.page, self.index = 'results', 0
-        elif button == k.BUTTON_F1:
-            self.select_tab('Analysis')
-            self.page, self.row = 'model', 0
-            self.begin()
-        elif button == k.BUTTON_F2:
-            if self.state['mode'] == 'section':
-                self.select_tab('Section')
-                self.open_section(material=True)
-            else:
-                self.select_tab('Material')
-            self.choice = ['Illustrative material', tuple(r[0] for r in materials.PRESETS), 0, ('material',)]
+        elif button in (k.BUTTON_F1, k.BUTTON_F2):
+            return
         elif self.page in ('options', 'examples', 'files', 'results'):
             count = len(OPTIONS) if self.page == 'options' else len(model.EXAMPLES) if self.page == 'examples' else len(self.files) if self.page == 'files' else len(self.result_rows())
             if button in (k.BUTTON_UP, k.BUTTON_DOWN):
@@ -507,7 +514,7 @@ class StressStrain:
                     self.changed(state)
                     self.page, self.row = 'model', 0
         elif self.page == 'plots':
-            if self.state['mode'] == 'section' and button in (k.BUTTON_LEFT, k.BUTTON_RIGHT, k.BUTTON_UP, k.BUTTON_DOWN, k.BUTTON_TAB):
+            if self.state['mode'] == 'section' and button in (k.BUTTON_LEFT, k.BUTTON_RIGHT, k.BUTTON_UP, k.BUTTON_DOWN, k.BUTTON_P):
                 self.move_point(button)
         else:
             if button in (k.BUTTON_LEFT, k.BUTTON_RIGHT):
@@ -535,14 +542,14 @@ class StressStrain:
             self.row = min(self.row, len(rows)-1)
             draw_tabs(draw, p, (8, 161, 304, bottom-164), self.tabs.labels, self.tabs.index,
                       [None]*len(self.tabs.labels), font=XS)
-            form(draw, p, [r[:4] for r in rows], self.row, self.edit, 188, bottom-24, font=XS)
-            text(draw, 15, bottom-17, 'F1 Mode  F2 Mat  F3 Files  F5 Results', p.MUTED)
+            form(draw, p, [r[:4] for r in rows], -1 if self.preview_focus else self.row, self.edit, 188, bottom-24, font=XS)
+            text(draw, 15, bottom-17, 'F3 Options  F5 Results  F6 Calculate', p.MUTED)
         elif self.page == 'section':
             self.draw_section(draw, p, bottom)
         elif self.page == 'plots':
             self.draw_preview(draw, p, (8, 43, 304, 171))
             if self.state['mode'] == 'section':
-                text(draw, 16, 222, 'Arrows: probe   TAB: edge / centre', p.MUTED)
+                text(draw, 16, 222, 'Arrows: probe   P: edge / centre', p.MUTED)
                 text(draw, 16, 237, 'F7: map field   F8: critical point', p.MUTED)
                 if self.section_map is not None:
                     for i, (value, y, z) in enumerate(self.section_map.extrema):
@@ -625,20 +632,22 @@ class StressStrain:
                         validate=lambda shape, dims: model.section(state), axes=True)
         draw_tabs(draw, p, (8, 230, 304, bottom-233), self.section_tabs.labels, self.section_tabs.index,
                   [None]*len(self.section_tabs.labels), font=XS, height=14)
-        form(draw, p, [r[:4] for r in rows], self.row, self.edit, 248, bottom-7, font=XS, row_height=12)
+        form(draw, p, [r[:4] for r in rows], -1 if self.preview_focus else self.row, self.edit, 248, bottom-7, font=XS, row_height=12)
 
     def draw_preview(self, draw, p, rect):
         if self.section_map is not None and self.solution is not None:
             map_preview(draw, p, self, rect)
         else:
             preview(draw, p, self.state, self.solution, rect)
+        if self.preview_focus and self.page == 'model':
+            draw._rectangle(*rect, p.ACCENT)
 
 
 def map_preview(draw, p, app, rect):
     from engtools.ui.lab import mix
     x, y, w, h = rect
     field, kind = app.section_map, app.map_kind
-    panel(draw, p, rect, KINDS[kind].upper(), 'MPa / F4 View' if h < 150 else 'MPa')
+    panel(draw, p, rect, KINDS[kind].upper(), 'MPa / Probe' if app.preview_focus and app.page == 'model' else 'MPa / F4 View' if h < 150 else 'MPa')
     scale = min(118/(2*field.ry), (h-54)/(2*field.rz))
     width, height = max(1, int(2*field.ry*scale)+1), max(1, int(2*field.rz*scale)+1)
     left, top = x+73-width//2, y+25

@@ -113,6 +113,7 @@ def formulas(kind):
 class EquationHelp:
     def __init__(self):
         self.opened, self.first, self.blocks = False, 0, []
+        self.visible = 1
 
     def open(self, kind, lines):
         self.blocks = [('formula', label, expression) for label, expression in formulas(kind)]
@@ -125,7 +126,7 @@ class EquationHelp:
         if button in (k.BUTTON_F9, k.BUTTON_ESCAPE, k.BUTTON_BACK):
             self.opened = False
         else:
-            step = {k.BUTTON_UP: -1, k.BUTTON_DOWN: 1, k.BUTTON_LEFT: -4, k.BUTTON_RIGHT: 4}.get(button, 0)
+            step = {k.BUTTON_UP: -1, k.BUTTON_DOWN: 1, k.BUTTON_LEFT: -self.visible, k.BUTTON_RIGHT: self.visible}.get(button, 0)
             self.first = min(max(0, self.first+step), max(0, len(self.blocks)-1))
 
     def draw(self, draw, p):
@@ -135,6 +136,7 @@ class EquationHelp:
         bounded = Viewport(draw, (17, 65, int(draw.size.x)-20, bottom-22))
         renderer = Renderer(draw, bounded.box, p.ACCENT, p)
         y = 68
+        self.visible = 0
         for kind, label, expression in self.blocks[self.first:]:
             if kind == 'formula':
                 box = renderer.layout(expression, SM)
@@ -151,4 +153,5 @@ class EquationHelp:
                     break
                 text(bounded, 19, y, label, p.ACCENT if label.endswith(':') else p.TEXT)
             y += height
+            self.visible += 1
         text(draw, 18, bottom-14, 'UP/DOWN scroll  F9 / ESC close', p.MUTED)

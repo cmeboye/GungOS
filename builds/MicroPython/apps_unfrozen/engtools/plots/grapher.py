@@ -7,7 +7,7 @@ from picoware.system import buttons as k
 
 SESSION = 'picoware/settings/grapher/session.json'
 LIMIT = 32768
-HELP = ('Grapher:', 'F2 switches 2D / 3D at the plot', 'F3 or ESC opens the Grapher menu',
+HELP = ('Grapher:', 'F3 Options selects 2D / 3D', 'F3 or ESC opens the Grapher menu',
         'Each mode keeps its own working plot', 'ARROWS pan   + / - zoom   F fit',
         'ENTER edits expressions   W settings', '3D: SPACE changes pan / orbit',
         'Plot options opens mode-specific tools', 'F9 shows these workspace controls',
@@ -144,11 +144,9 @@ class Grapher:
         button = vm.button
         try:
             if self.page == 'plot':
-                if self.viewer.root() and button in (k.BUTTON_F2, k.BUTTON_F3, k.BUTTON_ESCAPE, k.BUTTON_F9):
+                if self.viewer.root() and button in (k.BUTTON_F3, k.BUTTON_ESCAPE, k.BUTTON_F9):
                     vm.input_manager.reset()
-                    if button == k.BUTTON_F2:
-                        self.open_mode('3d' if self.mode == '2d' else '2d')
-                    elif button == k.BUTTON_F9:
+                    if button == k.BUTTON_F9:
                         self.help()
                     else:
                         self.page, self.row = 'menu', 0

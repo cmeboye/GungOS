@@ -1,6 +1,6 @@
 # PicoCAD
 
-Open **Apps → PicoLAB → Tools → PicoCAD**. PicoCAD uses direct geometry only.
+Open **Apps → PicoLAB → Modules → Machine design → PicoCAD**. PicoCAD uses direct geometry only.
 Box, Cylinder, Cone and Sphere build at arbitrary positions and rotations.
 Supported analytic Boolean cases are listed below; a general trimmed-face
 Boolean kernel is still in progress. Units are mm and degrees.
@@ -20,15 +20,16 @@ The upper box previews the part; the lower box has Features and Properties
 tabs. Left/Right switches tabs, Up/Down browses the active list, and Enter on
 a feature opens its properties. A selected feature is overlaid in white in
 Properties. Cut and Intersect primitives use dashed outlines. Editing changes
-the primitive preview immediately; combined boundaries require **F4 Build**.
+the primitive preview immediately; combined boundaries require **F6 Build**.
 
 | Key | Action |
 |---|---|
 | F1 | Add Box, Cylinder, Cone or Sphere; Operation is set in Properties |
 | F2 | Remove the selected step; Z can undo |
-| F3 | Save, Save as, Open, New (blank), Curve Quality, Projection |
-| F4 | Build the combined part |
-| F5 | Isometric/Front/Top/Right, Fit and Reset camera |
+| F3 | Save, Save as, Open, New (blank), Curve Quality, Projection, Camera views |
+| F4 | Focus the part preview |
+| F6 | Build the combined part |
+| F3 → Camera views | Isometric/Front/Top/Right, Fit and Reset camera |
 | F9 | Scrollable help; F9/Esc closes it |
 | Tab | Switch keyboard focus between preview and editor |
 | Arrows with preview focused | Orbit, or pan after pressing Space |
@@ -62,7 +63,7 @@ To make the demonstration manually:
 1. F3 → New opens a blank model. F1 → Box adds the initial solid.
 2. F1 → Cylinder, then set Operation to Cut in Properties (Enter on Operation).
    Set Radius to 5 and Height Z to 16, with X/Y/Z all zero.
-3. Press F4. Tab focuses the preview; arrows orbit it and +/− zoom.
+3. Press F6. Tab focuses the preview; arrows orbit it and +/− zoom.
 4. F3 → Save as stores the editable construction history.
 5. F3 → Open lists the saved projects; selecting one reloads and rebuilds it.
 
@@ -70,8 +71,7 @@ F1 always inserts a primitive with Operation = Add and opens its Properties.
 For subsequent steps, Enter on Operation cycles Add, Cut and Intersect. The
 first step must remain Add. All four primitives are visible in the F1 menu.
 
-F3 contains exactly six entries: Save, Save as, Open, New, Curve Quality and
-Projection. New always opens a blank model, using the normal Save/Discard/Cancel
+F3 contains Save, Save as, Open, New, Curve Quality, Projection and Camera views. New always opens a blank model, using the normal Save/Discard/Cancel
 guard if the current model is modified. The startup demo remains a box and bore.
 Undo remains available with Z; Help with F9. Undo restores model inputs and can
 recover the previously cached result when the construction history matches it.
@@ -82,7 +82,7 @@ F3 → Projection selects **Perspective** or **Isometric** without rebuilding th
 geometry or modifying the project. Isometric uses parallel (orthographic)
 projection and starts at an equal-axis isometric orientation. Arrows can orbit
 to other parallel views afterward. Perspective applies depth foreshortening.
-F5's named views and R reset the viewing direction while retaining the selected
+Options' named camera views and R reset the viewing direction while retaining the selected
 projection mode. Fitting after a projection change keeps the part in view.
 
 ## Geometry and rendering
@@ -163,7 +163,7 @@ conversion, filled rendering and mesh export remain deferred. Graph3D is separat
 
 Failures include the offending step where available, appear in the red recovery
 box and preserve edits. Correct a property, undo with Z, or change the operation
-and rebuild with F4. Empty/No change/Multiple bodies are successful outcomes.
+and rebuild with F6. Empty/No change/Multiple bodies are successful outcomes.
 Tolerance is **1e-5 mm + 2e-6 times the largest active primitive extent**; tiny
 features in much larger constructions may require rescaling. Positively sized
 features below the app's 0.01 mm input limit are classified as Limit, not invalid
@@ -218,7 +218,7 @@ PicoCAD itself. The source launcher and simulator contain the new Tools entry.
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_picocad.py
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_picocad_kernel.py
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/benchmark_picocad.py
-sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w --open 'Apps/PicoLAB/tools/PicoCAD'
+sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w --open 'Apps/PicoLAB/modules/Machine design/PicoCAD'
 ```
 
 Checks cover direct radii and face positions, rotated and multiple bores, tiny

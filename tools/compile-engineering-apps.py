@@ -32,7 +32,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     version = runpy.run_path(str(root/'src/MicroPython/picoware/system/features.py'))['FIRMWARE_VERSION']
     source = root / 'builds/MicroPython/apps_unfrozen'
-    files = [source / name for name in ('Grapher.py', 'Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py')]
+    files = [source / name for name in ('Grapher.py', 'Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py','PicoDict.py','PicoReader.py')]
     files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','misc/screensavers/Lenia.py','misc/Benchmark.py','games/Tetris.py')]
     files += [path for path in sorted((source / 'engtools').rglob('*.py')) if 'tools' not in path.relative_to(source).parts]
     files += sorted((source / 'desktopapps').rglob('*.py'))
@@ -87,7 +87,7 @@ def main():
             archive.writestr('INSTALL.txt',
                              'Copy/merge the picoware folder onto the root of your SD card.\n'
                              'Grapher, Graph, Graph3D and PicoLAB require the complete engtools folder.\n'
-                             f'GungOS v{version}: Apps > PicoDESK > Eggcel/PicoWord/PicoPaint. Requires the updated UF2.\n'
+                             f'GungOS v{version}: Apps > PicoDESK > Eggcel/PicoWord/PicoPaint/PicoDict/PicoReader. Requires the updated UF2.\n'
                              'Desktop apps live in desktopapps, separate from engineering engtools.\n'
                              'Eggcel workbooks are saved explicitly under picoware/documents/eggcel.\n'
                              'Keep one .py or .mpy copy of each module in the deployed app tree.\n'
@@ -116,12 +116,13 @@ def main():
                 archive.write(staging/relative,'picoware/apps/'+relative.as_posix())
             archive.writestr('INSTALL.txt',
                              'Merge picoware into the SD root, replacing the matching app modules.\n'
-                             f'GungOS v{version}: Apps > PicoDESK > Eggcel / PicoWord / PicoPaint.\n'
+                             f'GungOS v{version}: Apps > PicoDESK > Eggcel / PicoWord / PicoPaint / PicoDict / PicoReader.\n'
                              'Keep desktopapps and engtools complete. Requires the updated firmware UF2.\n'
+                             'PicoDict also requires the separate PicoDict-data.zip merged into the SD root.\n'
                              'Keep only one .py or .mpy copy per module.\n'
                              'Your existing documents and settings are not included or replaced.\n'
                              'Read DesktopApps.md and Eggcel.md for keys, formats and current limits.\n')
-            for name in ('DesktopApps','Eggcel'):
+            for name in ('DesktopApps','Eggcel','PicoDict','PicoReader'):
                 archive.write(root/'guides'/(name+'.md'),name+'.md')
             archive.write(root/'LICENSE','LICENSE.txt')
             archive.write(root/'guides/Lenia-LICENSE.txt','Lenia-LICENSE.txt')

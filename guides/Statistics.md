@@ -1,6 +1,6 @@
 # Calculator Statistics
 
-Open PicoLAB → Tools → Scientific calculator → F2 → Statistics. Choose
+Open PicoLAB → Tools → Scientific calculator → F3 → Mode → Statistics. Choose
 1-variable or 2-variable data. Probability distributions are deferred and hidden
 from the release menu.
 
@@ -10,7 +10,7 @@ answer box, data/results area, mathematical prompt and shortcut bar.
 ## Table and input
 
 - One-variable data uses X; two-variable data uses paired X/Y columns.
-- Optional Freq is enabled in F6 Options and defaults to 1. Its integer range
+- Optional Freq is enabled in F3 → Statistics tools and defaults to 1. Its integer range
   is 0..9999; zero excludes a row from calculations while frequencies are on.
 - Arrow keys browse cells. Typing replaces the selected cell; Enter begins
   editing its existing value. The full float32 round-trip value is loaded into
@@ -37,16 +37,16 @@ ends the RAM session. Nothing is automatically written to SD.
 
 ## Results and commands
 
-F3 Data, F4 Summary, F5 Fit and F6 Options switch views while browsing.
-During editing, F5 clears the input and Enter/Tab commit it. F2 opens the main
-calculator mode grid. Escape from the table/results returns to the statistics
+F5 shows Summary; F6 refreshes it. F3 offers Data, Fit and Statistics tools.
+During editing, F10 clears input and Enter/Tab/F6 commit it. F3 → Mode opens
+the calculator mode grid. Escape from the table/results returns to the statistics
 type selector; Escape there opens the Statistics calculator prompt.
 
 Summary provides count, sums/squared sums, mean, median, minimum/maximum/range,
 quartiles/IQR, and explicitly labelled sample/population variance and standard
 deviation for each column. Paired results also include sample/population
 covariance and Pearson correlation. Select a result and Enter to use it as
-**Ans** in the calculator prompt. F3 there returns to the data table.
+**Ans** in the calculator prompt. F3 → Data there returns to the data table.
 
 Commands accept the active dataset, including from Calculate/Complex after
 one has been opened:
@@ -92,7 +92,7 @@ Plotting, nonlinear fits and distributions are deferred.
 
 ## CSV files
 
-F6 Options → Save CSV writes a **new numbered file**, for example:
+F3 → Statistics tools → Save CSV writes a **new numbered file**, for example:
 
 `picoware/engineering/statistics/statistics-1var-001.csv`
 

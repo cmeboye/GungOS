@@ -40,3 +40,11 @@ Other upstream test constants and example passwords remain with their source.
 GPLv3 notice and source-distribution terms are available at
 https://www.gnu.org/licenses/gpl-3.0.html. This software license does not grant
 permission to redistribute unrelated recordings or third-party trademarks.
+
+## Optional PicoDict dictionary data
+
+The separately generated PicoDict SD data is adapted from WikDict by Karl Bartel,
+using Wiktionary contributor data via DBnary, under CC BY-SA 4.0. Its generated
+NOTICE.txt describes the conversion and attribution; manifest.json records input
+and output hashes. See guides/PicoDict.md for sources and build instructions.
+This data retains its own license, separate from GungOS application code.

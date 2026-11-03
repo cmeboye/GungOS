@@ -85,15 +85,18 @@ class Workspace:
             elif self.page in ('options','load','confirm'): self.page = self.return_page
             else: self.page,self.selected = 'start',0
             return
-        if button == keys.BUTTON_F2:
-            self.calc.open_page('modes')
+        if button in (keys.BUTTON_F1,keys.BUTTON_F2) and not self.editing:
+            if self.dataset is not None and self.page == 'data':
+                if button == keys.BUTTON_F1:self.dataset.insert_row(self.row+1);self.row+=1
+                else:self.dataset.delete_row(self.row);self.row=min(self.row,self.dataset.rows-1)
             return
+        if button == keys.BUTTON_F4:return
         if self.editing:
             if button == keys.BUTTON_TAB and self.editor.parents: self.editor.tab()
-            elif button in (keys.BUTTON_CENTER,keys.BUTTON_TAB): self.commit(button == keys.BUTTON_TAB)
+            elif button in (keys.BUTTON_CENTER,keys.BUTTON_TAB,keys.BUTTON_F6): self.commit(button == keys.BUTTON_TAB)
             elif button == keys.BUTTON_F7: self.calc.open_page('templates')
             elif button == keys.BUTTON_F8: self.calc.open_page('variables')
-            elif button == keys.BUTTON_F5:
+            elif button == keys.BUTTON_F10:
                 self.editor.clear(); self.calc.error = ''
             elif button in (keys.BUTTON_F3,keys.BUTTON_F4,keys.BUTTON_F6):
                 raise ValueError('Commit the cell or press ESC first')
@@ -103,9 +106,10 @@ class Workspace:
             if self.dataset is None: raise ValueError('Choose 1-variable or 2-variable first')
             if button == keys.BUTTON_F3: self.page,self.selected = 'data',0
             elif button == keys.BUTTON_F4: self.page,self.selected = 'summary',0
-            elif button == keys.BUTTON_F5: self.page,self.selected = 'fit',0
+            elif button == keys.BUTTON_F5: self.page,self.selected = 'summary',0
             elif button == keys.BUTTON_F6:
-                self.return_page,self.page,self.selected = self.page,'options',0
+                self.dataset.summary()
+                self.page,self.selected = 'summary',0
             elif button in (keys.BUTTON_F7,keys.BUTTON_F8):
                 self.page = 'data'
                 self.begin_edit(True)
@@ -260,7 +264,7 @@ class Workspace:
                 r.text(15,y,title[:27],self.calc.palette.TEXT,FONT_XTRA_SMALL)
                 text = format_value(result,self.calc.engineering) if result is not None else '--'
                 r.text(width-15-len(text)*6,y,text,self.calc.accent,FONT_XTRA_SMALL)
-            self.footer(r,width,height,'F3 Data  F4 Summary  F5 Fit  F6 Options',self.calc.error or self.message or note)
+            self.footer(r,width,height,'F3 Options  F5 Results  F6 Calculate',self.calc.error or self.message or note)
             draw.swap()
             return
         r = self.calc.draw_top(draw,width,height,status=status)
@@ -312,9 +316,9 @@ class Workspace:
             r.text(16,bottom-15,(self.calc.error or self.message or hint)[:48],self.calc.palette.ERROR if self.calc.error else self.calc.palette.MUTED,FONT_XTRA_SMALL)
         if self.editing:
             self.footer(r,width,height,'ENTER commit  TAB slots/across  ESC cancel',
-                        'F2 Mode  F5 Clear  F7 Math  F8 Variables')
+                        'F3 Options  F10 Clear  F7 Math  F8 Variables')
         else:
-            self.footer(r,width,height,'F3 Data  F4 Summary  F5 Fit  F6 Options','F2 Mode  F7 Math  F8 Variables  ESC Return')
+            self.footer(r,width,height,'F3 Options  F5 Results  F6 Calculate','F3 Options  F7 Math  F8 Variables  ESC Return')
         draw.swap()
 
     def footer(self, r, width, height, first, second):

@@ -45,10 +45,12 @@ HELP = (
     '    at which the fit comes loose',
     'Main keys:',
     'F1 Add  F2 Remove  F3 Options',
-    'F4 Plot  F5 Results  F6 Preview',
+    'F4 Plot  F5 Results  F6 Refresh',
     'F9 help  Z undo (12 steps)',
     'I shows/hides the result summary',
     'V switches section / 3D view',
+    'TAB preview / list; SPACE Move / Orbit',
+    'Section preview: arrows move the view',
     'ESC returns; from the list leaves',
     'Lists:',
     'LEFT/RIGHT Bodies / Loads / Fits',
@@ -63,12 +65,12 @@ HELP = (
     'Editing E, nu, ... sets Custom',
     'F1 adds a ring outside or a shaft',
     'or ring inside; F2 removes a body',
-    'Preview (F6):',
+    'Preview (TAB):',
     'Outline turns accent while active',
     'LEFT/RIGHT turn, UP/DOWN tilt (3D)',
-    'LEFT/RIGHT next body (section)',
+    'Section arrows move the view',
     '+/- zoom  V or ENTER switch view',
-    'R resets the view  F6/ESC back',
+    'R resets the view  TAB/ESC back',
     'Plot (F4):',
     'LEFT/RIGHT move  , / . to boundaries',
     'D third panel: von Mises, u, sz',
@@ -114,6 +116,7 @@ class Discs:
         self.prompt = None
         self.message, self.error = '', False
         self.focus = 'list'
+        self.navigation, self.pan = 'Orbit', [0, 0]
         self.info = False
         self.help_open, self.help_first = False, 0
         self.undo = []
@@ -491,7 +494,10 @@ class Discs:
                 raise ValueError(self.problem or 'Nothing to plot')
             return
         if button == keys.BUTTON_F6:
-            self.page = 'model'
+            self.resolve()
+            self.say('Refreshed')
+            return
+        if self.page == 'model' and button == keys.BUTTON_TAB:
             self.focus = 'list' if self.focus == 'preview' else 'preview'
             return
         if self.page == 'model' and button in (keys.BUTTON_F1, keys.BUTTON_F2):
@@ -538,17 +544,17 @@ class Discs:
             self.zoom = max(self.zoom / 1.25, 0.5)
         elif c == 'r':
             self.yaw, self.pitch, self.zoom = 30.0, 35.0, 1.0
+            self.pan = [0, 0]
+        elif button == keys.BUTTON_SPACE:
+            if self.view == '3d':
+                self.navigation = 'Move' if self.navigation == 'Orbit' else 'Orbit'
+        elif (self.view == 'section' or self.navigation == 'Move') and button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT, keys.BUTTON_UP, keys.BUTTON_DOWN):
+            self.pan[0] += 8*((button == keys.BUTTON_RIGHT)-(button == keys.BUTTON_LEFT))
+            self.pan[1] += 8*((button == keys.BUTTON_DOWN)-(button == keys.BUTTON_UP))
         elif self.view == '3d' and button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT):
             self.yaw = (self.yaw + (15 if button == keys.BUTTON_RIGHT else -15)) % 360
         elif self.view == '3d' and button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
             self.pitch = min(max(self.pitch + (10 if button == keys.BUTTON_UP else -10), -90), 90)
-        elif button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT):
-            sel = self.selected()
-            n = len(self.model['bodies'])
-            k = sel[1] if sel and sel[0] == 'body' else 0
-            k = (k + (1 if button == keys.BUTTON_RIGHT else -1)) % n
-            self.tab = 0
-            self.focus_key(('body', k))
 
     def key_plot(self, button, esc):
         if esc:
@@ -801,9 +807,9 @@ class Discs:
         sketch = Viewport(draw, SKETCH)
         try:
             if self.view == 'section':
-                dd.section(sketch, pp, m, SKETCH, sel, self.zoom)
+                dd.section(sketch, pp, m, SKETCH, sel, self.zoom, self.pan)
             else:
-                dd.wireframe(sketch, pp, m, SKETCH, self.yaw, self.pitch, self.zoom, sel)
+                dd.wireframe(sketch, pp, m, SKETCH, self.yaw, self.pitch, self.zoom, sel, self.pan)
         except (ZeroDivisionError, ValueError):
             text(draw, 20, 120, 'Nothing to draw: check the radii', p.ERROR)
         lines, state = self.summary()
@@ -815,9 +821,9 @@ class Discs:
             for i, line in enumerate(lines):
                 text(draw, x + 10, top + 4 + 10 * i, line[:48], p.TEXT if state == 'ok' else color)
         elif self.focus == 'preview':
-            right_text(draw, x + w - 8, y + h - 12, 'arrows turn  +/- zoom  V view', p.MUTED)
+            right_text(draw, x + w - 8, y + h - 12, ('Move' if self.view == 'section' else self.navigation)+' / SPACE mode / +/- zoom', p.MUTED)
         else:
-            right_text(draw, x + w - 8, y + h - 12, 'F6 preview  I results', p.MUTED)
+            right_text(draw, x + w - 8, y + h - 12, 'TAB preview  I results', p.MUTED)
         rect = self.properties_rect()
         rows = self.rows()
         counts = [len(m['bodies']), 3, len(m['fits'])]

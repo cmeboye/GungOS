@@ -21,10 +21,10 @@ microstrain (`ue`, one millionth); models and files use SI.
 
 | Key | Action |
 |---|---|
-| F1 | Select Section loads or Stress ↔ strain |
-| F2 | Open section material and choose a preset; in constitutive mode, choose its material preset |
+| Tab | Focus the calculated section probe / return to the same input row |
+| P in section preview | Next edge/centre point |
 | F3 | Examples, cases, exports and assumptions |
-| F4 | Expanded stress map / stress-tensor view; calculates if needed |
+| F4 | Expanded stress map / stress-tensor view; requires a successful F6 |
 | F5 | Results, properties and load contributions |
 | F6 | Calculate the current inputs |
 | F7 | In the expanded section view, cycle normal / resultant shear / von Mises maps |
@@ -45,7 +45,7 @@ A/I records without an outline. It does not modify the standalone Section
 Properties session or introduce saved-section exchange.
 
 Input edits clear calculated results and maps. The expanded section view uses arrows to move
-the point by 5% of the section dimension, and Tab cycles its four edge points
+the point by 5% of the section dimension, and P cycles its four edge points
 and centre (excluding the hole of a tube). Moving a calculated probe updates
 its stress and strain immediately while retaining the section search and map.
 Moves outside the material are refused. Entering coordinates numerically

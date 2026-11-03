@@ -49,7 +49,8 @@ HELP = (
     'A next rotation axis (3D)',
     'M switch 2D / 3D',
     'Other keys:',
-    'F3 examples  F9 help',
+    'TAB preview / inputs; preview arrows turn',
+    'F3 Options / Examples; F6 refresh; F9 help',
     'ESC leaves Mohr circle',
     'The circle:',
     'tau is drawn positive DOWN, so the',
@@ -87,6 +88,7 @@ class Mohr:
         self.popup = None
         self.message, self.error = '', False
         self.help_open, self.help_first = False, 0
+        self.preview_focus = False
         self.last_jump = None
         self.result = stress.results(self.state)
 
@@ -302,29 +304,33 @@ class Mohr:
                     self.move(-1 if result == 'up' else 1)
             return
         self.message, self.error = '', False
+        if button == keys.BUTTON_TAB:
+            self.preview_focus = not self.preview_focus
+            return
         if esc:
-            self.vm.back()
+            if self.preview_focus:self.preview_focus = False
+            else:self.vm.back()
             return
         c = self.vm.input_manager.button_to_char(button)
         c = c.lower() if c else ''
         row = self.current()
         typing = row[5] in ('MPa', 'deg')
-        if button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
+        if button == keys.BUTTON_F3:
+            def choose(index):
+                self.popup = ['Examples', tuple(name for name, _ in EXAMPLES), 0, self.example]
+            self.popup = ['Options', ('Examples',), 0, choose]
+        elif button == keys.BUTTON_F6:
+            self.solve()
+        elif self.preview_focus:
+            if button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT):self.turn(1.0 if button == keys.BUTTON_RIGHT else -1.0)
+            elif c in ('[', ']'):self.turn(15.0 if c == ']' else -15.0)
+            elif c in ('p', 's'):self.jump(c)
+            elif c == 'r':self.state['theta'] = 0.0;self.solve()
+            elif c == 'a':self.next_axis()
+        elif button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
             self.move(-1 if button == keys.BUTTON_UP else 1)
-        elif button in (keys.BUTTON_LEFT, keys.BUTTON_RIGHT):
-            self.turn(1.0 if button == keys.BUTTON_RIGHT else -1.0)
         elif button == keys.BUTTON_CENTER:
             self.begin_edit()
-        elif button == keys.BUTTON_F3:
-            self.popup = ['Examples', tuple(name for name, _ in EXAMPLES), 0, self.example]
-        elif c in ('[', ']'):
-            self.turn(15.0 if c == ']' else -15.0)
-        elif c in ('p', 's'):
-            self.jump(c)
-        elif c == 'r':
-            self.state['theta'] = 0.0
-            self.last_jump = None
-            self.solve()
         elif c == 'm':
             self.set_mode('2D' if self.state['mode'] == '3D' else '3D')
         elif c == 'a':
@@ -364,6 +370,7 @@ class Mohr:
         a, b = _axis_names(st)
         status = '%s  theta %s deg' % (st['mode'], number(st['theta'], 4))
         panel(draw, p, PREVIEW, 'STRESS AT A POINT', status, p.PANEL)
+        if self.preview_focus:draw._rectangle(*PREVIEW, p.ACCENT)
         pp = theme.colors(p.PANEL, p.TEXT, p.ACCENT)
         circles(Viewport(draw, CIRCLE_BOX), pp, st, r)
         draw._line(170, 65, 170, 156, p.GRID)
@@ -380,7 +387,7 @@ class Mohr:
         rows = self.rows()
         self.row = min(self.row, len(rows) - 1)
         panel(draw, p, rect, 'PROPERTIES', '%d/%d' % (self.row + 1, len(rows)))
-        form(draw, p, [row[:4] for row in rows], self.row, self.edit, PROPERTIES_TOP + 26, rect[1] + rect[3] - 5)
+        form(draw, p, [row[:4] for row in rows], -1 if self.preview_focus else self.row, self.edit, PROPERTIES_TOP + 26, rect[1] + rect[3] - 5)
         chrome(draw, p, st['mode'] + ' about ' + stress.axis(st), self.message, self.error, title=TITLE,
                fallback=PATH)
         if self.popup is not None:

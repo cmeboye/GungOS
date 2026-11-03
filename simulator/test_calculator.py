@@ -139,17 +139,17 @@ def text(text):
 key(k.BUTTON_CENTER)
 assert vm.current_view.name == 'eng_calculator'
 calc = app._active
-assert not calc.show_hints
+assert not calc.help_open
 # Help toggles preserve the input/session on every mode, with no new SD setting.
 text('2^ ')
 saved = source(calc.editor.root, False)
 key(k.BUTTON_F9)
-assert calc.show_hints and source(calc.editor.root, False) == saved
+assert calc.help_open and source(calc.editor.root, False) == saved
 key(k.BUTTON_F9)
-assert not calc.show_hints and source(calc.editor.root, False) == saved
-key(k.BUTTON_F5)
+assert not calc.help_open and source(calc.editor.root, False) == saved
+key(k.BUTTON_F10)
 vm.draw.screenshot('/private/tmp/picoware-calculator-empty.bmp')
-key(k.BUTTON_F2)
+key(k.BUTTON_F3); calc.selected=2; key(k.BUTTON_CENTER)
 assert calc.page == 'modes'
 vm.draw.screenshot('/private/tmp/picoware-calculator-modes.bmp')
 for mode in range(6):
@@ -157,19 +157,20 @@ for mode in range(6):
     key(k.BUTTON_CENTER)
     assert calc.mode == mode and calc.page == {0:'calc',1:'stats',2:'solver',3:'calc',4:'base',5:'matrix'}[mode]
     page = calc.page
-    key(k.BUTTON_F9); assert calc.show_hints and calc.page == page
-    key(k.BUTTON_F9); assert not calc.show_hints and calc.page == page
+    key(k.BUTTON_F9); assert calc.help_open and calc.page == page
+    key(k.BUTTON_F9); assert not calc.help_open and calc.page == page
     if mode not in app.SUPPORTED:
         text('2+2'); key(k.BUTTON_CENTER)
         assert 'planned' in calc.error and calc.answer == 0
-        key(k.BUTTON_F5)
-    key(k.BUTTON_F2)
+        key(k.BUTTON_F10)
+    key(k.BUTTON_F3); calc.selected=2; key(k.BUTTON_CENTER)
 calc.selected = 0; key(k.BUTTON_CENTER)
 # Record actual drawing: theme follows the VM without changing the shared Lab
 # palette, hidden help frees panel space, and errors survive both layouts.
 from engtools.ui import theme
 class RecordingDraw:
     def __init__(self, draw): self.draw=draw; self.size=draw.size; self.calls=[]
+    def __getattr__(self,name):return getattr(self.draw,name)
     def get_font(self, size): return self.draw.get_font(size)
     def len(self, text, font): return self.draw.len(text,font)
     def _text(self, x,y,char,color,font): self.calls.append(('text',x,y,char,color))
@@ -194,11 +195,10 @@ try:
     assert any(c[:5]==('line',8,122,311,122) for c in recording.calls)
     assert any(c[:5]==('line',8,304,311,304) for c in recording.calls)
     key(k.BUTTON_F9)
-    assert 'F3 Options' in recording.text() and 'Type 2^' in recording.text()
-    assert any(c[:5]==('line',8,280,311,280) for c in recording.calls)
+    assert 'F3 Options' in recording.text() and 'SPACE expands' in recording.text()
     calc.error='Complete the highlighted slot'
     key(k.BUTTON_F9)
-    assert not calc.show_hints and calc.error in recording.text()
+    assert not calc.help_open and calc.error in recording.text()
     calc.error=''
 finally:
     vm._draw, vm.selected_color = original_draw, original_color
@@ -234,26 +234,26 @@ assert source(calc.editor.root) == '2^(3)+sqrt(((9)/(4)))'
 key(k.BUTTON_DOWN); assert not calc.editor.root
 text('draft'); key(k.BUTTON_UP); key(k.BUTTON_DOWN)
 assert source(calc.editor.root) == 'draft'
-key(k.BUTTON_F5)
+key(k.BUTTON_F10)
 text('int() '); text('0'); key(k.BUTTON_TAB); text('1'); key(k.BUTTON_TAB); text('x^ '); text('2')
 vm.draw.screenshot('/private/tmp/picoware-calculator-integral.bmp')
 key(k.BUTTON_CENTER); assert abs(calc.answer-1/3) < 1e-4
-key(k.BUTTON_F4); assert calc.page == 'variables'
+key(k.BUTTON_F8); assert calc.page == 'variables'
 vm.draw.screenshot('/private/tmp/picoware-calculator-variables.bmp')
 key(k.BUTTON_ESCAPE); assert calc.page == 'calc'
 key(k.BUTTON_F3); key(k.BUTTON_CENTER); assert calc.angle == 'RAD'
 key(k.BUTTON_DOWN); key(k.BUTTON_CENTER); assert calc.engineering
 key(k.BUTTON_ESCAPE); text('sin(pi/2)'); key(k.BUTTON_CENTER)
 assert abs(calc.answer-1) < 1e-5
-key(k.BUTTON_F6); assert calc.page == 'history'
+key(k.BUTTON_F5); assert calc.page == 'history'
 key(k.BUTTON_CENTER); assert calc.page == 'calc' and calc.editor.root
-key(k.BUTTON_F5)
+key(k.BUTTON_F10)
 text('12'); key(k.BUTTON_BACKSPACE); assert source(calc.editor.root) == '1'
-key(k.BUTTON_F5)
+key(k.BUTTON_F10)
 for deletion in (k.BUTTON_BACK,k.BUTTON_DELETE,k.BUTTON_BACKSPACE):
     text('12'); key(deletion); assert source(calc.editor.root) == '1'
     key(k.BUTTON_F3); key(k.BUTTON_ESCAPE); assert calc.page == 'calc'
-    key(k.BUTTON_F5)
+    key(k.BUTTON_F10)
 for _ in range(30):
     text('1+1'); key(k.BUTTON_CENTER)
 assert len(calc.history) == 24

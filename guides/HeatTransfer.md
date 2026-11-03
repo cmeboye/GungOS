@@ -9,7 +9,7 @@ same parts as Mohr circle and Shrink fit ([Screens and controls](UI.md)).
 
 - **Steady state** or **transient** (M switches, or Solve → Mode). Only
   **F6 Evaluate** solves; editing a value clears the field, and Z undoes
-  (12 steps). A transient shows its field live while it runs; SPACE pauses
+  (12 steps). A transient shows its field live while it runs; F7 pauses
   and resumes, ESC pauses.
 - The plate is cut into 16 to 40 cells along its long side. Each cell balances
   the heat from its four neighbours, the sides and its sources. Steady state
@@ -46,7 +46,7 @@ shows the temperature field with its colour range and the hottest point.
 - **Profiles**: temperature along the cursor's row and column.
 - **History** (transient): lowest, mean and highest temperature over time.
 
-D changes the view, TAB visits the hottest and coldest points and the pinned
+D changes the view, P visits the hottest and coldest points and the pinned
 points, ENTER pins the cursor (up to 8).
 
 ## Results (F5)
@@ -93,3 +93,8 @@ the examples, saving, opening and the exports.
 - `engtools/thermal/items.py`: tabs, rows and the rules for each value.
 - `engtools/thermal/render.py`: plate, field, colour bar and line plots.
 - `engtools/thermal/app.py`: pages and keys.
+
+After calculating, Tab focuses the input page’s temperature probe; arrows move
+the probe, Enter pins it, and P visits extrema. Tab or Esc returns to the same
+input tab and row. Space does not run or pause the solver. F6 starts a fresh
+solve; F7 pauses or resumes it. The full-page plots already have probe focus.

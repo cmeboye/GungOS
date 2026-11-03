@@ -272,7 +272,7 @@ key(k.BUTTON_F4); assert a.page == 'plots'
 key(k.BUTTON_LEFT); assert a.at == 99
 text(','); assert a.at == 89
 key(k.BUTTON_DOWN); assert a.active == 1
-key(k.BUTTON_TAB); assert a.at == a.sim.stats(1)['at_max']
+key(k.BUTTON_P); assert a.at == a.sim.stats(1)['at_max']
 a.draw()
 # F5: the final value, and ENTER on an extreme opens it in the plots.
 key(k.BUTTON_F5); assert a.page == 'results'

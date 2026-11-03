@@ -147,11 +147,12 @@ key(k.BUTTON_RIGHT); goto('Speed'); text('3000'); key(k.BUTTON_CENTER)
 near(a.model['speed']['v'], 3000 * pi / 30)
 goto('Inner pressure Pi'); text(' '); assert a.error
 # F6 focuses the preview: arrows orbit in 3D, V switches, ESC returns.
-key(k.BUTTON_F6); assert a.focus == 'preview'
+key(k.BUTTON_TAB); assert a.focus == 'preview'
 text('v'); assert a.view == '3d'
 yaw = a.yaw; key(k.BUTTON_RIGHT); assert a.yaw == (yaw + 15) % 360
 key(k.BUTTON_UP); key(k.BUTTON_CENTER); assert a.view == 'section'
-key(k.BUTTON_RIGHT); assert a.selected() == ('body', 1)
+selected=a.selected(); pan=a.pan[0]
+key(k.BUTTON_RIGHT); assert a.selected() == selected and a.pan[0] == pan+8
 key(k.BUTTON_ESCAPE); assert a.focus == 'list' and vm.current_view.name == 'discs_view'
 # Plot, results and options.
 key(k.BUTTON_F4); assert a.page == 'plot'

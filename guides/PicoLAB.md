@@ -1,7 +1,7 @@
 # PicoLAB
 
 New apps follow [PicoLAB keys](Keys.md) for function keys and input/preview
-focus. It also audits existing outliers; the app guides linked below describe
+focus. It records the local control alignment; the app guides linked below describe
 the controls currently implemented.
 
 Open Apps → PicoLAB. The launcher is organised as:
@@ -14,7 +14,6 @@ PicoLAB
 ├── Tools
 │   ├── Grapher
 │   ├── Scientific calculator
-│   ├── PicoCAD
 │   └── UnitConverter
 └── Modules
     ├── Structural
@@ -24,15 +23,27 @@ PicoLAB
     │   ├── StressStrain
     │   ├── Buckling
     │   └── Section Properties
+    ├── Machine design
+    │   └── PicoCAD
     ├── Dynamics
+    │   ├── ModalHarmonics (planned)
+    │   ├── TransientSolve (planned)
+    │   ├── Multibody (planned)
+    │   └── TransferFunc (planned)
+    ├── Fluids
+    │   ├── FlowRegimes (planned)
+    │   ├── PipeLoss (planned)
+    │   ├── BoundaryDrag (planned)
+    │   └── 1DNetSolve (planned)
     ├── Thermal
     │   └── Heat transfer 2D
-    ├── Electrical
-    │   └── PicoSpice
-    └── Fluids
+    └── Electrical
+        └── PicoSpice
 ```
 
-Dynamics and Fluids are empty folders labelled as planned.
+Dynamics and Fluids show informational lists of their planned apps. The rows
+are muted and have no selection or launch action; Esc returns to Modules.
+PicoCAD is under Modules → Machine design, alongside the other disciplines.
 BeamView is the former Beam Lab; its saved models, solver, controls and CSV
 exports keep their existing formats and locations.
 
@@ -65,8 +76,8 @@ See [PicoCAD](PicoCAD.md), [BeamView](BeamLab.md), [Shrink fit](ShrinkFit.md), [
 [StressStrain](StressStrain.md), [Buckling](Buckling.md),
 [Section Properties](SectionProperties.md) and [plot previews](SharedPlots.md).
 
-Grapher provides one workspace with independent 2D and 3D plots: F2 switches
-modes; F3 opens its menu. Existing solver apps retain their current plots while
+Grapher provides one workspace with independent 2D and 3D plots: F3 opens
+its menu, including the mode choices. Existing solver apps retain their current plots while
 the shared API is tested in isolation.
 
 The hierarchy and breadcrumbs are SD applications. Update PicoLAB, Grapher,
@@ -81,4 +92,7 @@ builds/MicroPython/desktop/micropython -X heapsize=16M simulator/run.py --viewer
 
 Older simulator shortcuts such as `Apps/PicoLAB/Graph` and
 `Apps/PicoLAB/Graph3D` open the corresponding Grapher mode. Direct legacy
-entry points and their saved sessions remain available separately.
+entry points and their saved sessions remain available separately. The current
+PicoCAD shortcut is `Apps/PicoLAB/modules/Machine design/PicoCAD`; the simulator
+also accepts the former `Apps/PicoLAB/tools/PicoCAD` shortcut and the short
+`PicoLAB/PicoCAD` form. They all open the new folder route.

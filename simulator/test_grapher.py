@@ -61,6 +61,12 @@ def key(button):
     vm.input_manager._last_button = button
     vm.run()
 
+def switch_mode():
+    target = '3d' if app.mode == '2d' else '2d'
+    key(k.BUTTON_F3)
+    app.row = 1 if target == '2d' else 2
+    key(k.BUTTON_CENTER)
+
 def finish(viewer):
     for _ in range(6000):
         key(k.BUTTON_NONE)
@@ -175,14 +181,14 @@ original_bounds = app.viewer.controller.app.bounds[:]
 key(k.BUTTON_CENTER); key(k.BUTTON_CENTER)
 assert app.viewer.controller.app.state == 'input'
 key(k.BUTTON_ESCAPE); key(k.BUTTON_ESCAPE)
-key(k.BUTTON_F2)
+switch_mode()
 assert app.mode == '3d' and 'engtools.plots.plot2d' not in sys.modules
 finish(app.viewer)
 key(k.BUTTON_SPACE); key(k.BUTTON_RIGHT)
 yaw = app.viewer.engine._yaw
-key(k.BUTTON_F2); finish(app.viewer)
+switch_mode(); finish(app.viewer)
 assert app.viewer.controller.app.bounds == original_bounds
-key(k.BUTTON_F2); finish(app.viewer)
+switch_mode(); finish(app.viewer)
 assert app.viewer.engine._yaw == yaw
 key(k.BUTTON_F3); assert app.page == 'menu'
 key(k.BUTTON_F9); assert app.page == 'help'
@@ -203,8 +209,8 @@ finish(app.viewer)
 assert app.viewer.engine._yaw == yaw
 measurements = []
 for i in range(6):
-    key(k.BUTTON_F2); finish(app.viewer)
-    key(k.BUTTON_F2); finish(app.viewer)
+    switch_mode(); finish(app.viewer)
+    switch_mode(); finish(app.viewer)
     vm._log.logs[:] = []
     gc.collect()
     measurements.append(gc.mem_alloc())

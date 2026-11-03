@@ -7,8 +7,12 @@ not been migrated. This first stage is tested with synthetic fixtures.
 
 ## Controls
 
-- **F2**, at the plot: switch between 2D and 3D, retaining each plot's
-  expressions, bounds and settings. The 3D camera is retained too.
+- **F3 → 2D plot / 3D plot** changes mode, retaining each plot’s expressions,
+  bounds and settings, including the 3D camera.
+- **F1** adds an expression or a second surface. **F2** opens the layer list
+  for selection/removal in 2D, or the second-surface editor in 3D (clear it
+  to remove). At least one layer remains in a shared plot.
+- **F4** returns to the plot; **F6** refreshes it. Neither key changes mode.
 - **F3** or **Esc**, at the plot: Grapher menu. Continue resumes the plot;
   Plot options opens the selected mode's editors, settings and presets.
 - **Enter**: expressions in 2D; the main surface editor in 3D.

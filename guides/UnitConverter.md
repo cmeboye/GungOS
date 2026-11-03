@@ -6,7 +6,7 @@ it needs no changes to picosolve or the device firmware.
 The first pass has **49 categories and 322 unit entries**, covering everyday
 quantities, engineering, fluids, thermal properties, electricity, magnetism,
 light, radiation and computing. Type a category, unit name or symbol to filter
-the category browser (F1). Search is case insensitive; displayed symbols retain their case.
+the Category field or F3 → Categories. Search is case insensitive; displayed symbols retain their case.
 Left/Right pages through search results. Enter opens a category.
 
 ## Converting
@@ -17,7 +17,7 @@ selected row in each. Up/Down selects a field or entry within that tab.
 The Convert tab contains quantity, value, source unit and target unit.
 Enter edits a field or opens a unit selector, where typing filters the list.
 Arrow keys move the text cursor while editing and navigate search results
-inside a picker. F1 opens the category browser.
+inside a picker. Enter on Category opens the category browser.
 
 Type a number from the conversion screen to replace the value immediately.
 Arithmetic such as `3/8`, `2*pi` and `1e-6` works. Enter applies the input;
@@ -25,10 +25,10 @@ Esc cancels. Results update when a value or unit is accepted.
 
 | Key | Action |
 |---|---|
-| F1 | Category browser |
-| F2 | Search source unit when From is selected; otherwise target unit |
+| Enter on Category | Category browser |
+| Enter on From / To | Search source / target units |
 | F3 | Options, favorites, recent conversions, saved cases and CSV |
-| F4 | Conventions for the selected quantity |
+| F3 → Unit conventions | Conventions for the selected quantity |
 | F5 | All equivalents; Enter picks a target unit |
 | F6 | Calculate and remember the current conversion |
 | S | Swap units, preserving the physical quantity |

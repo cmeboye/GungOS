@@ -84,26 +84,26 @@ def key(button): vm.input_manager._last_button=button;vm.run()
 def text(value):
     for char in value: key(vm.input_manager._key_to_button(ord(char)))
 def mode(index):
-    key(k.BUTTON_F2);calc.selected=index;key(k.BUTTON_CENTER)
+    key(k.BUTTON_F3);calc.selected=2;key(k.BUTTON_CENTER);calc.selected=index;key(k.BUTTON_CENTER)
 mode(2)
 solver=calc.workspace()
 key(k.BUTTON_CENTER)
 assert solver.page=='equation'
-key(k.BUTTON_F5)
+key(k.BUTTON_F6)
 for _ in range(80):
     key(k.BUTTON_NONE)
     if solver.job is None: break
 assert solver.page=='results';close(calc.answer,math.sqrt(2))
 vm.draw.screenshot('/private/tmp/picoware-solver-results.bmp')
 key(vm.input_manager._key_esc)
-solver.expression='x^2=3';key(k.BUTTON_F5)
+solver.expression='x^2=3';key(k.BUTTON_F6)
 key(vm.input_manager._key_esc)
 assert solver.job is None and 'Cancelled' in calc.error
 mode(4)
 base=calc.workspace()
 text('0xFFFFFFFF');key(k.BUTTON_CENTER)
 assert base.value==-1 and calc.variables['Ans']==-1
-key(k.BUTTON_F3);key(k.BUTTON_RIGHT)
+key(k.BUTTON_F3);calc.selected=6;key(k.BUTTON_CENTER);key(k.BUTTON_RIGHT)
 assert base.base==16
 key(vm.input_manager._key_esc)
 text('FF AND 0F');key(k.BUTTON_CENTER)
@@ -111,9 +111,9 @@ assert base.value==15
 vm.draw.screenshot('/private/tmp/picoware-base-n.bmp')
 mode(5)
 matrix=calc.workspace()
-key(k.BUTTON_F3);key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)
+key(k.BUTTON_F3);calc.selected=6;key(k.BUTTON_CENTER);key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)
 assert matrix.page=='cells' and matrix.matrices['MatA'].shape==(2,2)
-key(k.BUTTON_CENTER);key(k.BUTTON_F5);text('4');key(k.BUTTON_CENTER)
+key(k.BUTTON_CENTER);key(k.BUTTON_F10);text('4');key(k.BUTTON_CENTER)
 assert matrix.matrices['MatA'][0,0]==4
 matrix.matrices['MatA']=a
 key(vm.input_manager._key_esc)

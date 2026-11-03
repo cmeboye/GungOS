@@ -7,11 +7,11 @@ from engtools.ui import lab
 from . import model as dm
 from . import draw as dd
 
-PATH=('tools','PicoCAD')
+PATH=('modules','machine design','PicoCAD')
 PREVIEW=(8,43,304,160)
 CANVAS=(12,64,296,135)
 EDITOR=(8,210,304,96)
-OPTIONS=('Save','Save as','Open','New','Curve Quality','Projection')
+OPTIONS=('Save','Save as','Open','New','Curve Quality','Projection','Camera views')
 PRIMITIVES=('Box','Cylinder','Cone','Sphere')
 VIEWS=('Isometric','Front','Top','Right','Fit','Reset camera')
 HELP=(
@@ -26,8 +26,8 @@ HELP=(
     'F3: Save / Save as / Open / New (blank).',
     'F3 also sets curve quality and projection.',
     'Choose Add / Cut / Intersect in Properties.',
-    'F4 Build: calculate the combined part.',
-    'F5 View: standard views, fit, reset.',
+    'F6 Build: calculate the combined part.',
+    'F4 preview; F3 Camera views: fit, reset.',
     'F9: scrollable help; Esc closes it.',
     'Editing:',
     'Left/Right: Features / Properties.',
@@ -109,7 +109,7 @@ class CAD:
         self.builder=self.job=None;self.progress=None;self.result_kind=None
         self.popup=None;self.menu_index=0;self.menu_kind='';self.prompt_kind=None
         self.edit=None;self.edit_key=None;self.replace=True
-        self.help_open=False;self.help_first=0;self.message='F4 Build / Tab camera';self.error=False
+        self.help_open=False;self.help_first=0;self.message='F6 Build / Tab camera';self.error=False
         self.undo=[];self.pending=None;self.discard=False;self.redraw=True
         self.sync()
         if self.model['features']:self.build()
@@ -136,7 +136,7 @@ class CAD:
         if selected is not None:self.selected=selected
         self.selected=max(0,min(self.selected,len(self.model['features'])-1))
         self.sync()
-        self.tell('Changed; F4 rebuild' if not self.show_built else 'Previous build restored')
+        self.tell('Changed; F6 rebuild' if not self.show_built else 'Previous build restored')
 
     def undo_edit(self):
         if not self.undo:self.tell('Nothing to undo');return
@@ -247,7 +247,7 @@ class CAD:
             self.transact(candidate,len(candidate['features'])-1);self.tab=1;self.focus='editor'
         elif kind=='quality':
             candidate=dm.clone(self.model);candidate['resolution']=dm.QUALITIES[self.menu_index]
-            self.transact(candidate);self.tell('Curve target %.2gpx / F4 applies'%(4.0/candidate['resolution']))
+            self.transact(candidate);self.tell('Curve target %.2gpx / F6 applies'%(4.0/candidate['resolution']))
         elif kind=='view':
             if value in ('Isometric','Reset camera'):
                 self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH
@@ -262,6 +262,7 @@ class CAD:
             elif value=='Open':self.guard('open')
             elif value=='New':self.guard('blank')
             elif value=='Curve Quality':self.quality_menu()
+            elif value=='Camera views':self.menu('view',VIEWS)
             elif value=='Projection':
                 self.menu('projection',dd.PROJECTIONS);self.menu_index=dd.PROJECTIONS.index(self.camera.projection)
         elif kind=='projection':
@@ -331,17 +332,16 @@ class CAD:
                 candidate=dm.clone(self.model);candidate['features'].pop(self.selected);self.transact(candidate)
             return
         if button==k.BUTTON_F3:self.menu('options',OPTIONS);return
-        if button==k.BUTTON_F4:self.build();return
-        if button==k.BUTTON_F5:self.menu('view',VIEWS);return
+        if button==k.BUTTON_F6:self.build();return
+        if button==k.BUTTON_F4:self.focus='preview';return
         if button==k.BUTTON_TAB:
             self.focus='preview' if self.focus=='editor' else 'editor';return
         if button==k.BUTTON_Z:self.undo_edit();return
-        # On a numeric property row '-' starts a negative value instead of zooming.
-        numeric=self.focus=='editor' and self.tab and self.model['features'] and self.row>0
-        if button in (k.BUTTON_PLUS,k.BUTTON_EQUAL,k.BUTTON_MINUS) and not (numeric and button==k.BUTTON_MINUS):
+        # Camera keys act only in the preview; signs stay numeric input.
+        if self.focus=='preview' and button in (k.BUTTON_PLUS,k.BUTTON_EQUAL,k.BUTTON_MINUS):
             self.camera.zoom=max(.2,min(8.0,self.camera.zoom*(1/1.15 if button==k.BUTTON_MINUS else 1.15)));return
-        if button==k.BUTTON_F:self.refit();return
-        if button==k.BUTTON_R:
+        if self.focus=='preview' and button==k.BUTTON_F:self.refit();return
+        if self.focus=='preview' and button==k.BUTTON_R:
             self.camera.yaw,self.camera.pitch=dd.ISO_YAW,dd.ISO_PITCH;self.refit();return
         char=self.vm.input_manager.button_to_char(button)
         if char in ('[',']'):self.select_feature(-1 if char=='[' else 1);return

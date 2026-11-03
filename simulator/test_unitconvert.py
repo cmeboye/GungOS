@@ -112,7 +112,7 @@ def option(index):
 
 
 assert a.page == 'convert'
-key(k.BUTTON_F1)
+a.row=0; key(k.BUTTON_CENTER)
 search('length')
 assert a.page == 'convert'
 # Use only keys to choose inch -> mm and enter a fractional inch.
@@ -142,7 +142,7 @@ near(float(data.split('\n')[1]), .009525)
 option(5); assert a.page == 'files' and a.files == ['inch-check']
 key(k.BUTTON_CENTER); assert a.state['from'] == 'in'
 # Search a unit name globally, zero search matches, cancellation, temperature error.
-key(k.BUTTON_F1); text('nonsense-no-unit'); assert not a.search_rows(); a.draw()
+a.row=0; key(k.BUTTON_CENTER); text('nonsense-no-unit'); assert not a.search_rows(); a.draw()
 key(k.BUTTON_ESCAPE); search('fahrenheit')
 assert a.state['category'] == 'temperature'
 text('-1'); key(k.BUTTON_CENTER)

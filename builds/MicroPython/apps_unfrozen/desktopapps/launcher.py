@@ -3,7 +3,9 @@ from picoware.system import buttons as k
 from engtools.ui import theme
 
 ROWS=(('Eggcel','Spreadsheet and XY plots'),('PicoWord','Formatted notes and equations'),
-      ('PicoPaint','Pixel canvas, tools and pattern fills'))
+      ('PicoPaint','Pixel canvas, tools and pattern fills'),
+      ('PicoDict','English / Italian word lookup'),
+      ('PicoReader','Read EPUB books from SD'))
 
 
 class Launcher:
@@ -36,6 +38,14 @@ class Launcher:
                     from .paint import Paint
                     from engtools.plots.view import open_view
                     open_view(vm,'picopaint',Paint())
+                elif self.selected==3:
+                    from .dictionary.app import PicoDict
+                    from engtools.plots.view import open_view
+                    open_view(vm,'picodict',PicoDict())
+                elif self.selected==4:
+                    from .reader.app import PicoReader
+                    from engtools.plots.view import open_view
+                    open_view(vm,'picoreader',PicoReader())
             except (ValueError,MemoryError):self.keep=False;raise
 
 

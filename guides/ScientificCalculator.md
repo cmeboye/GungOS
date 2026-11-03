@@ -2,14 +2,13 @@
 
 Open **PicoLAB → Tools → Scientific calculator**. The preview follows `test.png`:
 18 pixels reserved for system indicators, calculator status, a separate answer
-box and history above the `>>` prompt. Shortcut bars and editing explanations
-start hidden; **F9** toggles them throughout the calculator, including its
-desktop widget. A small `F9 Help` cue remains when hidden, freeing room for
-input, history and tables. Errors and operation results remain visible.
+box and history above the `>>` prompt. **F9** opens scrollable help throughout the calculator, including its
+desktop widget. Closing help restores the exact draft, slot or table selection.
+A small `F9 Help` cue leaves room for input, history and tables. Errors and operation results remain visible.
 The reserved area is currently blank. Indicators, answers, active slots and
 cursors read the system theme colour when drawn.
 
-**F2** opens a three-column, two-row mode grid: Calculate / Statistics / Solver,
+**F3 → Mode** opens a three-column, two-row mode grid: Calculate / Statistics / Solver,
 then Complex / Base-N / Matrix. All six modes have working numerical workflows.
 Inline plotting is deferred. See [Statistics.md](Statistics.md)
 for the Statistics table, summaries, regression and explicit CSV save/load.
@@ -24,15 +23,16 @@ for the Statistics table, summaries, regression and explicit CSV save/load.
 | Tab | Next editable row, including the main row |
 | Ctrl-Up / Ctrl-Down | Previous / next editable row |
 | Enter | Calculate; highlight a missing slot if unfinished |
-| Backspace / Delete | Delete before / after the cursor |
+| Backspace / Delete | Erase before the cursor |
 | Escape | Close the current menu, or return to the Lab |
-| F2 | Mode grid; arrows or number keys 1–6 choose a mode |
-| F3 | DEG/RAD and normal/engineering number format |
-| F4 | Variable list; Enter inserts a name, Delete removes a stored variable |
-| F5 | Clear input without clearing the answer or history |
-| F6 | Session history; Enter recalls the selected expression |
+| F1 / F2 | Statistics data: insert / remove a row; unused elsewhere |
+| F3 | Options: mode, angle/format, history, variables and mode-specific tools |
+| F8 | Variable list; Enter inserts a name, Delete removes a stored variable |
+| F10 | Clear input without clearing the answer or history |
+| F5 | Results; Calculate/Complex show session history |
+| F6 | Calculate or accept the current cell edit |
 | F7 | Mathematical template catalogue |
-| F9 | Show/hide shortcut bars and editing explanations |
+| F9 | Scrollable help; Esc/F9 closes it |
 
 Alt+S is the system screenshot shortcut and Home remains its home shortcut.
 The current keyboard transport does not distinguish Shift-Tab, so Ctrl-Up is
@@ -103,7 +103,7 @@ recalling an expression evaluates it using the currently selected mode/angle.
 ## Solver, Base-N and Matrix
 
 Solver offers a general equation in `x`, polynomials of degree 2..4, and linear
-systems of 2..4 unknowns. Enter edits a field; F5 solves. F3 changes polynomial
+systems of 2..4 unknowns. Enter edits a field; F6 solves. F3 → Mode setup changes polynomial
 degree or system size. Equation fields include lower/upper bounds and an initial
 guess. A sign-changing interval uses bisection; otherwise bounded Newton steps
 use the guess. Escape cancels between batches. A root is accepted after checking
@@ -111,7 +111,7 @@ its residual; this finds one approximate real root, not every root of a general
 equation. Polynomials return approximate real/complex roots. Linear systems use
 native QR with scaling and rank/residual checks.
 
-Base-N evaluates integers in BIN/OCT/DEC/HEX. F3 selects input base, 8/16/32-bit
+Base-N evaluates integers in BIN/OCT/DEC/HEX. F3 → Mode setup selects input base, 8/16/32-bit
 word width and signed/unsigned interpretation; F7 lists bitwise operators.
 `0b`, `0o` and `0x` prefixes override the input base. Arithmetic wraps modulo
 the word width. Division truncates toward zero and remainder follows that
@@ -120,9 +120,9 @@ Use `AND OR XOR NOT`, `& | ^ ~` and `<< >>`; `^` means XOR in this mode.
 Floating numbers and scientific functions are rejected. Results retain exact
 32-bit integer precision. For example, `0xFFFFFFFF+1` becomes zero at 32 bits.
 
-Matrix stores MatA..MatD, each 1×1 through 4×4. F3 chooses a matrix and dimensions;
+Matrix stores MatA..MatD, each 1×1 through 4×4. F3 → Mode setup chooses a matrix and dimensions;
 Left/Right changes dimensions, Enter applies them. The overlap is preserved when
-resizing. Arrow keys select a cell, Enter edits, F5 clears its input, and Escape
+resizing. Arrow keys select a cell, Enter edits, F10 clears its input, and Escape
 cancels or returns to the expression prompt. Matrix entry accepts real scalar
 expressions and the shared math templates.
 

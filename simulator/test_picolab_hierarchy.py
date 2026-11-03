@@ -50,16 +50,17 @@ key(k.BUTTON_ESCAPE);assert lab._page=='gallery'
 key(k.BUTTON_ESCAPE);assert lab._page=='checks' and lab._selected==1
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==0
 pick('Tools');path('tools');shot('tools')
-assert [r[1] for r in lab.MENUS['tools']]==['Grapher','Scientific calculator','PicoCAD','UnitConverter']
+assert [r[1] for r in lab.MENUS['tools']]==['Grapher','Scientific calculator','UnitConverter']
 pick('UnitConverter');assert vm.current_view.name=='unitconvert_view'
 path('tools','UnitConverter')
-key(k.BUTTON_F1);key(k.BUTTON_CENTER)  # Length
+sys.modules['engtools.unitconvert.app']._active.row=0
+key(k.BUTTON_CENTER);key(k.BUTTON_CENTER)  # Category field / Length
 key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE)
-assert lab._page=='tools' and lab._selected==3;path('tools')
+assert lab._page=='tools' and lab._selected==2;path('tools')
 pick('Scientific calculator');assert vm.current_view.name=='eng_calculator'
 path('tools','Scientific calculator');shot('calculator')
 from engtools.calculator import app as calc
-key(k.BUTTON_F2);assert calc._active.page=='modes';path('tools','Scientific calculator')
+key(k.BUTTON_F3);calc._active.selected=2;key(k.BUTTON_CENTER);assert calc._active.page=='modes';path('tools','Scientific calculator')
 key(k.BUTTON_ESCAPE);exit_child()
 assert lab._page=='tools' and lab._selected==1;path('tools')
 # The unified workspace keeps the route through mode changes and editors.
@@ -73,7 +74,7 @@ assert runtime._active.controller.app.state=='input'
 assert runtime._active.controller.app.edit is not None
 path('tools','Grapher');shot('grapher-editor')
 key(k.BUTTON_2);path('tools','Grapher')
-key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE);key(k.BUTTON_F2)
+key(k.BUTTON_ESCAPE);key(k.BUTTON_ESCAPE);key(k.BUTTON_F3);key(k.BUTTON_DOWN);key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
 for _ in range(2000):
     key(k.BUTTON_NONE)
     engine=runtime._active.engine
@@ -85,15 +86,38 @@ exit_child();assert lab._page=='tools' and lab._selected==0
 assert engine._edit is None and breadcrumbs.current(vm,'eng_grapher') is None
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==1
 pick('Modules');path('modules');shot('modules')
-assert [r[1] for r in lab.MENUS['modules']]==['Structural','Dynamics','Thermal','Electrical','Fluids']
+assert [r[1] for r in lab.MENUS['modules']]==['Structural','Machine design','Dynamics','Fluids','Thermal','Electrical']
 for label in ('Dynamics','Fluids'):
     pick(label);path('modules',label.lower())
     assert lab.MENUS[lab._page]==()
+    names={'Dynamics':('ModalHarmonics','TransientSolve','Multibody','TransferFunc'),
+           'Fluids':('FlowRegimes','PipeLoss','BoundaryDrag','1DNetSolve')}
+    assert tuple(row[0] for row in lab.PLANNED[lab._page])==names[label]
+    assert all(row[1].startswith('Planned:') for row in lab.PLANNED[lab._page])
+    before=set(sys.modules)
     page=lab._page
     key(k.BUTTON_UP);key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
-    assert lab._page==page and vm.current_view.name=='lab'
+    assert lab._page==page and vm.current_view.name=='lab' and set(sys.modules)==before
     shot(label.lower())
     key(k.BUTTON_ESCAPE);assert lab._page=='modules'
+# The moved tool retains its model, folder selection and new breadcrumb.
+pick('Machine design');path('modules','machine design');shot('machine-design')
+assert [r[1] for r in lab.MENUS['machine']]==['PicoCAD']
+pick('PicoCAD');assert vm.current_view.name=='picocad_view'
+path('modules','machine design','PicoCAD')
+from engtools.picocad import app as cad
+for _ in range(2000):
+    key(k.BUTTON_NONE)
+    if cad._active.job is None:break
+assert cad._active.geometry is not None
+model=cad.dm.clone(cad._active.model)
+key(k.BUTTON_F9);assert cad._active.help_open
+path('modules','machine design','PicoCAD');shot('machine-design-help')
+key(k.BUTTON_ESCAPE);exit_child()
+assert lab._page=='machine' and lab._selected==0
+pick('PicoCAD');cad=sys.modules['engtools.picocad.app'];assert cad._active.model==model
+exit_child();key(k.BUTTON_ESCAPE)
+assert lab._page=='modules' and lab._selected==1
 # Electrical holds PicoSpice, opened with its breadcrumb; ESC returns.
 pick('Electrical');path('modules','electrical')
 assert [r[1] for r in lab.MENUS['electrical']]==['PicoSpice']
@@ -145,12 +169,18 @@ assert lab._page=='root' and not lab._resume and not lab._suspended
 for route in ('PicoLAB/checks/Numerics check','PicoLAB/checks/Plot previews',
               'PicoLAB/tools/Grapher','PicoLAB/tools/Graph','PicoLAB/tools/Graph3D','PicoLAB/tools/Scientific calculator','PicoLAB/tools/UnitConverter',
               'PicoLAB/modules/structural/BeamView','PicoLAB/modules/thermal',
+              'PicoLAB/modules/Machine design','PicoLAB/modules/Machine design/PicoCAD',
+              'PicoLAB/modules/machine/PicoCAD','Apps/PicoLAB/tools/PicoCAD','PicoLAB/PicoCAD',
               'PicoLAB/modules/structural/StressStrain',
               'PicoLAB/modules/structural/Buckling',
               'PicoLAB/modules/structural/Section Properties',
               'PicoLAB/modules/electrical/PicoSpice',
               'Apps/PicoLAB/Graph','PicoLAB/Beam Lab'):
     sim_runtime._keys=[];sim_runtime.request_open(route);assert sim_runtime._keys
+for folder,name in (('dynamics','ModalHarmonics'),('fluids','PipeLoss')):
+    try:sim_runtime.request_open('PicoLAB/modules/'+folder+'/'+name)
+    except sim_runtime.LaunchTargetError:pass
+    else:raise AssertionError('Planned app accepted as a launch target')
 try:sim_runtime.request_open('PicoLAB/modules/structural/Missing')
 except sim_runtime.LaunchTargetError:pass
 else:raise AssertionError('Invalid nested path accepted')

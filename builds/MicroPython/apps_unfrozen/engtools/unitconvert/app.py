@@ -18,7 +18,8 @@ OPTIONS = (('Swap units', 'Keep the quantity and reverse the conversion'),
            ('Favorites', 'Saved unit pairs'), ('Recent conversions', 'Last 12 calculations'),
            ('Save conversion', 'Versioned case with its value in SI'),
            ('Open conversion', 'Load a saved conversion'),
-           ('Export SI CSV', 'One value in the category base unit'))
+           ('Export SI CSV', 'One value in the category base unit'),
+           ('Categories', 'Browse quantities'), ('Unit conventions', 'Notes for this quantity'))
 HELP = ('Getting started:', 'Type to search categories or unit names',
         'UP/DOWN choose; ENTER opens', 'ESC clears search, then goes back',
         'Converting:', 'UP/DOWN choose a field; ENTER edits',
@@ -26,8 +27,8 @@ HELP = ('Getting started:', 'Type to search categories or unit names',
         'ENTER applies; ESC cancels an edit',
         'LEFT/RIGHT tabs; UP/DOWN selects a row',
         'S swaps units and preserves quantity',
-        'F1 browse categories  F2 find a unit',
-        'F3 options, favorites and saved cases', 'F4 conventions for this quantity',
+        'Category / units: ENTER on their fields',
+        'F3 options, favorites and saved cases', 'Conventions are in F3 Options',
         'F5 all equivalents  F6 calculate',
         'ENTER opens a searchable unit list',
         'Z undo the last conversion change',
@@ -154,6 +155,13 @@ class Converter:
     def option(self, index):
         from engtools import cases
         self.page, self.index = 'convert', 0
+        if index == 7:
+            self.browse()
+            return
+        if index == 8:
+            record = catalog.category(self.state['category'])
+            self.vm.show('UNIT CONVENTIONS', tuple(wrap(record[5] or 'Units convert through '+record[3]+'.', 43)))
+            return
         if index == 0:
             self.do_swap()
         elif index == 1:
@@ -270,8 +278,8 @@ class Converter:
                     self.choose_category(rows[self.index][0])
                 else:
                     self.apply_unit(rows[self.index][0])
-            elif button == k.BUTTON_F1:
-                self.browse()
+            elif button in (k.BUTTON_F1, k.BUTTON_F2):
+                return
             else:
                 before = self.search.text
                 self.search.key(self.vm, button)
@@ -282,8 +290,7 @@ class Converter:
             self.switch_tab(-1 if button == k.BUTTON_LEFT else 1)
             return
         if self.page in PRIMARY:
-            if button == k.BUTTON_F1:
-                self.browse()
+            if button in (k.BUTTON_F1, k.BUTTON_F2):
                 return
             if button == k.BUTTON_F3:
                 self.page, self.index = 'options', 0
@@ -320,15 +327,10 @@ class Converter:
                     self.state, self.page, self.row = candidate, 'convert', 1
             return
         c = self.vm.input_manager.button_to_char(button) or ''
-        if button == k.BUTTON_F1:
-            self.browse()
-        elif button == k.BUTTON_F2:
-            self.open_units('to' if self.row != 2 else 'from')
+        if button in (k.BUTTON_F1, k.BUTTON_F2):
+            return
         elif button == k.BUTTON_F3:
             self.page, self.index = 'options', 0
-        elif button == k.BUTTON_F4:
-            record = catalog.category(self.state['category'])
-            self.vm.show('UNIT CONVENTIONS', tuple(wrap(record[5] or 'Units convert through ' + record[3] + '.', 43)))
         elif button == k.BUTTON_F5:
             self.page, self.index = 'results', 0
         elif button == k.BUTTON_F6:

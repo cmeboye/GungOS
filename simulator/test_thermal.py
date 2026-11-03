@@ -249,7 +249,7 @@ assert 'End time' in [r[1] for r in a.rows()]
 a.state['tend'], a.state['res'] = 20000.0, 3
 key(k.BUTTON_F6); assert a.running
 key(k.BUTTON_ESCAPE); assert not a.running and vm.current_view.name == 'thermal_view'
-text(' '); assert a.running
+key(k.BUTTON_F7); assert a.running
 a.state['tend'], a.state['res'] = 60.0, 0
 key(k.BUTTON_F6); settle()
 assert a.plate.done and 'Finished' in a.message
@@ -263,8 +263,8 @@ key(k.BUTTON_CENTER); assert a.page == 'plots'
 hot = a.plate.stats()['hot']; assert a.probe_cell() == hot
 # F4: arrows move the cursor, TAB visits hottest and coldest, ENTER pins, D changes the view.
 key(k.BUTTON_LEFT); assert a.probe_cell() == (hot[0], max(0, hot[1] - 1))
-key(k.BUTTON_TAB); assert a.probe_cell() == hot
-key(k.BUTTON_TAB); assert a.probe_cell() == a.plate.stats()['cold']
+key(k.BUTTON_P); assert a.probe_cell() == hot
+key(k.BUTTON_P); assert a.probe_cell() == a.plate.stats()['cold']
 key(k.BUTTON_CENTER); assert len(a.pins) == 1
 key(k.BUTTON_CENTER); assert len(a.pins) == 1
 assert a.views() == app.PLOT_VIEWS

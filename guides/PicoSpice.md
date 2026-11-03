@@ -101,7 +101,7 @@ set twice*.
 
 Voltage and current probes get a pane each, scaled to their range. Left/Right
 move the cursor, `,` and `.` move ten steps, Up/Down choose the probe whose
-value the header shows, TAB jumps to its maximum and minimum.
+value the header shows, P jumps to its maximum and minimum.
 
 ## Results (F5)
 
