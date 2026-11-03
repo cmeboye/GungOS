@@ -1,293 +1,215 @@
-"""JPEG - Decode and display JPEG images."""
-
+"""Bounded JPEG input, native scaled decoding and explicit resource cleanup."""
 import jpegdec
+from time import ticks_ms, ticks_diff, sleep_ms
 
 
 class JPEG(jpegdec.JPEGDecoder):
-    """JPEG decoder for Picoware."""
+    """JPEG decoder; file streaming uses the firmware's two input buffers."""
 
-    def __init__(
-        self,
-        screen_width: int = 320,
-        screen_height: int = 320,
-        buffer_size: int = 1024 * 8,
-        buffer_num: int = 2,
-    ):
-        """Initialize the JPEG decoder with display and buffer settings.
-
-        Args:
-            screen_width (int): Maximum display width. Defaults to 320.
-            screen_height (int): Maximum display height. Defaults to 320.
-            buffer_size (int): Size of each decode buffer. Defaults to 1024 * 8.
-            buffer_num (int): Number of decode buffers. Defaults to 2.
-        """
+    def __init__(self, screen_width=320, screen_height=320,
+                 buffer_size=8192, buffer_num=2):
         super().__init__()
-        self._max_width = screen_width
-        self._max_height = screen_height
-        self._buffer_size = buffer_size
-        self._buffer_num = buffer_num
+        if screen_width < 1 or screen_height < 1:
+            raise ValueError('JPEG viewport must be positive')
+        if buffer_num != 2 or buffer_size < 2048:
+            raise ValueError('JPEG streaming needs two buffers of at least 2048 bytes')
+        self._max_width, self._max_height = int(screen_width), int(screen_height)
+        self._buffer_size, self._buffer_num = int(buffer_size), 2
         self._filebuffer = None
-        self._buffers = [None] * self._buffer_num
-        self._buffers_pos = [-1] * self._buffer_num
-        self._buffers_len = [self._buffer_size] * self._buffer_num
+        self._buffers = [None, None]
+        self._buffers_pos = [-1, -1]
+        self._buffers_len = [0, 0]
         self._decoder_running = False
+        self._closed = False
+        self._file_pos = 0
+        self.last_error = ''
 
-    def draw(self, x: int, y: int, file_path, storage=None) -> bool:
-        """Draw a JPEG file at position (x, y) on the display.
-
-        Args:
-            x (int): Horizontal draw position in pixels.
-            y (int): Vertical draw position in pixels.
-            file_path (str): Path to the .jpg / .jpeg file.
-            storage: Storage class instance. Defaults to None.
-
-        Returns:
-            bool: True on success, False on failure.
-        """
-        if not file_path.endswith((".jpg", ".jpeg")):
-            print("Bad file", file_path)
-            return False
-        if not file_path.startswith("sd") and not file_path.startswith("/sd"):
-            file_path = "sd/" + file_path.lstrip("/")
-        rc = True
-        mounted_vfs = False
+    def draw(self, x, y, file_path, storage=None):
+        """Decode a mounted SD JPEG; accept absolute paths and uppercase suffixes."""
+        if self._closed: return False
+        self.last_error = ''
+        mounted = False
         try:
-            self._init_buffers()
+            if not file_path.lower().endswith(('.jpg', '.jpeg')):
+                raise ValueError('Not a JPEG path')
             if storage and not storage.vfs_mounted:
-                mounted_vfs = storage.mount_vfs()
-            with open(file_path, mode="rb") as fi:
-                fsize = fi.seek(0, 2)  # os.SEEK_END
-                fi.seek(0, 0)  # os.SEEK_SET
-                rc = self._decode_split(fi, fsize, x, y)
-        except OSError as e:
-            print(e, "file open error")
-            rc = False
+                mounted = bool(storage.mount_vfs())
+                if not mounted: raise OSError('Cannot mount SD card')
+            if not file_path.startswith('/'):
+                prefix = getattr(storage, 'vfs_prefix', '/sd') if storage else '/sd'
+                if file_path.startswith('sd/'): file_path = '/'+file_path
+                else: file_path = prefix.rstrip('/')+'/'+file_path
+            with open(file_path, 'rb') as handle:
+                handle.seek(0, 2); size = handle.tell(); handle.seek(0)
+                # Small files fit in less memory than the two streaming buffers.
+                if 0 < size <= self._buffer_size:
+                    data = bytearray(size); view = memoryview(data); count = 0
+                    while count < size:
+                        n = handle.readinto(view[count:])
+                        if not n: raise OSError('Truncated JPEG file')
+                        count += n
+                    return self._decode_buffer(x, y, data)
+                return self._decode_split(handle, size, x, y)
+        except (OSError, ValueError, MemoryError) as exc:
+            self.last_error = str(exc) or 'JPEG decoding failed'
+            return False
         finally:
-            if mounted_vfs and storage:
-                try:
-                    storage.unmount_vfs()
-                except OSError:
-                    pass
             self._cleanup()
-        return rc
+            if mounted and storage:
+                try: storage.unmount_vfs()
+                except OSError: pass
 
-    def draw_buffer(self, x: int, y: int, buf) -> bool:
-        """Draw a JPEG image from bytes data into a BytesIO buffer.
-
-        Args:
-            x (int): Horizontal draw position in pixels.
-            y (int): Vertical draw position in pixels.
-            buf: Bytes data containing the JPEG image.
-
-        Returns:
-            bool: True on success, False on failure.
-        """
-        from io import BytesIO
-
-        self._init_buffers()
-        bio = BytesIO(buf)
-        rc = False
+    def draw_buffer(self, x, y, buf):
+        """Decode borrowed JPEG bytes directly, without BytesIO or input copies."""
+        if self._closed: return False
+        self.last_error = ''
         try:
-            rc = self._decode_split(bio, len(buf), x, y)
-        except OSError as e:
-            print(e, "buffer decode error")
-        return rc
+            return self._decode_buffer(x, y, buf)
+        except (OSError, ValueError, MemoryError) as exc:
+            self.last_error = str(exc) or 'JPEG decoding failed'
+            return False
+        finally:
+            self._cleanup()
 
-    def __del__(self) -> None:
-        """Clean up decoder resources."""
-        self._cleanup()
-        del self._filebuffer
-        del self._buffers
-        del self._buffers_pos
-        del self._buffers_len
+    def _decode_buffer(self, x, y, data):
+        info = self._dimensions(data)
+        if not info[0]: raise ValueError('Invalid or unsupported JPEG header')
+        width, height = info[1:]
+        scale, offset = self._get_scale(width, height, x, y)
+        result = self.decode_opt(data, (x+offset[0], y+offset[1]),
+                                 (0, 0, width, height), self._get_option(scale))
+        if not result[0]: self.last_error = 'Native JPEG decoding failed'
+        return bool(result[0])
 
-    def _init_buffers(self) -> None:
-        """Allocate the file buffer and split it into decode buffers."""
+    @staticmethod
+    def _dimensions(data):
+        """Find a baseline SOF without building Huffman tables twice."""
+        size = len(data)
+        if size < 4 or data[0] != 255 or data[1] != 216: return False, 0, 0
+        pos = 2
+        while pos < size:
+            if data[pos] != 255: return False, 0, 0
+            while pos < size and data[pos] == 255: pos += 1
+            if pos == size: break
+            marker = data[pos]; pos += 1
+            if marker in (216, 1) or 208 <= marker <= 215: continue
+            if marker in (217, 218) or pos+2 > size: break
+            length = (data[pos] << 8) | data[pos+1]
+            if length < 2 or pos+length > size: break
+            if marker == 192:  # baseline Huffman JPEG, as supported by JPEGDEC
+                if length < 8 or data[pos+2] != 8: break
+                height = (data[pos+3] << 8) | data[pos+4]
+                width = (data[pos+5] << 8) | data[pos+6]
+                return bool(width and height), width, height
+            if marker in (193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207): break
+            pos += length
+        return False, 0, 0
+
+    def _init_buffers(self):
         if self._filebuffer is None:
-            self._filebuffer = bytearray(self._buffer_size * self._buffer_num)
-            mv = memoryview(self._filebuffer)
-            for i in range(self._buffer_num):
-                self._buffers[i] = mv[
-                    i * self._buffer_size : (i + 1) * self._buffer_size
-                ]
+            self._filebuffer = bytearray(self._buffer_size*2)
+            view = memoryview(self._filebuffer)
+            self._buffers = [view[:self._buffer_size], view[self._buffer_size:]]
 
-    def _cleanup(self) -> None:
-        """Wait for the decoder core and reset the running flag."""
-        if self._decoder_running:
-            self.decode_core_wait(1)
-            self.decode_core_wait(1)
-            self._decoder_running = False
+    def _cleanup(self):
+        if getattr(self, '_decoder_running', False):
+            try: self.decode_core_wait(1)  # cancel a worker blocked on input
+            finally: self._decoder_running = False
 
-    def _get_option(self, scale) -> int:
-        """Return the decoder option for the given scale factor.
+    def close(self):
+        """Release retained buffers and, on updated firmware, the native context."""
+        if getattr(self, '_closed', False): return
+        self._cleanup()
+        self._buffers = [None, None]; self._filebuffer = None
+        close = getattr(super(), 'close', None)
+        if close: close()
+        self._closed = True
 
-        Args:
-            scale: The scale factor (1, 0.5, 0.25, or 0.125).
+    def __del__(self):
+        self.close()
 
-        Returns:
-            int: The decoder option value.
-        """
-        if scale == 1:
-            return 0
-        if scale >= 0.5:
-            return 2
-        if scale >= 0.25:
-            return 4
-        if scale >= 0.125:
-            return 8
-        return 0
+    def _get_option(self, scale):
+        return {1:0, 0.5:2, 0.25:4, 0.125:8}[scale]
 
-    def _get_scale(self, w, h) -> tuple[float, tuple[int, int]]:
-        """Return (scale, (auto_x, auto_y)) so the image fits the display.
+    def _get_scale(self, width, height, x=0, y=0):
+        available_w = self._max_width-max(0, int(x))
+        available_h = self._max_height-max(0, int(y))
+        for divisor in (1, 2, 4, 8):
+            sw, sh = (width+divisor-1)//divisor, (height+divisor-1)//divisor
+            if sw <= available_w and sh <= available_h:
+                return 1/divisor, ((available_w-sw)//2, (available_h-sh)//2)
+        raise ValueError('JPEG is too large even at 1/8 scale')
 
-        Args:
-            w (int): The image width.
-            h (int): The image height.
+    def _test_buffer(self, pos, length):
+        found, free = -1, 0
+        for i in range(2):
+            start, size = self._buffers_pos[i], self._buffers_len[i]
+            if start < 0 or start+size <= pos: free |= 1 << i
+            if start >= 0 and start <= pos and pos+length <= start+size: found = i
+        return found, free
 
-        Returns:
-            tuple[float, tuple[int, int]]: The scale and auto offset.
-        """
-        scale = 0.125
-        for fact in (1, 2, 4, 8):
-            if (w + fact - 1) // fact <= self._max_width and (
-                h + fact - 1
-            ) // fact <= self._max_height:
-                scale = 1 / fact
-                break
-        sw = int(w * scale)
-        sh = int(h * scale)
-        off_x = (self._max_width - sw) // 2
-        off_y = (self._max_height - sh) // 2
-        return scale, (off_x, off_y)
+    def _fill(self, handle, index, pos, size, publish=True):
+        expected = min(self._buffer_size, size-pos)
+        if expected <= 0: return False
+        if self._file_pos != pos: handle.seek(pos)
+        buf = self._buffers[index]; count = 0
+        while count < expected:
+            n = handle.readinto(buf[count:expected])
+            if not n: raise OSError('Truncated JPEG input')
+            count += n
+        self._file_pos = pos+count
+        self._buffers_pos[index], self._buffers_len[index] = pos, count
+        if publish and not self.decode_split_buffer(index, pos, buf[:count]):
+            raise ValueError('JPEG input buffer rejected')
+        return True
 
-    def _test_buffer(self, ipos, ilen) -> tuple[int, int]:
-        """Check which buffers cover the requested data range.
+    def _start_split(self, size, first, x, y):
+        # Older firmware initializes split headers on the feeding core. A bounded
+        # getinfo probe is needed there to reject headers outside the first block.
+        info = self._dimensions(first) if getattr(jpegdec, 'SPLIT_PREFIX_SAFE', False) else self.getinfo(first)
+        if not info[0]: raise ValueError('JPEG header is unsupported or exceeds the first input buffer')
+        scale, offset = self._get_scale(info[1], info[2], x, y)
+        self._decoder_running = True  # also cover an exception returning the tuple
+        result = self.decode_split(size, first, (x+offset[0], y+offset[1]), None, self._get_option(scale))
+        self._decoder_running = bool(result[0])
+        if not result[0]: self.last_error = 'Native JPEG header initialization failed'
+        return bool(result[0])
 
-        Args:
-            ipos: The requested start position.
-            ilen: The requested length.
-
-        Returns:
-            tuple[int, int]: The matching buffer index and free buffer mask.
-        """
-        idx = -1
-        freeidx = 0
-        for i in range(self._buffer_num):
-            bufpos = self._buffers_pos[i]
-            buflen = self._buffers_len[i]
-            if bufpos < 0:
-                freeidx = freeidx | (1 << i)
-                continue
-            if bufpos <= ipos and ipos + ilen <= bufpos + buflen:
-                idx = i
-            if bufpos + buflen <= ipos:
-                freeidx = freeidx | (1 << i)
-        return idx, freeidx
-
-    def _read_into_buf(self, fi, buf):
-        """Read data from the file into a buffer.
-
-        Args:
-            fi: The file object to read from.
-            buf: The buffer to fill.
-        """
-        fi.readinto(buf)
-
-    def _start_split(self, fsize, buf, x, y) -> bool:
-        """Start decoding a JPEG from the given buffer.
-
-        Args:
-            fsize: The total file size.
-            buf: The initial buffer data.
-            x (int): Horizontal draw position.
-            y (int): Vertical draw position.
-
-        Returns:
-            bool: True if decoding started successfully.
-        """
-        jpginfo = self.getinfo(buf)
-        iw = jpginfo[1]
-        ih = jpginfo[2]
-        scale, auto_offset = self._get_scale(iw, ih)
-        ioption = self._get_option(scale)
-        offset = (x + auto_offset[0], y + auto_offset[1])
-        jpginfo = self.decode_split(fsize, buf, offset, None, ioption)
-        return jpginfo[0]
-
-    def _decode_split(self, fi, fsize, x, y) -> bool:
-        """Decode a JPEG from a file, streaming buffers as needed.
-
-        Args:
-            fi: The file object to read from.
-            fsize: The total file size.
-            x (int): Horizontal draw position.
-            y (int): Vertical draw position.
-
-        Returns:
-            bool: True on success, False on failure.
-        """
-        buf_idx = 0
-        buf = self._buffers[buf_idx]
-        self._buffers_pos[buf_idx] = 0
-        fi.readinto(buf)
-        self._decoder_running = True
-        rc = self._start_split(fsize, buf, x, y)
-
-        buf2 = self._buffers[1]
-        pos2 = self._buffer_size
-        self._buffers_pos[1] = pos2
-        fi.seek(pos2)
-        fi.readinto(buf2)
-        _ = self.decode_split_buffer(1, pos2, buf2)
-
-        newpos = -1
-        newsize = -1
+    def _decode_split(self, handle, size, x, y):
+        self._cleanup()
+        if size <= 0: raise ValueError('Empty JPEG file')
+        self._init_buffers()
+        self._buffers_pos = [-1, -1]; self._buffers_len = [0, 0]
+        self._file_pos = 0
+        handle.seek(0)
+        self._fill(handle, 0, 0, size, False)
+        first = self._buffers[0][:self._buffers_len[0]]
+        if not self._start_split(size, first, x, y): return False
+        self._fill(handle, 1, self._buffers_len[0], size)
+        progress = ticks_ms(); previous = None
         while True:
-            while True:
-                retc = self.decode_split_wait()
-                if retc[0] == 0:  # running
-                    if retc[1] < 0:  # fpos not set yet
-                        continue
-                    newpos = retc[1]
-                    newsize = retc[2]
-                break
-            if retc[0] != 0:  # done
-                break
-
-            idx, freeidx = self._test_buffer(newpos, newsize)
-            if freeidx != 0:
-                for i in range(self._buffer_num):
-                    if freeidx & (1 << i) != 0:
-                        buf2 = self._buffers[i]
-                        for j in range(self._buffer_num):
-                            if newpos < self._buffers_pos[j] + self._buffer_size:
-                                newpos = self._buffers_pos[j] + self._buffer_size
-                        pos2 = newpos
-                        self._buffers_pos[i] = pos2
-                        fi.seek(pos2)
-                        fi.readinto(buf2)
-                        self.decode_split_buffer(i, pos2, buf2)
-                continue
-
-            if idx != -1:  # requested data already buffered
-                continue
-            else:
-                buf_idx = 0
-            buf = self._buffers[buf_idx]
-            self._buffers_pos[buf_idx] = newpos
-            fi.seek(newpos)
-            fi.readinto(buf)
-            _ = self.decode_split_buffer(buf_idx, newpos, buf)
-
-            buf_idx += 1
-            if buf_idx >= self._buffer_num:
-                buf_idx = 0
-            buf = self._buffers[buf_idx]
-            newpos += self._buffer_size
-            self._buffers_pos[buf_idx] = newpos
-            fi.seek(newpos)
-            fi.readinto(buf)
-            _ = self.decode_split_buffer(buf_idx, newpos, buf)
-
-        self._decoder_running = False
-        return rc
+            status, pos, length, index = self.decode_split_wait()
+            if status != 0:
+                if status == 1: self._decoder_running = False
+                ok = status == 1 and pos == 1
+                if not ok: self.last_error = 'Native JPEG decoding failed'
+                return ok
+            request = (pos, length)
+            if request != previous:
+                progress = ticks_ms(); previous = request
+            if pos >= 0:
+                cached, free = self._test_buffer(pos, length)
+                if length > 0 and cached < 0:
+                    if pos >= size: raise OSError('JPEG requested data beyond EOF')
+                    # The worker has paused waiting for this exact position.
+                    target = next((i for i in range(2) if free & (1 << i)), 0)
+                    self._fill(handle, target, pos, size)
+                    progress = ticks_ms(); continue
+                if length == 0 and free:
+                    end = max(self._buffers_pos[i]+self._buffers_len[i] for i in range(2))
+                    target = next(i for i in range(2) if free & (1 << i))
+                    if self._fill(handle, target, end, size):
+                        progress = ticks_ms(); continue
+            if ticks_diff(ticks_ms(), progress) > 10000:
+                raise OSError('JPEG decoder stalled')
+            sleep_ms(1)

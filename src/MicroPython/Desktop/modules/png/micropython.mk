@@ -1,0 +1,10 @@
+PNG_MOD_DIR := $(USERMOD_DIR)
+SRC_USERMOD += $(PNG_MOD_DIR)/png_core.c
+SRC_USERMOD += $(PNG_MOD_DIR)/pngdec_mp.c
+SRC_USERMOD += $(PNG_MOD_DIR)/adler32.c
+SRC_USERMOD += $(PNG_MOD_DIR)/crc32.c
+SRC_USERMOD += $(PNG_MOD_DIR)/inffast.c
+SRC_USERMOD += $(PNG_MOD_DIR)/inflate.c
+SRC_USERMOD += $(PNG_MOD_DIR)/inftrees.c
+SRC_USERMOD += $(PNG_MOD_DIR)/zutil.c
+SRC_USERMOD += $(PNG_MOD_DIR)/bounded_reader.c

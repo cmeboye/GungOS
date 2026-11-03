@@ -99,6 +99,7 @@ class Object:
         return self._value
 
     def length(self):
+        if self._value is None:return self._size
         try:
             return len(self._value)
         except TypeError:
@@ -134,7 +135,7 @@ class Object:
         return self._value(*args, **kwargs)
 
     def __bool__(self):
-        return bool(self._value)
+        return self._size>0 if self._value is None else bool(self._value)
 
     def __add__(self, other):
         if isinstance(other, Object):
@@ -275,3 +276,9 @@ def read(addr, length):
 
 def write(addr, data):
     return PSRAM().write(addr, data)
+
+
+def alloc_buffer(size):
+    size=int(size)
+    if size<=0 or size>SIZE:raise ValueError('Invalid PSRAM buffer size')
+    return Object(None,_alloc(size),size)

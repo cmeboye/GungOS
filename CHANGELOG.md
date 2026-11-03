@@ -1,5 +1,130 @@
 # Changelog
 
+## Unreleased — calculator reliability and buffered reader
+
+### PicoReader chapter navigation
+
+- Add F10 chapter selection with EPUB2/3 contents labels and filename fallback,
+  ten-entry movement, numeric Go to chapter and chapter-local reader-page jumps.
+- Add bracket page turning, cancellable menu/help/input and range checking;
+  an excessive jump in an uncounted chapter stays on that chapter's last page.
+- Source/compiled EPUB2/3, fallback, TXT, state and control checks pass. The user
+  accepted mixed equation pages on device; navigation acceptance is pending.
+
+### PicoReader mixed equation pages
+
+- Add height-aware text/MathML blocks in reading order, SD-backed bounded
+  equation records, page-local Tab selection and contextual F8 pan viewing.
+- Retain normalized character anchors and invalidate old page counts for the
+  revised layout. Keep legacy TXT/streaming code paths unchanged.
+- Source/MPY ordering, page budgets, passage/reflow/bookmark/disk-cache checks
+  pass. Device retesting pending; source-inline math currently occupies its own
+  block and six previously unsupported alignment expressions remain explicit.
+
+### PicoReader MathML prototype
+
+- Add F8 read-only chapter equation viewing with bounded streaming discovery,
+  structured fractions/scripts/roots/limits/matrices, Greek/math symbols,
+  bracket navigation, arrow-key panning, font choice and exact text-page return.
+- Report unsupported expressions explicitly; do not evaluate input or run EPUB
+  scripts. The six alignment-mark expressions in the supplied textbook remain
+  unsupported. Ordinary text pagination is unchanged.
+- Add original equation-check EPUB generation, independent structure/geometry,
+  source/MPY UI and constrained-core checks. Physical acceptance is pending;
+  later navigation, image and presentation work remains on hold.
+
+### Large EPUB manifest fix
+
+- Stream package/container metadata instead of loading the whole manifest;
+  keep only reading-order IDs and matching chapter paths, with explicit bounds.
+- Pool chapter paths and discard optional ZIP lookup cache before allocating
+  inflate windows to reduce fragmentation. Retain metadata CRC/size checks.
+- Fix opening illustrated books whose manifest exceeds the previous 64 KiB
+  ceiling; add source/compiled large-manifest, integrity and cleanup checks.
+  SD-only on the buffered-reader preview firmware; device retesting pending.
+
+### Buffered EPUB reading
+
+- Remove the 32 MiB archive guard; support classic ZIP EPUBs up to 2 GiB minus
+  one byte, with bounded metadata and up to 64 MiB of text per chapter.
+- Stream UTF-8/XHTML in 512-byte chunks, prefetch three pages cooperatively,
+  cap cached RAM text at 16 KiB and retain 64 pages in a capped SD ring.
+- Keep the current page visible while distant jumps or fast turns load;
+  preserve character anchors across fonts, bookmarks, reopening and images.
+- Use external PSRAM for the reading display and restore its previous mode
+  on exit; buffer the inflater's compressed byte reads in C on updated UF2.
+- Validate large-book streaming, cache caps, constrained native heaps and
+  source/compiled reader UI and image navigation. Device timing is pending.
+
+### Scientific calculator follow-up
+
+- Add principal complex asin/acos/atan with validated branch handling and
+  DEG/RAD results; repair complex sqrt/log/magnitude underflow and overflow
+  using scaled components.
+- Preserve local reduction/integration scope for Matrix scalar expressions,
+  with shared work limits and explicit rejection of matrix-valued terms.
+- Reject canonical tangent poles while retaining nearby representable angles;
+  route tangent expressions through Python for native/interpreted parity.
+- Add ncr/npr with exact bounded integer results and checked work/range, plus
+  real cbrt/root functions; expose the four new functions with F7 signatures.
+- Expand the tracked scientific review and reference/UI regression checks.
+  These calculator changes require an SD app update only on v1.35 firmware.
+
+### Additional scientific functions
+
+- Add angle/polar helpers, gcd/lcm, real/complex inverse hyperbolic functions,
+  stable log1p/expm1/hypot, decimal/significant-digit rounding and truncation,
+  plus checked native gamma/lgamma/erf/erfc.
+- Group F7 into lazy families with signatures/examples, dataset defaults,
+  Matrix-context entries and two-level navigation, including the compact widget.
+- Correct subnormal float32 display without altering numeric values.
+- Expand the saved calculator report to protocol v2 and 28 fixed checks.
+
+### Numerical reliability and device report
+
+- Factor exact repeated polynomial factors from stored float32 coefficients;
+  scale and polish roots with exact integer Horner/Newton residuals, checked
+  locations, multiplicities and coefficient-sensitivity warnings.
+- Replace integral depth comparison with bounded adaptive Gauss/Kronrod,
+  split points/tolerances, concentrated-feature checks and visible estimated
+  error/sample diagnostics. Refuse ambiguous all-zero samples explicitly.
+- Add progress and Escape cancellation between reduction/integration batches,
+  retaining drafts and stored state. Native Formula point calls remain atomic.
+- Add PicoLAB > Checks > Calculator check, optional small REPL script and a
+  saved text report with correctness, compute timings and sampled heap use.
+
+### JPEG decoder review
+
+- Borrow in-memory JPEG input directly; avoid the two streaming buffers and
+  mutable BytesIO copy, and initialize native JPEG headers once on updated firmware.
+- Honor short reads and actual EOF lengths, remove redundant sequential seeks,
+  report final decode failures, bound polling and clean up decoder resources.
+- Correct core-1 stack size/startup synchronization and odd-width tile padding;
+  repair the simulator JPEG/BMP handoff. Native changes need a new UF2.
+- Add generated-image, transport and native pixel/stride regression checks.
+  Device profiling remains pending; details are in `guides/ImageDecoding.md`.
+
+### EPUB images and PNG
+
+- Add a native sequential PNG decoder with a compile-time 48 KiB workspace
+  limit, checked input, packed colour modes, alpha and bounded downsampling.
+- Stream and CRC-check EPUB image extraction, including native raw DEFLATE;
+  scan large ZIP footers in 1 KiB blocks.
+- Add F7 chapter images, fullscreen JPEG/PNG previews, captions and restoration
+  of text word anchors. Keep previews in managed external PSRAM; temporarily
+  select the PSRAM drawing mode while decoding and restore it on return.
+- New matching firmware is required for images. Add native sanitizer/pixel and
+  illustrated EPUB integration tests; physical device testing remains pending.
+
+### Reader memory
+
+- Fixed chapter decompression requesting a 192 KiB buffer even for the small
+  bundled examples. Allocate according to actual section size and use smaller
+  safe deflate windows for short entries.
+- Reduce entity-decoding allocations, release book memory on return to the
+  library, preserve the current layout when a font change fails, and handle
+  low-memory state-save failures. Added constrained-heap and UI regression checks.
+
 ## v1.35 — 2026-11-03
 
 - Spleen bitmap fonts are now the default in firmware, with existing layout

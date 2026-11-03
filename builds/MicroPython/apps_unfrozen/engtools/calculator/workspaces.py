@@ -169,10 +169,13 @@ class SolverWorkspace(Workspace):
                 value=record['root']
                 self.results=[('x',format_value(value)),('Residual',format_value(record['residual'])),('Iterations',str(record['iterations']))]
             elif 'roots' in record:
-                roots=[v.real if abs(v.imag)<3e-6*(1+abs(v.real)) else v for v in record['roots']]
+                roots=[v.real if v.imag==0 else v for v in record['roots']]
                 value=roots[0]
                 self.results=[('x'+str(i+1),format_value(v)) for i,v in enumerate(roots)]
-                self.results.append(('Numerical roots','Approximate float32 results'))
+                self.results.append(('Numerical roots','Approximate for stored coefficients'))
+                for warning in record.get('warnings',[]):self.results.append(('Conditioning',warning))
+                if any(n>1 for n in record.get('multiplicities',[])):
+                    self.results.append(('Multiplicity',' '.join(str(n) for n in record['multiplicities'])))
             else:
                 self.progress=record.get('progress',0); return
             self.calc.answer=value; self.calc.variables['Ans']=value
@@ -296,73 +299,98 @@ class MatrixWorkspace(Workspace):
         parser=Parser(text,FUNCTIONS+('det','inv','trn','transpose','trace','identity'))
         name,node=parser.parse()
         if name and name not in self.NAMES: raise ValueError('Assign only MatA, MatB, MatC or MatD')
-        steps=[0]
+        workspace=self
         dataset=self.calc.statistics.dataset if self.calc.statistics else None
-        scalar=Evaluator(self.calc.variables,self.calc.angle,statistics=dataset)
+        functions=('det','inv','trn','transpose','trace','identity')
         def contains_matrix(node):
-            if node[0]=='name': return node[1] in self.NAMES+('MatAns',)
-            if node[0]=='binary': return contains_matrix(node[2]) or contains_matrix(node[3])
-            if node[0]=='call': return node[1] in ('det','inv','trn','transpose','trace','identity') or any(contains_matrix(arg) for arg in node[2])
-            if node[0]=='unary': return contains_matrix(node[2])
-            if node[0]=='factorial': return contains_matrix(node[1])
+            if node[0]=='name':return node[1] in workspace.NAMES+('MatAns',)
+            if node[0]=='binary':return contains_matrix(node[2]) or contains_matrix(node[3])
+            if node[0]=='call':return node[1] in functions or any(contains_matrix(arg) for arg in node[2])
+            if node[0]=='unary':return contains_matrix(node[2])
+            if node[0]=='factorial':return contains_matrix(node[1])
             return False
-        def run(node):
-            steps[0]+=1
-            if steps[0]>512: raise ValueError('Matrix operation limit')
-            if not contains_matrix(node): return scalar.run(node)
-            kind=node[0]
-            if kind=='name':
-                key=node[1]
-                if key in self.NAMES:
-                    if key not in self.matrices: raise ValueError('Define '+key+' first (F3)')
-                    return self.matrices[key]
-                if key=='MatAns':
-                    if self.result is None: raise ValueError('No matrix answer yet')
-                    return self.result
-            if kind=='unary':
-                value=run(node[2]); return -value if node[1]=='-' else value
-            if kind=='binary':
-                a,b=run(node[2]),run(node[3]); op=node[1]
-                am,bm=self.is_matrix(a),self.is_matrix(b)
-                if not am and not bm:
-                    return Evaluator({},self.calc.angle).run(('binary',op,('value',a),('value',b)))
-                if op in ('+','-'):
-                    if not am or not bm or a.shape!=b.shape: raise ValueError('Add/subtract equally sized matrices')
-                    value=a+b if op=='+' else a-b
-                elif op=='*':
-                    if am and bm:
-                        if a.shape[1]!=b.shape[0]: raise ValueError('Matrix product dimensions do not match')
-                        value=np.dot(a,b)
-                    else: value=a*b
-                elif op=='/':
-                    if bm: raise ValueError('Use inv(MatB) for matrix division')
-                    if b==0: raise ZeroDivisionError('Division by zero')
-                    value=a/b
-                elif op=='^':
-                    if not am or bm: raise ValueError('Use MatA^integer')
-                    value=m.power(a,b)
-                else: raise ValueError('Unsupported matrix operator')
-                return m.validate(value)
-            if kind=='call':
-                function,args=node[1],node[2]
-                if function in ('det','inv','trn','transpose','trace','identity'):
-                    if len(args)!=1: raise ValueError(function+' takes one argument')
-                    value=run(args[0])
-                    if function=='identity': return m.identity(value)
-                    m.validate(value)
-                    if function=='det': return m.determinant(value)
-                    if function=='inv': return m.inverse(value)
-                    if function=='trace': return sum(value[i,i] for i in range(m.square(value)))
-                    return np.array(value.transpose())
-                values=[run(arg) for arg in args]
-                if any(self.is_matrix(value) for value in values): raise ValueError('Use matrix-specific functions for matrix arguments')
-                return Evaluator({},self.calc.angle).run(('call',function,[('value',value) for value in values]))
-            if kind=='factorial':
-                value=run(node[1])
-                if self.is_matrix(value): raise ValueError('Factorial requires a scalar')
-                return Evaluator({}).run(('factorial',('value',value)))
-            return Evaluator(self.calc.variables,self.calc.angle).run(node)
-        value=run(node)
+        class MatrixEvaluator(Evaluator):
+            def matrix_charge(self,expensive=True):
+                self.charge()
+                if expensive:self.matrix_steps+=1
+                if self.matrix_steps>512:raise ValueError('Matrix operation limit: 512')
+            def series(self,function,args,local):
+                if len(args)==4 and args[0][0]=='name' and args[0][1] in workspace.NAMES+('MatAns',)+functions:
+                    raise ValueError('Sum/product index is reserved in Matrix mode')
+                return super().series(function,args,local)
+            def reduction(self,function,values):
+                def terms():
+                    for value in values:
+                        if workspace.is_matrix(value):raise ValueError('Sum/product terms must be scalars')
+                        yield value
+                return super().reduction(function,terms())
+            def run(self,node,local=None):
+                # Dispatch through one evaluator, including every binder's body.
+                # Scalar subtrees keep their original local k/x and shared budget.
+                if not contains_matrix(node):return super().run(node,local)
+                kind=node[0]
+                if kind=='name':
+                    self.charge();key=node[1]
+                    if key in workspace.NAMES:
+                        if key not in workspace.matrices:raise ValueError('Define '+key+' first (F3)')
+                        return workspace.matrices[key]
+                    if workspace.result is None:raise ValueError('No matrix answer yet')
+                    return workspace.result
+                if kind=='unary':
+                    value=self.run(node[2],local)
+                    if workspace.is_matrix(value):
+                        self.matrix_charge();return m.validate(-value if node[1]=='-' else value)
+                    return super().run(('unary',node[1],('value',value)),local)
+                if kind=='binary':
+                    a,b=self.run(node[2],local),self.run(node[3],local);op=node[1]
+                    am,bm=workspace.is_matrix(a),workspace.is_matrix(b)
+                    if not am and not bm:return super().run(('binary',op,('value',a),('value',b)),local)
+                    self.matrix_charge()
+                    if op in ('+','-'):
+                        if not am or not bm or a.shape!=b.shape:raise ValueError('Add/subtract equally sized matrices')
+                        value=a+b if op=='+' else a-b
+                    elif op=='*':
+                        if am and bm:
+                            if a.shape[1]!=b.shape[0]:raise ValueError('Matrix product dimensions do not match')
+                            value=np.dot(a,b)
+                        else:value=a*b
+                    elif op=='/':
+                        if bm:raise ValueError('Use inv(MatB) for matrix division')
+                        if b==0:raise ZeroDivisionError('Division by zero')
+                        value=a/b
+                    elif op=='^':
+                        if not am or bm:raise ValueError('Use MatA^integer')
+                        value=m.power(a,b)
+                    else:raise ValueError('Unsupported matrix operator')
+                    return m.validate(value)
+                if kind=='call':
+                    function,args=node[1],node[2]
+                    if function in ('sum','prod','int'):return super().run(node,local)
+                    if function in functions:
+                        if len(args)!=1:raise ValueError(function+' takes one argument')
+                        value=self.run(args[0],local);self.matrix_charge(function!='trace')
+                        if function=='identity':
+                            if workspace.is_matrix(value):raise ValueError('Identity size must be a scalar')
+                            return m.identity(value)
+                        m.validate(value)
+                        if function=='det':return m.determinant(value)
+                        if function=='inv':return m.inverse(value)
+                        if function=='trace':return sum(value[i,i] for i in range(m.square(value)))
+                        return np.array(value.transpose())
+                    values=[self.run(arg,local) for arg in args]
+                    if any(workspace.is_matrix(value) for value in values):raise ValueError('Use matrix-specific functions for matrix arguments')
+                    return super().run(('call',function,[('value',value) for value in values]),local)
+                if kind=='factorial':
+                    value=self.run(node[1],local)
+                    if workspace.is_matrix(value):raise ValueError('Factorial requires a scalar')
+                    return super().run(('factorial',('value',value)),local)
+                return super().run(node,local)
+        self.calc.calculation_info=[];self.calc.notice=''
+        evaluator=MatrixEvaluator(self.calc.variables,self.calc.angle,statistics=dataset,
+                                  diagnostics=self.calc.calculation_info,progress=self.calc.calculation_progress)
+        evaluator.matrix_steps=0
+        value=evaluator.run(node)
+        self.calc.calculation_done()
         if self.is_matrix(value): value=np.array(m.validate(value))
         elif not finite(value) or isinstance(value,complex): raise ValueError('Expected a real matrix or scalar result')
         if name:

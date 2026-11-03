@@ -3,6 +3,7 @@
 // modified for Picoware by @jblanked
 #include "jpegdec_mp.h"
 #include <limits.h>
+#include "jpeg_output.h"
 #include "../log/log_mp.h"
 
 #ifndef PRINT
@@ -27,10 +28,8 @@ static uint16_t disp_height, disp_width;
 static int docode_result;
 static uint8_t Coremode = 0;
 
-#define CORE1_STACK_SIZE 1024
-uint32_t core1_stack[CORE1_STACK_SIZE];
-
-#define FIFO_CMD_DONE (0xffff0ff0)
+#define CORE1_STACK_WORDS 1024
+uint32_t core1_stack[CORE1_STACK_WORDS];
 
 uint32_t JPEG_msg_core1;
 
@@ -52,14 +51,18 @@ volatile uint32_t core_message_box3;
 int core1_decode_is_busy();
 
 /* callback funtion from JPEGDEC */
-static int JPEGDraw(JPEGDRAW *pDraw)
+static void jpeg_blit(int x, int y, int width, int height, const uint16_t *pixels)
 {
 #if defined(LCD_MP_BLIT_16BIT)
-    LCD_MP_BLIT_16BIT(pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight, pDraw->pPixels);
+    LCD_MP_BLIT_16BIT(x, y, width, height, pixels);
 #else
-    (void)pDraw;
+    (void)x; (void)y; (void)width; (void)height; (void)pixels;
 #endif
-    return 1;
+}
+
+static int JPEGDraw(JPEGDRAW *pDraw)
+{
+    return jpeg_output(pDraw, jpeg_blit);
 }
 
 static int JPEGDrawx2(JPEGDRAW *pDraw)
@@ -90,17 +93,9 @@ static void jpeg_param_init(JPEGIMAGE *pJpeg, int iDataSize, uint8_t *pData, JPE
 
 int core1_decode_is_busy()
 {
-    uint32_t result;
-    if (core1_running == 1)
-    {
-        return 1;
-    }
-    result = 0;
-    if (multicore_fifo_pop_timeout_us(100, &result))
-    {
-        JPEG_msg_core1 = result;
-    }
-    return 0;
+    // This decoder publishes completion through shared state, not the FIFO.
+    // Polling an unrelated FIFO added 100 us to idle calls and consumed messages.
+    return core1_running == 1;
 }
 
 static int decode_core1_prepare(JPEGIMAGE *image, int drawmode, int iDataSize, uint8_t *pData, JPEG_DRAW_CALLBACK func)
@@ -118,11 +113,14 @@ static int decode_core1_prepare(JPEGIMAGE *image, int drawmode, int iDataSize, u
 
 uint32_t get_message_box()
 {
-    return core_message_box;
+    uint32_t msg = core_message_box;
+    __dmb();
+    return msg;
 }
 
 void set_message_box(uint32_t msg)
 {
+    __dmb(); // publish request length/index before its position
     core_message_box = msg;
 }
 
@@ -162,6 +160,7 @@ static void set_fbuffer(uint32_t bufnum, uint32_t pos, uint8_t *pbuf, uint32_t s
     {
         JPEG_fbuffer[bufnum].pos = pos;
         JPEG_fbuffer[bufnum].pbuf = pbuf;
+        __dmb();
         JPEG_fbuffer[bufnum].size = size; // set size at last
     }
 }
@@ -180,6 +179,7 @@ static int testAndSetBuffer(int32_t *p_iPos, int32_t *p_iLen, uint8_t **p_dstBuf
         {
             continue;
         }
+        __dmb(); // acquire the published buffer position/pointer
         bufPos = JPEG_fbuffer[i].pos;
         bufLen = JPEG_fbuffer[i].size;
         if (bufPos <= iPos)
@@ -219,6 +219,10 @@ static int32_t readRAM_split(JPEGFILE *pFile, uint8_t *pBuf, int32_t iLen)
     int rc;
     int iBytesRead;
     int32_t iPos = pFile->iPos;
+    if (iPos < 0 || iLen <= 0 || iPos >= pFile->iSize)
+        return 0;
+    if (iLen > pFile->iSize - iPos)
+        iLen = pFile->iSize - iPos;
     int32_t iLen_sav = iLen;
 
     do
@@ -258,20 +262,14 @@ static int32_t seekMem_split(JPEGFILE *pFile, int32_t iPosition)
     {
         iPosition = 0;
     }
-    else if (iPosition >= pFile->iSize)
+    else if (iPosition > pFile->iSize)
     {
-        iPosition = pFile->iSize - 1;
+        iPosition = pFile->iSize;
     }
     pFile->iPos = iPosition;
     return iPosition;
 }
 
-static void jpeg_param_init_split(JPEGIMAGE *pJpeg, int iDataSize, uint8_t *pData, JPEG_DRAW_CALLBACK func)
-{
-    jpeg_param_init(pJpeg, iDataSize, pData, func);
-    pJpeg->pfnRead = readRAM_split;
-    pJpeg->pfnSeek = seekMem_split;
-}
 JPEGIMAGE *g_context = NULL;
 static void decode_core1_split()
 {
@@ -280,6 +278,7 @@ static void decode_core1_split()
     docode_result = DecodeJPEG(g_context);
     g_context = NULL;
     JPEG_msg_core1 = (uint32_t)docode_result;
+    __dmb();
     core1_running = 2;
 }
 
@@ -367,6 +366,14 @@ mp_obj_t jpegdec_mp_del(mp_obj_t self_in)
     jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (self && !self->freed)
     {
+        if (self->context == g_context && core1_running == 1)
+        {
+            multicore_reset_core1();
+            core1_running = 0;
+            Coremode = 0;
+            g_context = NULL;
+            init_fbuffer();
+        }
         m_free(self->context);
         self->context = NULL;
         self->freed = true;
@@ -375,6 +382,12 @@ mp_obj_t jpegdec_mp_del(mp_obj_t self_in)
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(jpegdec_mp_del_obj, jpegdec_mp_del);
+
+static void jpegdec_require_context(jpegdec_mp_obj_t *self)
+{
+    if (self->freed || self->context == NULL)
+        mp_raise_ValueError(MP_ERROR_TEXT("JPEG decoder is closed"));
+}
 
 void jpegdec_mp_attr(mp_obj_t self_in, qstr attribute, mp_obj_t *destination)
 {
@@ -417,6 +430,7 @@ void jpegdec_mp_attr(mp_obj_t self_in, qstr attribute, mp_obj_t *destination)
 mp_obj_t jpegdec_decode(mp_obj_t self_in, mp_obj_t data)
 {
     jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    jpegdec_require_context(self);
     mp_buffer_info_t inbuf;
     mp_get_buffer_raise(data, &inbuf, MP_BUFFER_READ);
 
@@ -442,6 +456,7 @@ static MP_DEFINE_CONST_FUN_OBJ_2(jpegdec_decode_obj, jpegdec_decode);
 mp_obj_t jpegdec_decodex2(size_t n_args, const mp_obj_t *args)
 {
     jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+    jpegdec_require_context(self);
     mp_buffer_info_t inbuf;
     mp_get_buffer_raise(args[1], &inbuf, MP_BUFFER_READ);
     jpeg_param_init(self->context, inbuf.len, (uint8_t *)inbuf.buf, JPEGDrawx2);
@@ -502,6 +517,8 @@ mp_obj_t jpegdec_decode_core_wait(size_t n_args, const mp_obj_t *args)
             multicore_reset_core1();
             Coremode = 0;
             core1_running = 0;
+            g_context = NULL;
+            init_fbuffer();
             result = 0;
         }
     }
@@ -527,6 +544,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(jpegdec_decode_core_wait_obj, 1, 2, j
 mp_obj_t jpegdec_decode_opt(size_t n_args, const mp_obj_t *args)
 {
     jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+    jpegdec_require_context(self);
     mp_buffer_info_t inbuf;
     mp_get_buffer_raise(args[1], &inbuf, MP_BUFFER_READ);
 
@@ -588,6 +606,7 @@ mp_obj_t jpegdec_decode_split(size_t n_args, const mp_obj_t *args)
 {
     // args[0] self, args[1] filesize, args[2] buf, [ args[3] ofset, args[4] clip, args[5] option ]
     jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+    jpegdec_require_context(self);
     int result = 0;
     int result0 = -1;
 
@@ -645,12 +664,20 @@ mp_obj_t jpegdec_decode_split(size_t n_args, const mp_obj_t *args)
         ioption = mp_obj_get_int(args[5]);
     }
 
-    jpeg_param_init_split(self->context, mp_obj_get_int(args[1]), inbuf.buf, JPEGDraw);
-    self->initialized = true;
+    int file_size = mp_obj_get_int(args[1]);
+    if (self->freed || file_size <= 0 || inbuf.len == 0 || inbuf.len > (size_t)file_size)
+        mp_raise_ValueError(MP_ERROR_TEXT("Invalid JPEG split input"));
+    // Header initialization runs on core 0, where Python cannot feed a request.
+    // Parse the available prefix using bounded RAM reads; never wait on core 0.
+    jpeg_param_init(self->context, inbuf.len, inbuf.buf, JPEGDraw);
     result = JPEGInit(self->context);
+    self->initialized = result == 1;
     if (result == 1)
     {
         Coremode = 1;
+        self->context->JPEGFile.iSize = file_size;
+        self->context->pfnRead = readRAM_split;
+        self->context->pfnSeek = seekMem_split;
         self->context->iXOffset = ofst_x;
         self->context->iYOffset = ofst_y;
         self->context->iOptions = ioption | JPEG_USES_DMA;
@@ -661,7 +688,10 @@ mp_obj_t jpegdec_decode_split(size_t n_args, const mp_obj_t *args)
 
         multicore_reset_core1();
         g_context = self->context;
-        multicore_launch_core1_with_stack(decode_core1_split, core1_stack, CORE1_STACK_SIZE);
+        // Publish running before launch: the first poll must not observe idle.
+        __dmb();
+        core1_running = 1;
+        multicore_launch_core1_with_stack(decode_core1_split, core1_stack, sizeof(core1_stack));
     }
     else
     {
@@ -683,7 +713,7 @@ mp_obj_t jpegdec_decode_split_buffer(size_t n_args, const mp_obj_t *args)
     // self, buffer num, filepointer, buffer
     const int bufnum = mp_obj_get_int(args[1]);
 
-    if (bufnum >= FBUFFER_MAX)
+    if (bufnum < 0 || bufnum >= FBUFFER_MAX)
     {
         PRINT("Invalid buffer number: %d\n", bufnum);
         return mp_const_false;
@@ -691,7 +721,12 @@ mp_obj_t jpegdec_decode_split_buffer(size_t n_args, const mp_obj_t *args)
 
     mp_buffer_info_t inbuf;
     mp_get_buffer_raise(args[3], &inbuf, MP_BUFFER_READ);
-    set_fbuffer(bufnum, mp_obj_get_int(args[2]), (uint8_t *)inbuf.buf, inbuf.len);
+    int pos = mp_obj_get_int(args[2]);
+    jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+    if (self->freed || pos < 0 || pos >= self->context->JPEGFile.iSize || inbuf.len == 0 ||
+        inbuf.len > (size_t)(self->context->JPEGFile.iSize - pos))
+        return mp_const_false;
+    set_fbuffer(bufnum, pos, (uint8_t *)inbuf.buf, inbuf.len);
     return mp_const_true;
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(jpegdec_decode_split_buffer_obj, 4, 4, jpegdec_decode_split_buffer);
@@ -725,9 +760,11 @@ mp_obj_t jpegdec_decode_split_wait(mp_obj_t self_in)
     }
     else if (core1_running == 2)
     {                               // core1 done
+        __dmb();
         res2 = (int)JPEG_msg_core1; // core1 result
         res1 = docode_result;
         core1_running = 0;
+        Coremode = 0;
     }
     res[0] = mp_obj_new_int(result); // 0: running, 1: done
     res[1] = mp_obj_new_int(res1);   // if result==0 : message_box(required filepointer)
@@ -741,6 +778,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(jpegdec_decode_split_wait_obj, jpegdec_decode_s
 mp_obj_t jpegdec_getinfo(mp_obj_t self_in, mp_obj_t data)
 {
     jpegdec_mp_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    jpegdec_require_context(self);
     int result = self->initialized ? 1 : 0;
 
     mp_buffer_info_t inbuf;
@@ -764,6 +802,7 @@ mp_obj_t jpegdec_getinfo(mp_obj_t self_in, mp_obj_t data)
 static MP_DEFINE_CONST_FUN_OBJ_2(jpegdec_getinfo_obj, jpegdec_getinfo);
 
 static const mp_rom_map_elem_t jpegdec_locals_dict_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_close), MP_ROM_PTR(&jpegdec_mp_del_obj)},
     {MP_ROM_QSTR(MP_QSTR_decode), MP_ROM_PTR(&jpegdec_decode_obj)},
     {MP_ROM_QSTR(MP_QSTR_decodex2), MP_ROM_PTR(&jpegdec_decodex2_obj)},
     {MP_ROM_QSTR(MP_QSTR_decode_core_stat), MP_ROM_PTR(&jpegdec_decode_core_stat_obj)},
@@ -788,6 +827,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
 static const mp_rom_map_elem_t jpegdec_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_jpegdec)},
     {MP_ROM_QSTR(MP_QSTR_JPEGDecoder), MP_ROM_PTR(&jpegdec_mp_type)},
+    {MP_ROM_QSTR(MP_QSTR_SPLIT_PREFIX_SAFE), MP_ROM_TRUE},
 };
 static MP_DEFINE_CONST_DICT(jpegdec_globals, jpegdec_globals_table);
 

@@ -37,6 +37,7 @@ class State:
     def _load(self,path):
         try:
             if not self.storage.exists(path):return False
+            if self.storage.size(path)>LIMIT:return False
             raw=self.storage.read(path)
             if not raw or len(raw)>LIMIT:return False
             data=loads(raw)
@@ -58,7 +59,8 @@ class State:
         out={'size':_number(record.get('size'),0,0x7fffffff,0),
              'chapter':_number(record.get('chapter'),0,MAX_CHAPTERS-1,0),
              'page':_number(record.get('page'),0,1000000,0),
-             'word':_number(record.get('word'),-1,10000000,-1),
+             'word':_number(record.get('word'),-1,0x7fffffff,-1),
+             'offset':_number(record.get('offset'),-1,0x7fffffff,-1),
              'bookmarks':[],'index':None}
         marks=record.get('bookmarks')
         if isinstance(marks,list):
@@ -67,24 +69,25 @@ class State:
                 out['bookmarks'].append([_number(mark[0],0,MAX_CHAPTERS-1,0),
                                          _number(mark[1],0,1000000,0),
                                          _text(mark[2] if len(mark)>2 else '',40),
-                                         _number(mark[3] if len(mark)>3 else -1,-1,10000000,-1)])
+                                         _number(mark[3] if len(mark)>3 else -1,-1,0x7fffffff,-1),
+                                         _number(mark[4] if len(mark)>4 else -1,-1,0x7fffffff,-1)])
         index=record.get('index')
-        if isinstance(index,dict) and _number(index.get('font'),0,2,0)==self.font:
+        if isinstance(index,dict) and index.get('layout')==3 and _number(index.get('font'),0,2,0)==self.font:
             pages=index.get('pages')
             if isinstance(pages,list) and 0<len(pages)<=MAX_CHAPTERS:
-                out['index']={'font':self.font,'pages':[_number(n,0,1000000,0) for n in pages]}
+                out['index']={'layout':3,'font':self.font,'pages':[_number(n,0,1000000,0) for n in pages]}
         return out
 
     def book(self,name,size):
         record=self.books.get(name)
         if record is None:
-            record={'size':size,'chapter':0,'page':0,'word':-1,'bookmarks':[],'index':None}
+            record={'size':size,'chapter':0,'page':0,'word':-1,'offset':-1,'bookmarks':[],'index':None}
             if len(self.books)>=MAX_BOOKS:
                 self.books.pop(next(iter(self.books)))
             self.books[name]=record
         elif size and record.get('size')!=size:
             # The file changed: keep bookmarks, but restart pagination.
-            record['size']=size;record['chapter']=0;record['page']=0;record['word']=-1;record['index']=None
+            record['size']=size;record['chapter']=0;record['page']=0;record['word']=-1;record['offset']=-1;record['index']=None
         return record
 
     def prune(self,names):
@@ -98,17 +101,17 @@ class State:
         # Page counts depend on the font width; rebuild them lazily.
         for record in self.books.values():record['index']=None
 
-    def set_position(self,name,size,chapter,page,word=-1):
+    def set_position(self,name,size,chapter,page,word=-1,offset=-1):
         record=self.book(name,size)
-        record['chapter']=chapter;record['page']=page;record['word']=word
+        record['chapter']=chapter;record['page']=page;record['word']=word;record['offset']=offset
 
     def set_index(self,name,size,pages):
         record=self.book(name,size)
-        record['index']={'font':self.font,'pages':list(pages)}
+        record['index']={'layout':3,'font':self.font,'pages':list(pages)}
 
-    def add_bookmark(self,name,size,chapter,page,label,word=-1):
+    def add_bookmark(self,name,size,chapter,page,label,word=-1,offset=-1):
         record=self.book(name,size);marks=record['bookmarks']
-        marks.append([chapter,page,_text(label,40),_number(word,-1,10000000,-1)])
+        marks.append([chapter,page,_text(label,40),_number(word,-1,0x7fffffff,-1),_number(offset,-1,0x7fffffff,-1)])
         if len(marks)>MAX_BOOKMARKS:marks.pop(0)
         return marks
 
@@ -148,7 +151,7 @@ class State:
                 return False
             if existed or self.storage.exists(backup):self.storage.remove(backup)
             return True
-        except (OSError,ValueError,TypeError):
+        except (OSError,ValueError,TypeError,MemoryError):
             return False
 
     def _trim(self,data):

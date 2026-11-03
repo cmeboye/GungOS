@@ -1,11 +1,17 @@
 """Small arithmetic parser: no Python eval, attribute access or arbitrary calls."""
 import math
+# Read runtime constants, avoiding host-double folding/decimal reload in mpy-cross.
+PI=getattr(math,'pi')
+E=getattr(math,'e')
+
+EXTRA_FUNCTIONS=('atan2','phase','radius','rect','gcd','lcm','asinh','acosh','atanh',
+                 'log1p','expm1','hypot','sigfig','trunc','gamma','lgamma','erf','erfc')
 
 STAT_FUNCTIONS = ('mean', 'std', 'pstd', 'var', 'pvar', 'sum', 'prod', 'sum2', 'n', 'median',
                   'q1', 'q3', 'iqr', 'range', 'cov', 'pcov', 'corr', 'slope', 'intercept', 'r2', 'predict')
 FUNCTIONS = ('sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
              'sqrt', 'ln', 'log', 'logb', 'exp', 'abs', 'floor', 'ceil', 'round',
-             're', 'im', 'conj', 'int', 'min', 'max')+STAT_FUNCTIONS
+             're', 'im', 'conj', 'int', 'min', 'max', 'ncr', 'npr', 'cbrt', 'root')+STAT_FUNCTIONS+EXTRA_FUNCTIONS
 RESERVED = FUNCTIONS+('pi', 'e', 'i', 'ans', 'Ans', 'j', 'X', 'Y')
 REDUCTION_LIMIT = 1024
 
@@ -143,8 +149,8 @@ def _formula_text(node, variables, angle, local, constants):
         if kind == 'name':
             name = node[1]
             if name == local: return 'x'
-            if name == 'pi': return constant(math.pi)
-            if name == 'e': return constant(math.e)
+            if name == 'pi': return constant(PI)
+            if name == 'e': return constant(E)
             if name in ('ans', 'Ans'): return constant(variables.get('Ans', 0))
             if name in ('i', 'j') or name not in variables: raise _Unsupported
             return constant(variables[name])
@@ -156,6 +162,9 @@ def _formula_text(node, variables, angle, local, constants):
             # Evaluator.run checks every operation's result is finite.
             return '_finite(%s%s%s)' % (text(node[2]), op, text(node[3]))
         if kind != 'call': raise _Unsupported
+        # The calculator now rejects exact represented tangent poles. Older
+        # native Formula firmware does not, so retain the Python policy here.
+        if node[1]=='tan':raise _Unsupported
         name, args = node[1], [text(arg) for arg in node[2]]
         if name in ('min', 'max'):
             if not args: raise _Unsupported
@@ -164,9 +173,9 @@ def _formula_text(node, variables, angle, local, constants):
             return '_finite(log(%s)/log(%s))' % (args[1], args[0])
         if name not in _DIRECT or len(args) != 1: raise _Unsupported
         a = args[0]
-        if name in ('sin', 'cos', 'tan') and angle == 'DEG': a = '%s*%s' % (a, constant(math.pi/180))
+        if name in ('sin', 'cos', 'tan') and angle == 'DEG': a = '%s*%s' % (a, constant(PI/180))
         value = '%s(%s)' % (_DIRECT[name], a)
-        if name in ('asin', 'acos', 'atan') and angle == 'DEG': value = '%s*%s' % (value, constant(180/math.pi))
+        if name in ('asin', 'acos', 'atan') and angle == 'DEG': value = '%s*%s' % (value, constant(180/PI))
         return '_finite(%s)' % value
     return text(node)
 
@@ -197,18 +206,24 @@ def native_function(node, variables, angle='DEG', local='x'):
 
 
 class Evaluator:
-    def __init__(self, variables, angle='DEG', complex_mode=False, statistics=None):
+    def __init__(self, variables, angle='DEG', complex_mode=False, statistics=None, diagnostics=None, progress=None):
         self.variables, self.angle, self.complex_mode = variables, angle, complex_mode
         self.steps = 0
         self.statistics = statistics
+        self.diagnostics=[] if diagnostics is None else diagnostics
+        self.progress=progress
+
+    def charge(self):
+        self.steps+=1
+        if self.steps>60000:raise ValueError('Calculation work limit')
+        if self.progress and self.steps%64==0:self.progress({'steps':self.steps})
 
     def reduction(self, name, values):
         """Bounded streaming reduction; Neumaier compensation for sums."""
         total, correction = (0.0 if name == 'sum' else 1.0), 0.0
         for count, value in enumerate(values):
             if count >= REDUCTION_LIMIT: raise ValueError('Sum/product limit: 1024 terms')
-            self.steps += 1
-            if self.steps > 60000: raise ValueError('Calculation work limit')
+            self.charge()
             if not finite(value): raise ValueError('Sum/product term out of range')
             if name == 'sum':
                 updated = total+value
@@ -244,8 +259,7 @@ class Evaluator:
         return self.reduction(name, (self.run(arg, local) for arg in args))
 
     def run(self, node, local=None):
-        self.steps += 1
-        if self.steps > 60000: raise ValueError('Calculation work limit')
+        self.charge()
         kind = node[0]
         if kind == 'value': return node[1]
         if kind == 'name':
@@ -254,8 +268,8 @@ class Evaluator:
             if name in ('i', 'j'):
                 if not self.complex_mode: raise ValueError('Select Complex mode to use i')
                 return complex(0, 1)
-            if name == 'pi': return math.pi
-            if name == 'e': return math.e
+            if name == 'pi': return PI
+            if name == 'e': return E
             if name in ('ans', 'Ans'): return self.variables.get('Ans', 0)
             if name not in self.variables: raise ValueError('Unknown variable: '+name)
             return self.variables[name]
@@ -305,86 +319,129 @@ class Evaluator:
                 if value is None: raise ValueError('Undefined for this dataset')
                 return value
             if name == 'int':
-                if len(args) != 3: raise ValueError('int(lower,upper,expression in x)')
-                if getattr(self, '_integrating', False): raise ValueError('Nested integrals are not available yet')
-                lower, upper = self.run(args[0], local), self.run(args[1], local)
-                if isinstance(lower, complex) or isinstance(upper, complex): raise ValueError('Integral bounds must be real')
-                # Numerical integration uses the selected native backend. Do not
-                # silently substitute an unvalidated solver on older firmware.
-                from engtools.numerics.backend import require
-                _, sp = require()
-                if lower == upper: return 0.0
-                constants = dict(self.variables)
-                constants.update(local or {})
-                native = None if self.complex_mode else native_function(args[2], constants, self.angle)
-                if native is not None:
-                    def integrand(x):
-                        self.steps += 1
-                        if self.steps > 60000: raise ValueError('Calculation work limit')
-                        value = native(x)
-                        if value is None: raise ValueError('Integrand undefined in the interval')
-                        return value
-                else:
-                    def integrand(x):
-                        scope = dict(local or {})
-                        scope['x'] = x
-                        return self.run(args[2], scope)
-                self._integrating = True
+                if not 3<=len(args)<=13:raise ValueError('int(lower,upper,expr[,atol,rtol,split...])')
+                if getattr(self,'_integrating',False):raise ValueError('Nested integrals are not available yet')
+                lower,upper=self.run(args[0],local),self.run(args[1],local)
+                controls=[self.run(arg,local) for arg in args[3:]]
+                atol=controls[0] if controls else 1e-7
+                rtol=controls[1] if len(controls)>1 else 2e-5
+                points=controls[2:]
+                if not all(isinstance(v,(int,float)) and finite(v) for v in (lower,upper)):
+                    raise ValueError('Integral bounds must be finite real scalars')
+                from engtools.numerics.integration import integrate_job
+                constants=dict(self.variables);constants.update(local or {})
+                native=None if self.complex_mode else native_function(args[2],constants,self.angle)
+                def integrand(x):
+                    if native is not None:
+                        self.charge();value=native(x)
+                        if value is None:raise ValueError('Integrand undefined in the interval')
+                    else:
+                        scope=dict(local or {});scope['x']=x
+                        value=self.run(args[2],scope)
+                    if not isinstance(value,(int,float)) or not finite(value):
+                        raise ValueError('Integrand must return a finite real scalar')
+                    return value
+                def depends(node):
+                    kind=node[0]
+                    if kind=='name':return node[1]=='x'
+                    if kind=='unary':return depends(node[2])
+                    if kind=='factorial':return depends(node[1])
+                    if kind=='binary':return depends(node[2]) or depends(node[3])
+                    if kind=='call':return any(depends(arg) for arg in node[2])
+                    return False
+                self._integrating=True
                 try:
-                    coarse, coarse_error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=3)
-                    value, error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=4)
-                finally:
-                    self._integrating = False
-                if not all(finite(v) for v in (coarse, coarse_error, value, error)):
-                    raise ValueError('Integral did not converge')
-                # Pinned ulab's raw estimate is not scaled by interval width.
-                # Compare successive bounded refinements instead of treating
-                # that estimate as an absolute error in the integral's units.
-                if abs(value-coarse) > 1e-4*max(1, abs(value)):
-                    raise ValueError('Integral accuracy limit reached')
-                return value
+                    # The job still validates every control, including degenerate
+                    # intervals. Constant zero is known, unlike missed samples.
+                    if not depends(args[2]):
+                        from engtools.numerics.integration import validate
+                        validate(lower,upper,atol,rtol,points)
+                        value=0.0 if lower==upper else integrand(lower)*(upper-lower)
+                        if not finite(value):raise ValueError('Integral out of range')
+                        record=dict(value=value,error=0.0,evaluations=0 if lower==upper else 1,intervals=0,estimated=True,constant=True)
+                    else:
+                        record=None
+                        for step in integrate_job(integrand,lower,upper,atol,rtol,points):
+                            if 'value' in step:record=step
+                            elif self.progress:self.progress({'integral_samples':step['progress']})
+                finally:self._integrating=False
+                self.diagnostics.append(record)
+                # Keep diagnostics bounded even in sums of many integrals.
+                if len(self.diagnostics)>8:del self.diagnostics[0]
+                return record['value']
             values = [self.run(arg, local) for arg in args]
             if name in ('min', 'max'):
                 if not values: raise ValueError('Enter at least one argument')
                 return min(values) if name == 'min' else max(values)
-            expected = 2 if name == 'logb' else 1
+            if name in EXTRA_FUNCTIONS or name=='round':
+                from .scientific import function
+                value=function(name,values,self.angle,self.complex_mode,self.charge)
+                if not finite(value):raise ValueError(name+' result out of range')
+                if isinstance(value,complex) and not self.complex_mode:raise ValueError('Select Complex mode for this result')
+                return value
+            expected = 2 if name in ('logb','ncr','npr','root') else 1
             if len(values) != expected: raise ValueError(name+' needs '+str(expected)+' argument(s)')
             a = values[0]
-            if name == 'logb':
+            if name in ('ncr','npr'):
+                from .scientific import combinatorial
+                value=combinatorial(name,values[0],values[1],self.charge)
+            elif name in ('cbrt','root'):
+                from .scientific import real_root
+                value=real_root(3,a) if name=='cbrt' else real_root(*values)
+            elif name == 'logb':
                 if self.complex_mode and any(isinstance(v, complex) or v < 0 for v in values):
-                    import cmath
-                    value = cmath.log(values[1])/cmath.log(a)
+                    from .scientific import complex_log
+                    value = complex_log(complex(values[1]))/complex_log(complex(a))
                 else: value = math.log(values[1])/math.log(a)
-            elif name == 'abs': value = abs(a)
+            elif name == 'abs':
+                if isinstance(a,complex):
+                    from .scientific import hypot
+                    value=hypot(a.real,a.imag)
+                else:value=abs(a)
             elif name == 're': value = a.real if isinstance(a, complex) else a
             elif name == 'im': value = a.imag if isinstance(a, complex) else 0
-            elif name == 'conj': value = complex(a.real, -a.imag) if isinstance(a, complex) else a
+            elif name == 'conj':
+                if isinstance(a,complex):
+                    from .scientific import _complex
+                    value=_complex(a.real,-a.imag)
+                else:value=a
             elif name == 'round': value = round(a)
             else:
-                if name in ('sin', 'cos', 'tan') and self.angle == 'DEG': a *= math.pi/180
+                if name=='tan':
+                    from .scientific import tangent_pole
+                    if tangent_pole(a,self.angle):raise ValueError('tan is undefined at this angle')
+                if name in ('sin', 'cos', 'tan') and self.angle == 'DEG': a *= PI/180
                 actual = {'ln':'log', 'log':'log10'}.get(name, name)
                 extend = self.complex_mode and not isinstance(a, complex) and ((name in ('sqrt', 'ln', 'log') and a < 0) or
                                                (name in ('asin','acos') and abs(a) > 1))
                 if isinstance(a, complex) or extend:
                     import cmath
-                    function = getattr(cmath, 'log' if name in ('ln', 'log') else actual, None)
-                    if function is None:
-                        if name in ('asin','acos','atan'):
-                            raise ValueError('Complex inverse trig is not available yet')
-                        raise ValueError('This function requires a real argument')
-                    value = function(a)
+                    if name in ('sqrt','ln','log'):
+                        from .scientific import complex_sqrt,complex_log
+                        value=complex_sqrt(complex(a)) if name=='sqrt' else complex_log(complex(a))
+                    elif name in ('asin','acos','atan'):
+                        from .scientific import complex_inverse
+                        value=complex_inverse(name,complex(a))
+                    else:
+                        function = getattr(cmath, 'log' if name in ('ln', 'log') else actual, None)
+                        if function is None:raise ValueError('This function requires a real argument')
+                        value = function(a)
                     if name == 'log': value /= math.log(10)
                 else: value = getattr(math, actual)(a)
-                if name in ('asin', 'acos', 'atan') and self.angle == 'DEG': value *= 180/math.pi
+                if name in ('asin', 'acos', 'atan') and self.angle == 'DEG':
+                    if isinstance(value,complex):
+                        from .scientific import _complex
+                        value=_complex(value.real*(180/PI),value.imag*(180/PI))
+                    else:value *= 180/PI
         if not finite(value): raise ValueError('Result out of range')
         if isinstance(value, complex) and not self.complex_mode:
             raise ValueError('Select Complex mode for this result')
         return value
 
 
-def calculate(text, variables, angle='DEG', complex_mode=False, statistics=None):
+def calculate(text, variables, angle='DEG', complex_mode=False, statistics=None, diagnostics=None, progress=None):
     assignment, tree = Parser(text).parse()
-    value = Evaluator(variables, angle, complex_mode, statistics).run(tree)
+    value = Evaluator(variables, angle, complex_mode, statistics, diagnostics, progress).run(tree)
     if not finite(value): raise ValueError('Result out of range')
     if isinstance(value, complex) and not complex_mode:
         raise ValueError('Select Complex mode for this result')
@@ -399,6 +456,9 @@ def format_value(value, engineering=False):
     if isinstance(value, complex):
         if value.imag == 0: return format_value(value.real, engineering)
         return '%s%s%si' % (format_value(value.real, engineering), '+' if value.imag >= 0 else '-', format_value(abs(value.imag), engineering))
+    if value and abs(value)<math.ldexp(1.0,-126):
+        from .precision import format_subnormal
+        return format_subnormal(value,engineering)
     if engineering and value:
         exponent = int(math.floor(math.log10(abs(value))/3))*3
         return '%.6ge%+d' % (value/(10**exponent), exponent)

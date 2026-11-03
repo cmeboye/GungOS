@@ -72,42 +72,5 @@ def root_job(text,lower=-10,upper=10,guess=0,variables=None,angle='DEG'):
     raise ValueError('No root converged within 96 iterations')
 
 def polynomial_job(coefficients):
-    """Descending coefficients; bounded degree and scale-aware residual checks."""
-    import cmath
-    if not 3<=len(coefficients)<=5 or not all(finite(v) and not isinstance(v,complex) for v in coefficients):
-        raise ValueError('Use real coefficients for degree 2..4')
-    if coefficients[0]==0: raise ValueError('Leading coefficient must be nonzero')
-    degree=len(coefficients)-1
-    c=[v/coefficients[0] for v in coefficients]
-    if not all(finite(v) for v in c): raise ValueError('Coefficient scaling exceeds float32')
-    if degree==2:
-        discriminant=cmath.sqrt(complex(c[1]*c[1]-4*c[2],0))
-        q=-0.5*(c[1]+(discriminant if c[1]>=0 else -discriminant))
-        roots=[q,c[2]/q] if abs(q)>0 else [complex(0,0),complex(0,0)]
-    else:
-        radius=1+max(abs(v) for v in c[1:])
-        roots=[radius*cmath.exp(complex(0,2*math.pi*(i+0.17)/degree)) for i in range(degree)]
-        for iteration in range(160):
-            changed=0
-            next_roots=[]
-            for i,z in enumerate(roots):
-                value=complex(c[0],0)
-                for v in c[1:]: value=value*z+v
-                divisor=complex(1,0)
-                for j,other in enumerate(roots):
-                    if j!=i: divisor*=z-other
-                if abs(divisor)<1e-20: divisor=complex(1e-20,1e-20)
-                delta=value/divisor
-                candidate=z-delta
-                if not finite(candidate): raise ValueError('Polynomial roots exceeded float32 range')
-                next_roots.append(candidate)
-                changed=max(changed,abs(delta)/(1+abs(candidate)))
-            roots=next_roots
-            if changed<3e-6: break
-            if iteration%4==0: yield {'progress':iteration+1}
-    for z in roots:
-        value,scale=complex(c[0],0),abs(c[0])
-        for v in c[1:]: value=value*z+v; scale=scale*abs(z)+abs(v)
-        if abs(value)>5e-5*max(1,scale): raise ValueError('Polynomial roots did not converge')
-    roots.sort(key=lambda z:(z.real,z.imag))
-    yield {'roots':roots,'approximate':True}
+    from .polynomials import polynomial_job as solve
+    return solve(coefficients)

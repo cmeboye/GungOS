@@ -79,11 +79,11 @@ static int write_bmp_rgb565(const char *path, const Bitmap *bmp) {
     if (file == NULL) {
         return 0;
     }
-    int row_bytes = ((bmp->width * 16 + 31) / 32) * 4;
+    int row_bytes = ((bmp->width * 24 + 31) / 32) * 4;
     int image_bytes = row_bytes * bmp->height;
-    int header_bytes = 14 + 40 + 12;
+    int header_bytes = 14 + 40;
     int file_bytes = header_bytes + image_bytes;
-    uint8_t header[66];
+    uint8_t header[54];
     memset(header, 0, sizeof(header));
     header[0] = 'B';
     header[1] = 'M';
@@ -93,12 +93,9 @@ static int write_bmp_rgb565(const char *path, const Bitmap *bmp) {
     put_u32(header, 18, (uint32_t)bmp->width);
     put_u32(header, 22, (uint32_t)(-bmp->height));
     put_u16(header, 26, 1);
-    put_u16(header, 28, 16);
-    put_u32(header, 30, 3);
+    put_u16(header, 28, 24);
+    put_u32(header, 30, 0);
     put_u32(header, 34, (uint32_t)image_bytes);
-    put_u32(header, 54, 0x0000f800);
-    put_u32(header, 58, 0x000007e0);
-    put_u32(header, 62, 0x0000001f);
     if (fwrite(header, 1, sizeof(header), file) != sizeof(header)) {
         fclose(file);
         return 0;
@@ -112,8 +109,12 @@ static int write_bmp_rgb565(const char *path, const Bitmap *bmp) {
         memset(row, 0, (size_t)row_bytes);
         for (int x = 0; x < bmp->width; x++) {
             uint16_t pixel = bmp->pixels[y * bmp->width + x];
-            row[x * 2] = (uint8_t)(pixel & 0xff);
-            row[x * 2 + 1] = (uint8_t)((pixel >> 8) & 0xff);
+            const uint8_t r = (pixel >> 11) & 31;
+            const uint8_t g = (pixel >> 5) & 63;
+            const uint8_t b = pixel & 31;
+            row[x * 3] = (uint8_t)((b << 3) | (b >> 2));
+            row[x * 3 + 1] = (uint8_t)((g << 2) | (g >> 4));
+            row[x * 3 + 2] = (uint8_t)((r << 3) | (r >> 2));
         }
         if (fwrite(row, 1, (size_t)row_bytes, file) != (size_t)row_bytes) {
             free(row);

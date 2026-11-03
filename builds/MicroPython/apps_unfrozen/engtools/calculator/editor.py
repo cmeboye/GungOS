@@ -202,6 +202,7 @@ class Editor:
                         index = ''.join(rows[0]).strip() if all(isinstance(item, str) for item in rows[0]) else ''
                         if not index or not index[0].isalpha() or not all(c.isalpha() or c.isdigit() or c == '_' for c in index):
                             return False
+                    if name=='int' and len(rows)>3:return False
                     if len(rows) > len(SLOTS[name]):
                         raise ValueError('Too many template arguments')
                     rows += [[] for _ in range(len(SLOTS[name])-len(rows))]

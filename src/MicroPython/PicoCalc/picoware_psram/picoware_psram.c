@@ -987,6 +987,15 @@ mp_obj_t picoware_psram_alloc_buffer(uint32_t size)
     return MP_OBJ_FROM_PTR(obj);
 }
 
+// Reserve managed external storage without first allocating the same bytes in SRAM.
+static mp_obj_t psram_buffer(mp_obj_t length) {
+    mp_int_t size = mp_obj_get_int(length);
+    if (size <= 0 || size > PSRAM_SIZE - PSRAM_HEAP_START_ADDR)
+        mp_raise_ValueError(MP_ERROR_TEXT("Invalid PSRAM buffer size"));
+    return picoware_psram_alloc_buffer(size);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(psram_buffer_obj, psram_buffer);
+
 // Function to initialize the PSRAM
 mp_obj_t picoware_psram_init(size_t n_args, const mp_obj_t *args)
 {
@@ -2360,6 +2369,8 @@ MP_DEFINE_CONST_OBJ_TYPE(
 // Module globals table
 static const mp_rom_map_elem_t picoware_psram_module_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_picoware_psram)},
+
+    {MP_ROM_QSTR(MP_QSTR_alloc_buffer), MP_ROM_PTR(&psram_buffer_obj)},
 
     // Constants
     {MP_ROM_QSTR(MP_QSTR_SIZE), MP_ROM_INT(PSRAM_SIZE)},

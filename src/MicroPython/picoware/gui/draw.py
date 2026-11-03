@@ -377,6 +377,9 @@ class Draw(lcd.LCD):
         except Exception as e:
             print(f"Error loading JPEG: {e}")
             return False
+        finally:
+            if jpeg is None and _jpeg is not None:
+                _jpeg.close()
 
     def image_jpeg_buffer(self, position: Vector, buf, jpeg=None) -> bool:
         """Draw a JPEG image from bytes data into a BytesIO buffer.
@@ -398,6 +401,19 @@ class Draw(lcd.LCD):
         except Exception as e:
             print(f"Error loading JPEG from buffer: {e}")
             return False
+        finally:
+            if jpeg is None and _jpeg is not None:
+                _jpeg.close()
+
+    def image_png(self, position: Vector, path: str, background: int = 0xffffff):
+        """Fit a PNG in the remaining screen; return source/output dimensions.
+
+        Raises ValueError/OSError/MemoryError so callers can report the cause.
+        background is RGB888; transparent pixels are composited before RGB332.
+        """
+        from picoware.gui.png import draw_png
+        x,y=int(position.x),int(position.y)
+        return draw_png(path,x,y,int(self._size.x)-x,int(self._size.y)-y,background)
 
     def image_bytearray(
         self, position: Vector, size: Vector, byte_data, invert: bool = False

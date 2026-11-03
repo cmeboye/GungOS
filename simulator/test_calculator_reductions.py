@@ -7,7 +7,7 @@ for part in ('src/MicroPython', 'simulator/hardware', 'builds/MicroPython/apps_u
 from engtools.calculator.evaluate import calculate, format_value, Evaluator, Parser
 from engtools.calculator.editor import Editor, Node, source, clone, SLOTS
 from engtools.calculator.base_n import IntegerParser
-from engtools.calculator.app import Calculator, TEMPLATES
+from engtools.calculator.app import Calculator
 from engtools.calculator.workspaces import MatrixWorkspace
 from engtools.numerics.equations import root_job
 from engtools.numerics.statistics import Dataset
@@ -68,9 +68,7 @@ assert '1e-08' in format_value(value('1e-8*i', complex_mode=True))
 assert format_value(complex(1000,2000), True) == '1e+3+2e+3i'
 close(value('logb(2,-8)', complex_mode=True), complex(3, math.pi/math.log(2)))
 close(value('sqrt(i)', complex_mode=True)**2, 1j)
-try: value('asin(2)', complex_mode=True)
-except ValueError as exc: assert 'not available yet' in str(exc)
-else: raise AssertionError('Unsupported complex inverse trig was accepted')
+close(value('asin(2)', complex_mode=True), complex(math.pi/2,math.acosh(2)))
 for name in ('pi','sin','i','j','X','Y','sum','prod','mean'):
     variables = {'Ans': 7}
     try: IntegerParser(name+'=3', variables).calculate()
@@ -178,7 +176,9 @@ for kind, expected in (('sum',55),('prod',14400)):
     key(keys.BUTTON_F6); assert calc.answer==expected and not calc.error
     key(keys.BUTTON_UP); assert source(calc.editor.root)==snapshot
     key(keys.BUTTON_F10)
-key(keys.BUTTON_F7);calc.selected=TEMPLATES.index('sum');key(keys.BUTTON_CENTER)
+from engtools.calculator.catalogue import location
+group,item=location('sum')
+key(keys.BUTTON_F7);calc.selected=group;key(keys.BUTTON_CENTER);calc.selected=item;key(keys.BUTTON_CENTER)
 assert calc.editor.root[0].kind=='sum' and calc.editor.parents[-1][2]==1
 key(keys.BUTTON_F10)
 text('sum() ');text('1');key(keys.BUTTON_TAB);text('5');key(keys.BUTTON_TAB)

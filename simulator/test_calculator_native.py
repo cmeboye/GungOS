@@ -11,14 +11,14 @@ import os, sys, struct
 from time import ticks_us, ticks_diff
 root = os.getcwd()
 sys.path.insert(0, root + '/src/MicroPython')
-sys.path.insert(0, root + '/builds/MicroPython/apps_unfrozen')
+sys.path.insert(0,root+'/'+(sys.argv[1] if len(sys.argv)>1 else 'builds/MicroPython/apps_unfrozen'))
 import engtools.calculator.evaluate as ev
 from engtools.calculator.evaluate import Parser, Evaluator, calculate, native_function
 from engtools.numerics.equations import root_job
 
 VARIABLES = {'a': 2.5, 'k': -3.0, 'n': 4, 'Ans': 0.75}
 EXPRESSIONS = (
-    'x^2', '2x+1', 'sin(x)', 'cos(x)^2+sin(x)^2', 'tan(x)', 'asin(x/100)', 'atan(x)',
+    'x^2', '2x+1', 'sin(x)', 'cos(x)^2+sin(x)^2', 'asin(x/100)', 'atan(x)',
     'sqrt(x)', 'ln(x)', 'log(x)', 'logb(2,x)', 'logb(x,8)', 'exp(-x^2)', 'e^x', 'pi x',
     '1/x', 'x%3', '(-x)^0.5', 'x^-1', 'abs(x)-a', 'floor(x)*k', 'ceil(x/n)', 'round(x)',
     'sinh(x)/cosh(x)-tanh(x)', 'min(x,a,1)', 'max(x)', 'Ans*x', '-x^2', '2^3^x',
@@ -56,7 +56,7 @@ for text in EXPRESSIONS:
             else:
                 assert bits(float(want)) == bits(got), (text, angle, x, want, got)
 assert compiled >= 2 * (len(EXPRESSIONS) - 2), compiled
-for text in ('i*x', 'x!', 'mean(X)', 'im(x)', 'q*x'):
+for text in ('i*x', 'x!', 'mean(X)', 'im(x)', 'q*x', 'tan(x)', 'sin(tan(x))', 'ncr(5,2)', 'cbrt(x)'):
     assert native_function(Parser(text).parse()[1], VARIABLES) is None, text
 print('PASS: %d evaluations identical to the calculator evaluator (%d of %d compiled)'
       % (compared, compiled, 2 * len(EXPRESSIONS)))

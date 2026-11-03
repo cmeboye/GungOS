@@ -1,6 +1,8 @@
 import sim_runtime
 import os
 
+SPLIT_PREFIX_SAFE = True
+
 
 class JPEGDecoder:
     def __init__(self):
@@ -139,7 +141,8 @@ class JPEGDecoder:
             return False
         ident = str(id(data))
         in_path = "/tmp/picoware-jpegdec-" + ident + ".jpg"
-        out_path = "/tmp/picoware-jpegdec-" + ident + ".bmp"
+        out_name = ".sim-jpegdec-" + ident + ".bmp"
+        out_path = sim_runtime.host_path(out_name)
         try:
             with open(in_path, "wb") as handle:
                 handle.write(data)
@@ -153,11 +156,11 @@ class JPEGDecoder:
                 if os.system(cmd) != 0:
                     self.last_error = "JPEG decoding failed or no decoder available"
                     return False
-            ok = lcd._bmp(int(x), int(y), out_path)
-            self.last_error = "" if ok else "Decoded JPEG could not be blitted"
-            if ok:
-                lcd.swap()
-            return ok
+            # The native _bmp method returns None on success and raises on error.
+            lcd._bmp(int(x), int(y), out_name)
+            self.last_error = ""
+            lcd.swap()
+            return True
         except Exception as e:
             print("[sim:jpeg] decode failed:", e)
             self.last_error = str(e)
@@ -175,6 +178,18 @@ class JPEGDecoder:
     def decode(self, x, y, flags=0):
         """Decode the loaded JPEG at screen position (x, y)."""
         return self._draw_jpeg_bytes(self._data, x, y, flags)
+
+    def decode_opt(self, data, offset=(0, 0), clip=None, option=0):
+        """Firmware-compatible synchronous decode of borrowed JPEG bytes."""
+        info = self._detect_size(data)
+        ok = self._draw_jpeg_bytes(data, offset[0], offset[1], option)
+        return (bool(ok), info[1], info[2])
+
+    def close(self):
+        self._split_running = False
+        self._split_data = None
+        self._data = b''
+        self._opened = False
 
     def decode_split(self, fsize, buf, offset, callback=None, option=0):
         """Collect split input, then decode it with the native JPEG helper."""

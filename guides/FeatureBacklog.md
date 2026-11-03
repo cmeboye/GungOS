@@ -12,6 +12,23 @@ Verified gaps at review time: no `exchange/` package, material or fluid
 library, streaming CSV reader, report generation, AC analysis, Mohr case
 saving, numbered screenshots or shared material picker.
 
+## PicoReader follow-up — 3 November 2026
+
+Device feedback: the metadata SD patch now opens the supplied complex textbook
+on PicoCalc. The following requested work remains open; see
+[PicoReader device feedback and plan](PicoReader.md#device-feedback-and-next-work--3-november-2026)
+for detail and validation boundaries.
+
+| ID | Remaining feature | Status |
+|---|---|---|
+| R1 | Correct structured MathML/equation display, including wide-equation viewing | F8 and mixed-page device tests passed; six alignment cases remain |
+| R2 | Chapter list, fast selection, Go to chapter/page and clear page-number semantics | implemented locally; device acceptance pending |
+| R3 | Previous/next page on `[` / `]`; arrow-key panning in image views | reading bracket keys implemented; image panning still open |
+| R4 | Persistent indexed text chunks for efficient jumping/reopening | new |
+| R5 | Full-resolution image viewport, bounded decoding/storage and access to every chapter image | new |
+| R6 | Fullscreen reading/image mode | new |
+| R7 | Low-light mode: pitch-black background and reddish-gray text | new |
+
 ## Next milestone: finish the PicoDESK first passes
 
 | ID | Feature | Area | Size | Status | Depends on |

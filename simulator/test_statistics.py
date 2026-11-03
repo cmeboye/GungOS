@@ -180,7 +180,8 @@ key(vm.input_manager._key_esc)
 calc.editor.load(list('9+9'))
 key(k.BUTTON_F7)
 assert calc.page == 'templates' and ws.editing
-calc.selected = 2; key(k.BUTTON_CENTER)
+from engtools.calculator.catalogue import location
+group,item=location('sqrt');calc.selected=group;key(k.BUTTON_CENTER);calc.selected=item;key(k.BUTTON_CENTER)
 assert calc.page == 'stats' and ws.editor.root[0].kind == 'sqrt'
 text('9'); key(k.BUTTON_CENTER)
 assert ws.dataset.get(2,'X') == 3 and not ws.editing

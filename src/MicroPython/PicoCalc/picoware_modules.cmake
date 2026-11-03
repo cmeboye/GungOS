@@ -14,6 +14,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/picoware_psram/micropython.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/../font/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../jpeg/micropython.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../png/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../lcd/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../log/micropython.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../response/micropython.cmake)

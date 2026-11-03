@@ -1,7 +1,7 @@
 import os,sys
 root=os.getcwd()
-for relative in ('src/MicroPython','simulator/hardware','builds/MicroPython/apps_unfrozen'):
-    sys.path.insert(0,root+'/'+relative)
+for relative in ('src/MicroPython','simulator/hardware',sys.argv[2] if len(sys.argv)>2 else 'builds/MicroPython/apps_unfrozen'):
+    sys.path.insert(0,relative if relative.startswith('/') else root+'/'+relative)
 from desktopapps.reader.epub import Book
 from desktopapps.reader.state import State,PATH
 import sim_runtime
@@ -18,7 +18,16 @@ Input.button=property(lambda self:self._last_button)
 vm=ViewManager()
 vm.add(View('parent',lambda vm:None,lambda vm:True,lambda vm:None));vm.switch_to('parent')
 vm.add(View('desk',PicoDESK.run,PicoDESK.start,PicoDESK.stop));vm.switch_to('desk')
-def key(button):vm.input_manager._last_button=button;vm.run()
+def key(button):
+    vm.input_manager._last_button=button;vm.run()
+    active=vm.current_view.name if vm.current_view else ''
+    reader={'reader-test':globals().get('app'),'reader-test2':globals().get('app2'),
+            'reader-test3':globals().get('app3'),'reader-test4':globals().get('app4')}.get(active)
+    if reader:
+        for _ in range(10000):
+            if not reader.reflow and (not reader.session or not reader.session.pending):break
+            vm.input_manager._last_button=k.BUTTON_NONE;vm.run()
+        assert not reader.reflow and (not reader.session or not reader.session.pending),'Reader never settled'
 for _ in range(4):key(k.BUTTON_DOWN)
 key(k.BUTTON_CENTER);assert vm.current_view.name=='picoreader'
 key(vm.input_manager._key_esc);assert vm.current_view.name=='desk'
@@ -34,12 +43,27 @@ key(k.BUTTON_RIGHT);assert app.page==1
 key(k.BUTTON_LEFT);assert app.page==0
 key(k.BUTTON_F4);assert app.chapter==1
 key(k.BUTTON_LEFT);assert app.chapter==0 and app.page>0
+for _ in range(200):key(k.BUTTON_NONE)
 assert app.book_progress() is not None
 key(k.BUTTON_F9);assert app.help
 key(vm.input_manager._key_esc);assert not app.help
-app.draw();vm.draw.screenshot('/private/tmp/picoreader.bmp')
+app.draw();sim_runtime.lcd_screenshot('/private/tmp/gungos-reader-buffer-text.bmp')
 
 # Font, bookmarks, index and the saved reading position.
+previous_font,previous_page=app.font,app.page
+previous_lines,previous_pages=app.lines,app.pages
+chapter_reader=app.book.stream
+def out_of_memory(index):raise MemoryError('injected chapter allocation')
+app.book.stream=out_of_memory
+key(k.BUTTON_F6)
+assert 'injected chapter' in app.error
+assert app.font==previous_font and app.state.font==previous_font
+assert app.lines is previous_lines and app.pages is previous_pages and app.page==previous_page
+chapter=app.chapter
+app.session.cache.ram=[];app.session.cache.bytes=0;app.session.cache.slots=[]
+key(k.BUTTON_F4)
+assert app.chapter==chapter and app.lines is previous_lines and app.page==previous_page
+app.book.stream=chapter_reader
 key(k.BUTTON_F6);assert app.font==1 and app.message=='Font: S'
 key(k.BUTTON_F1);assert len(app.bookmarks)==1 and app.message=='Bookmark added'
 mark_chapter,mark_page=app.chapter,app.page
@@ -50,8 +74,9 @@ key(k.BUTTON_F1);assert len(app.bookmarks)==2
 key(k.BUTTON_F5);key(k.BUTTON_UP);key(k.BUTTON_CENTER)
 assert not app.bm_list and app.chapter==mark_chapter and app.page==mark_page
 saved_chapter,saved_page,saved_font=app.chapter,app.page,app.font
-key(vm.input_manager._key_esc);assert app.library
 book=app.book
+key(vm.input_manager._key_esc);assert app.library
+assert app.book is None and not app.lines and book.archive.file is None
 key(vm.input_manager._key_esc);assert app.vm is None and book.archive.file is None
 assert vm.storage.exists(PATH)
 
@@ -102,4 +127,10 @@ assert not vm.storage.exists(PATH+'.tmp')
 assert vm.storage.rename(PATH,PATH+'.bak')
 state=State(vm.storage);assert state.books['x.epub']['page']==2
 assert state.save() and vm.storage.exists(PATH) and not vm.storage.exists(PATH+'.bak')
-print('PASS: PicoDESK launch, TXT, pagination, font, bookmarks, position/index restore, corrupt state and cleanup')
+class LowMemoryStorage:
+    active=True
+    def exists(self,path):return False
+    def mkdir(self,path):return True
+    def write(self,path,text):raise MemoryError('injected state allocation')
+assert not State(LowMemoryStorage()).save()
+print('PASS: PicoDESK launch, TXT, pagination, font, bookmarks, position/index restore, corrupt state and low-memory cleanup')

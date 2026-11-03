@@ -9,7 +9,8 @@ MENUS = {
              ('tools','Tools','Graphing and scientific calculation'),
              ('modules','Modules','Engineering disciplines')),
     'checks': (('bench','Numerics check','Accuracy and timings for the math core'),
-               ('gallery','Plot previews','Shared 2D and 3D viewer examples')),
+               ('gallery','Plot previews','Shared 2D and 3D viewer examples'),
+               ('calcbench','Calculator check','Short timings and text report to SD')),
     'tools': (('grapher','Grapher','2D / 3D expressions, curves and surfaces'),
               ('calculator','Scientific calculator','Expressions, statistics, solver and matrices'),
               ('unitconvert','UnitConverter','Search everyday and engineering units')),
@@ -143,12 +144,12 @@ def _launch(view_manager,target):
     name={'grapher':'eng_grapher','Graph':'app_Graph','Graph3D':'app_Graph3D','calculator':'eng_calculator','beam':'beam_lab',
           'mohr':'mohr_view','discs':'discs_view','picocad':'picocad_view','heat2d':'thermal_view','spice':'spice_view',
           'unitconvert':'unitconvert_view','stressstrain':'stressstrain_view','buckling':'buckling_view',
-          'sectionprops':'sectionprops_view'}[target]
+          'sectionprops':'sectionprops_view','calcbench':'calculator_check'}[target]
     path={'beam':('modules','structural','BeamView'),'mohr':('modules','structural','Mohr circle'),
           'discs':('modules','structural','Shrink fit'),'heat2d':('modules','thermal','Heat transfer 2D'),
           'spice':('modules','electrical','PicoSpice'),
           'grapher':('tools','Grapher'), 'calculator':('tools','Scientific calculator'),'picocad':('modules','machine design','PicoCAD'),
-          'unitconvert':('tools','UnitConverter'),
+          'unitconvert':('tools','UnitConverter'),'calcbench':('checks','Calculator check'),
           'stressstrain':('modules','structural','StressStrain'),
           'buckling':('modules','structural','Buckling'),
           'sectionprops':('modules','structural','Section Properties')}.get(target,('tools',target))
@@ -161,6 +162,9 @@ def _launch(view_manager,target):
         elif target in ('Graph','Graph3D'):
             from picoware.applications.library import launch
             launch(view_manager,target)
+        elif target=='calcbench':
+            from engtools.bench.calculator import show
+            show(view_manager)
         elif target=='calculator':
             from engtools.calculator import app
             app.show(view_manager)

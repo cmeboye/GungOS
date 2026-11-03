@@ -10,10 +10,6 @@ MODES = ('Calculate', 'Statistics', 'Solver', 'Complex', 'Base-N', 'Matrix')
 DETAILS = ('Scientific expressions', 'Data, summaries, linear fit', 'Equations and roots',
            'Real + imaginary', 'BIN / OCT / DEC / HEX', 'Arrays and operations')
 SUPPORTED = (0, 1, 2, 3, 4, 5)
-TEMPLATES = ('pow', 'sub', 'sqrt', 'frac', 'int', 'logb', 'sin', 'cos', 'tan', 'ln', 'pi', 'sum', 'prod')
-TEMPLATE_LABELS = ('Power', 'Subscript', 'Square root', 'Fraction', 'Integral (in x)',
-                   'Log with base', 'Sine', 'Cosine', 'Tangent', 'Natural log', 'Pi',
-                   'Sum (Sigma)', 'Product (Pi)')
 HISTORY_LIMIT = 24
 HISTORY_ITEM_LIMIT = 1536
 
@@ -33,6 +29,8 @@ class Calculator:
         self.workspaces={}
         self.show_hints = False
         self.help_open, self.help_first = False, 0
+        self.notice='';self.calculation_info=[];self._progress_time=0
+        self.catalogue_group=None
 
     @property
     def accent(self):
@@ -50,6 +48,7 @@ class Calculator:
         breadcrumbs.paint(r.draw,theme.system_palette(self.vm),fallback=('tools','Scientific calculator'))
         bottom = height-self.footer_height
         r.fill(0, bottom, width, self.footer_height, self.palette.PANEL)
+        message=message or self.notice
         limit = max(1, (width-12)//6)
         if self.show_hints:
             r.text(6, bottom+4, first[:limit], self.accent, FONT_XTRA_SMALL)
@@ -81,6 +80,27 @@ class Calculator:
     def open_page(self, page):
         if self.page in ('calc','stats','solver','base','matrix'): self.menu_return = self.page
         self.page, self.selected = page, self.mode if page == 'modes' else 0
+        if page=='templates':self.catalogue_group=None
+
+    def math_groups(self):
+        from .catalogue import groups
+        matrix=self.mode==5 and self.menu_return=='matrix' and self.workspace().field=='expression'
+        return groups(matrix)
+
+    def math_insert(self,token):
+        from .editor import SLOTS
+        from .catalogue import text
+        editor=self.input_editor()
+        if token in ('pow','sub','factorial') and editor.index==0:
+            raise ValueError('Enter a base first')
+        if token in SLOTS or token=='pi':editor.template(token)
+        else:
+            insertion,inside=('!',False) if token=='factorial' else text(token)
+            if count(editor.root)+len(insertion)>384:raise ValueError('Expression limit: 384 items')
+            for char in insertion:editor.insert(char)
+            if inside:editor.move(-1)
+        self.page,self.error=self.menu_return,''
+        self.catalogue_group=None
 
     def statistics_view(self):
         if self.statistics is None:
@@ -145,8 +165,27 @@ class Calculator:
         self.editor.load(self.history[self.history_index]['row'])
         self.error = ''
 
+    def calculation_progress(self,record):
+        if self.vm is None:return
+        if self.vm.input_manager.button==self.vm.input_manager._key_esc:
+            self.vm.input_manager.reset()
+            raise ValueError('Cancelled')
+        from time import ticks_ms,ticks_diff
+        now=ticks_ms()
+        if ticks_diff(now,self._progress_time)<120:return
+        self._progress_time=now
+        self.notice=('Integral: %d samples'%record['integral_samples'] if 'integral_samples' in record else
+                     'Working: %d steps'%record.get('steps',0))+' / ESC cancel'
+        self.draw()
+
+    def calculation_done(self):
+        if self.calculation_info:
+            record=self.calculation_info[-1]
+            self.notice='Int err~%.2g / %d samples'%(record['error'],record['evaluations'])
+        else:self.notice=''
+
     def submit(self):
-        self.error = ''
+        self.error='';self.notice='';self.calculation_info=[]
         if not self.editor.root: return
         if self.mode not in SUPPORTED:
             self.error = MODES[self.mode]+' engine is planned; UI preview only'
@@ -157,7 +196,7 @@ class Calculator:
         try:
             text = source(self.editor.root)
             dataset = self.statistics.dataset if self.statistics else None
-            value, assignment = calculate(text, self.variables, self.angle, self.mode == 3, dataset)
+            value, assignment = calculate(text, self.variables, self.angle, self.mode == 3, dataset,self.calculation_info,self.calculation_progress)
             if not self.compact:
                 record = {'row': clone(self.editor.root), 'value': value, 'assignment': assignment,
                           'mode': self.mode, 'angle': self.angle, 'text': text}
@@ -166,9 +205,9 @@ class Calculator:
                 del self.history[0]
             self.answer, self.assignment = value, assignment
             self.history_index, self.draft = None, None
-            self.editor.clear()
+            self.editor.clear();self.calculation_done()
         except (ValueError, TypeError, ZeroDivisionError, OverflowError, ImportError, RuntimeError) as exc:
-            self.error = str(exc) or 'Invalid mathematical operation'
+            self.notice='';self.error = str(exc) or 'Invalid mathematical operation'
 
     def run(self, vm):
         button = vm.button
@@ -209,7 +248,9 @@ class Calculator:
             elif self.page == 'stats':
                 self.statistics_view().run(button)
             elif button == vm.input_manager._key_esc:
-                if self.page != 'calc':
+                if self.page=='templates' and self.catalogue_group is not None:
+                    self.selected=self.catalogue_group;self.catalogue_group=None
+                elif self.page != 'calc':
                     self.page = self.menu_return
                 else:
                     vm.back()
@@ -256,15 +297,15 @@ class Calculator:
                         self.editor.load(self.history[self.selected]['row'])
                         self.page, self.error = 'calc', ''
             elif self.page == 'templates':
-                if button in (keys.BUTTON_UP, keys.BUTTON_DOWN):
-                    self.selected = (self.selected+(-1 if button == keys.BUTTON_UP else 1))%len(TEMPLATES)
-                elif button == keys.BUTTON_CENTER:
-                    kind = TEMPLATES[self.selected]
-                    editor = self.input_editor()
-                    if kind in ('pow', 'sub') and editor.index == 0:
-                        raise ValueError('Enter a base first')
-                    editor.template(kind)
-                    self.page, self.error = self.menu_return, ''
+                groups=self.math_groups()
+                entries=groups if self.catalogue_group is None else groups[self.catalogue_group][2]
+                if button in (keys.BUTTON_UP,keys.BUTTON_DOWN):
+                    self.selected=(self.selected+(-1 if button==keys.BUTTON_UP else 1))%len(entries)
+                elif button==keys.BUTTON_LEFT and self.catalogue_group is not None:
+                    self.selected=self.catalogue_group;self.catalogue_group=None
+                elif button in (keys.BUTTON_CENTER,keys.BUTTON_RIGHT):
+                    if self.catalogue_group is None:self.catalogue_group=self.selected;self.selected=0
+                    elif button==keys.BUTTON_CENTER:self.math_insert(entries[self.selected][0])
             else:
                 if button == keys.BUTTON_CENTER: self.submit()
                 elif button == keys.BUTTON_LEFT: self.editor.move(-1)
@@ -297,7 +338,9 @@ class Calculator:
                 'F3 Options: modes, settings and tools',
                 'F6 Evaluate / Calculate; ENTER also accepts',
                 'F5 Results (history in Calculate/Complex)',
-                'F7 Templates; F8 Variables; F10 Clear input',
+                'F7 Math families; F8 Variables; F10 Clear input',
+                'Math menu: ENTER opens/inserts; LEFT returns',
+                'Float32: about 7 significant decimal digits',
                 'F1/F2 add/remove rows in Statistics data',
                 'Other modes have no collection action',
                 'F4 is reserved for graphical plots',
@@ -319,6 +362,7 @@ class Calculator:
              'sum(), prod(): SPACE creates Sigma / Pi',
              'TAB: lower, upper, expression; k is the index',
              'sum(k,1,10,k^2); prod(k,1,5,k)',
+             'ncr(n,r), npr(n,r); cbrt(x), root(n,x)',
              'Sum/product: inclusive integers, 1024 terms',
              'TAB steps fraction / integral / log slots',
              'Assignments: a=12; Ans keeps the last answer',
@@ -334,7 +378,7 @@ class Calculator:
              'Equation uses x; bounded root finding',
              'F5 returns to retained solver results'),
             ('Complex expressions:', 'Use i or j for the imaginary unit',
-             'Example: (1+2i)*(3-4i)',
+             'Example: (1+2i)*(3-4i)', 'asin/acos/atan: principal complex values',
              'Templates and structured slots: F7 / TAB',
              'F6 or ENTER evaluates; F5 opens history'),
             ('Base-N:', 'Options / Mode setup: base, bits and sign',
@@ -471,13 +515,13 @@ class Calculator:
         r.text(max(9,width-9-draw.len(result,font)),42,result,accent,font)
         footer_height = 24 if self.show_hints else 12
         bottom = height-footer_height
-        prompt_bottom = bottom-(14 if self.show_hints or self.error else 4)
+        prompt_bottom = bottom-(14 if self.show_hints or self.error or self.notice else 4)
         r.rect(6,75,width-12,prompt_bottom-75,self.palette.GRID)
         r.text(12,82,'>>',accent,FONT_SMALL)
         prompt=self.renderer(draw,(34,80,width-12,prompt_bottom-4))
         prompt.expression(self.editor.root,36,83,FONT_SMALL,fg,editor=self.editor,follow=True)
-        hint=self.error or self.editor.hint()
-        if self.show_hints or self.error:
+        hint=self.error or self.notice or self.editor.hint()
+        if self.show_hints or self.error or self.notice:
             r.text(7,bottom-11,hint[:max(1,(width-14)//6)],self.palette.ERROR if self.error else self.palette.MUTED,FONT_XTRA_SMALL)
         if self.show_hints:
             r.text(7,bottom+3,'F3 Opt F8 Vars F7 Math',accent,FONT_XTRA_SMALL)
@@ -545,26 +589,34 @@ class Calculator:
             rows = [(name, format_value(self.variables[name])) for name in names]
             hint = 'ENTER inserts | DELETE removes | a=3 assigns'
         elif self.page == 'templates':
-            rows = [(label, {'frac':'numerator/ + SPACE', 'logb':'log_ + SPACE: base, argument'}.get(kind, kind+'() + SPACE') if kind not in ('pow', 'sub', 'pi') else
-                     {'pow':'^ + SPACE', 'sub':'_ + SPACE', 'pi':'pi + SPACE'}[kind])
-                    for kind, label in zip(TEMPLATES, TEMPLATE_LABELS)]
-            hint = 'ENTER inserts | TAB slots | CTRL-UP previous'
+            groups=self.math_groups()
+            if self.catalogue_group is None:
+                rows=[(title,description) for title,description,_ in groups]
+                hint='ENTER opens family | ESC returns to input'
+            else:
+                rows=[(signature,example) for _,signature,example in groups[self.catalogue_group][2]]
+                hint='ENTER inserts | LEFT / ESC returns to families'
         else:
             rows = [(record['text'], '= '+format_value(record['value'])) for record in self.history]
             if not rows: rows = [('No calculations yet', 'History is kept only while the calculator is open')]
             hint = 'ENTER recalls | last 24 | saving OFF'
         r = self.renderer(draw, (0, 18, width, height))
         r.fill(0, 18, width, 24, self.palette.PANEL)
-        r.text(9, 24, 'CALCULATOR / '+self.page.upper(), self.accent)
+        heading=('MATH / '+(self.math_groups()[self.catalogue_group][0] if self.catalogue_group is not None else 'FUNCTIONS')) if self.page=='templates' else 'CALCULATOR / '+self.page.upper()
+        r.text(9,24,heading[:max(1,(width-18)//8)],self.accent)
         capacity = max(1, (height-self.footer_height-51)//29)
         first = max(0, self.selected-capacity+1)
         for index in range(first, min(len(rows), first+capacity)):
             y = 52+(index-first)*29
-            if index == self.selected: r.fill(8, y-3, width-16, 27, self.palette.SELECT)
+            if index == self.selected:
+                r.fill(8,y-3,width-16,27,self.palette.SELECT)
+                if self.page=='templates':r.text(8,y+2,'>',self.accent,FONT_XTRA_SMALL)
             label, detail = rows[index]
-            r.text(15, y, label[:(width-30)//8], self.palette.TEXT, FONT_SMALL)
+            color=self.accent if self.page=='templates' and index==self.selected else self.palette.TEXT
+            r.text(15,y,label[:(width-30)//8],color,FONT_SMALL)
             r.text(15, y+14, detail[:(width-30)//6], self.palette.MUTED, FONT_XTRA_SMALL)
-        self.footer(r,width,height,hint,'UP/DOWN choose  F9 Help  ESC returns')
+        message=('ENTER | ESC back' if self.catalogue_group is None else 'ENTER | LEFT back') if self.page=='templates' else ''
+        self.footer(r,width,height,hint,'UP/DOWN choose  F9 Help  ESC returns',message)
         draw.swap()
 
 

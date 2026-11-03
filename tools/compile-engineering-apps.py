@@ -33,7 +33,7 @@ def main():
     version = runpy.run_path(str(root/'src/MicroPython/picoware/system/features.py'))['FIRMWARE_VERSION']
     source = root / 'builds/MicroPython/apps_unfrozen'
     files = [source / name for name in ('Grapher.py', 'Graph.py', 'Graph3D.py', 'PicoLAB.py', 'Eggcel.py','Apps.py','PicoWord.py','PicoPaint.py','PicoDESK.py','PicoDict.py','PicoReader.py')]
-    files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','misc/screensavers/Lenia.py','misc/Benchmark.py','games/Tetris.py')]
+    files += [source / name for name in ('misc/screensavers/Calculator Widget.py','misc/screensavers/Lorenz.py','misc/screensavers/Lenia.py','misc/Benchmark.py','misc/Calculator Check.py','games/Tetris.py')]
     files += [path for path in sorted((source / 'engtools').rglob('*.py')) if 'tools' not in path.relative_to(source).parts]
     files += sorted((source / 'desktopapps').rglob('*.py'))
     output = root / 'builds/MicroPython/apps'
@@ -96,10 +96,11 @@ def main():
                              'PicoLAB includes Calculate, Statistics, Solver, Complex, Base-N and Matrix.\n'
                              'This bundle includes Tetris, Lorenz, Lenia and a native-size Calculator Widget.\n'
                              'Audio is optional and excluded by default; see guides/TetrisAudio.md for your own licensed assets.\n'
-                             'Calculator integrals require native ulab; basic arithmetic does not.\n'
+                             'Calculator integration is bounded application-side math; native Formula accelerates supported integrands.\n'
                              'Calculator Statistics requires the configured native ulab build with numpy.sort.\n'
                              'Numerics checks requires the custom firmware containing the selected ulab build.\n'
                              'The native ulab library cannot be installed by copying SD files.\n')
+            archive.write(root/'tools/device/calculator_check.py','calculator_check.py')
             archive.writestr('LICENSE.txt',(root/'LICENSE').read_text())
             archive.write(root/'guides/Lenia-LICENSE.txt','Lenia-LICENSE.txt')
             archive.writestr('CREDITS.txt',
