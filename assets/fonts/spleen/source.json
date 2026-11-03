@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/fcambus/spleen",
+  "revision": "5116f8eac7f65da2cfa169626ec43b5d041665fe",
+  "files": {
+    "LICENSE": "f33fe8679d5b2abecc4f1313ce6c6bfa58262964de5f7bca146596a7318047af",
+    "spleen-12x24.bdf": "ab7f434db312de6700e55ee7f174ebd0bd57fef16f7a15bc9ac9478fb26f2cd1",
+    "spleen-5x8.bdf": "40488184d075d0c752cdd239b441c5ece51e50b353156f2496c756c384ab01cb",
+    "spleen-6x12.bdf": "fc0743d164690f99b7e2e1b9d503180e4c719a9831ae03fd8f6da18c857dee27",
+    "spleen-8x16.bdf": "b38b32a66920068965a3101f98071d310c5c74659fe86e55d346140770f8f6e8"
+  }
+}

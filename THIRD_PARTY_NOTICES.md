@@ -15,6 +15,7 @@ GPL notice does not override a component's own license.
 | TinyUSB, lwIP, BTstack, CYW43, Mbed TLS | Notices in their `vendor/micropython/lib/` directories |
 | micropython-lib and Berkeley DB | Notices in their `vendor/micropython/lib/` directories |
 | JPEGDEC | `src/MicroPython/JPEGDEC/LICENSE` and source headers |
+| Spleen bitmap fonts | Frederic Cambus; BSD 2-Clause; `assets/fonts/spleen/LICENSE`, pinned BDF sources and `source.json`; generated tables in `src/MicroPython/font/font*.c` |
 
 Some dependencies, including BTstack and the CYW43 wireless firmware, have
 component-specific license terms; read their preserved notices for your use.
