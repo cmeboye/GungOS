@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.35 — 2026-11-03
+
+- Spleen bitmap fonts are now the default in firmware, with existing layout
+  metrics preserved and the original font tables backed up in the source tree.
+- Scientific calculator: rendered Sigma/Pi templates via `sum()`/`prod()` plus
+  Space, indexed and scalar sums/products, dataset products, scoped indices,
+  compensated summation and bounded work. Fixed false roots for small-scaled
+  equations, hidden imaginary results, complex base logarithms, adjacent numeric
+  input and reserved-name consistency. See `guides/CalculatorReview.md` for
+  remaining work; repeated-root and difficult-integration limitations remain.
+- PicoDESK adds PicoDict English/Italian lookup and PicoReader EPUB/TXT reading
+  with saved positions, bookmarks and reading fonts. Full SD packages include
+  the attributed dictionary data and four original reader samples.
+- PicoLAB controls and help aligned across engineering tools; PicoCAD moved to
+  Modules → Machine design, with planned Dynamics/Fluids entries shown separately.
+- Matching PicoCalc Pico 2 W firmware and full SD package prepared for device
+  testing. Host/simulator/package validation is separate from physical testing.
+
 ## v1.34 — 2026-10-23
 
 - Expanded PicoLAB with Grapher, PicoSpice, Section Properties, StressStrain

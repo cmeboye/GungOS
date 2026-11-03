@@ -102,6 +102,8 @@ class IntegerParser:
             name=self.take(); self.take()
             if len(name)>16 or not name[0].isalpha() or not all(c.isalpha() or c.isdigit() or c=='_' for c in name) or name.lower()=='ans':
                 raise ValueError('Invalid assignment name')
+            from .evaluate import RESERVED
+            if name in RESERVED: raise ValueError('This name is reserved')
             if self.base==16 and all(c.upper() in 'ABCDEF0123456789' for c in name):
                 raise ValueError('Use a name distinguishable from hex digits')
         value=self.expression()

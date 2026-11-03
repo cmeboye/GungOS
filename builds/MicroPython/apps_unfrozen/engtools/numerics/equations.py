@@ -38,11 +38,16 @@ def root_job(text,lower=-10,upper=10,guess=0,variables=None,angle='DEG'):
     if fa==0: yield {'root':lower,'residual':0.0,'iterations':0}; return
     if fb==0: yield {'root':upper,'residual':0.0,'iterations':0}; return
     bracket=(fa<0)!=(fb<0)
+    # A fixed absolute residual accepts any sufficiently small equation, even
+    # a nonzero constant. Normalize to this problem and require x convergence.
+    reference=max(abs(fa),abs(fb))
     x=guess
     for iteration in range(1,97):
         if bracket: x=lower+(upper-lower)*0.5
         value,scale=f(x)
-        if abs(value)<=2e-6*scale:
+        residual_ok=abs(value)<=2e-6*reference
+        position_ok=bracket and abs(upper-lower)<=4e-6*max(1,abs(x))
+        if value==0 or (residual_ok and position_ok):
             # A pole can look like a sign crossing, but cannot pass this check.
             yield {'root':x,'residual':abs(value),'iterations':iteration}; return
         if bracket:
@@ -59,6 +64,8 @@ def root_job(text,lower=-10,upper=10,guess=0,variables=None,angle='DEG'):
             candidate=x-value/derivative
             if not finite(candidate) or not lower<=candidate<=upper:
                 raise ValueError('Newton step left the interval; change the guess')
+            if residual_ok and abs(candidate-x)<=2e-6*max(1,abs(x)):
+                yield {'root':x,'residual':abs(value),'iterations':iteration}; return
             if candidate==x: raise ValueError('Root did not converge at float32 precision')
             x=candidate
         if iteration%4==0: yield {'progress':iteration}

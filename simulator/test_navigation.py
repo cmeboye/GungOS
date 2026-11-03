@@ -40,7 +40,7 @@ key(k.BUTTON_NONE)
 vm.draw.screenshot('/private/tmp/gungos-nav-home.bmp')
 key(k.BUTTON_CENTER);assert vm.current_view.name=='app_PicoDESK'
 import PicoDESK
-assert [row[0] for row in __import__('desktopapps.launcher',None,None,('ROWS',)).ROWS]==['Eggcel','PicoWord','PicoPaint']
+assert [row[0] for row in __import__('desktopapps.launcher',None,None,('ROWS',)).ROWS]==['Eggcel','PicoWord','PicoPaint','PicoDict','PicoReader']
 vm.draw.screenshot('/private/tmp/gungos-nav-desk.bmp')
 key(k.BUTTON_BACK);key(k.BUTTON_DELETE);assert vm.current_view.name=='app_PicoDESK'
 key(k.BUTTON_DOWN);key(k.BUTTON_CENTER);assert vm.current_view.name=='picoword'
@@ -63,7 +63,7 @@ assert PicoLAB._page=='tools'
 key(k.BUTTON_CENTER);assert vm.current_view.name=='eng_grapher'
 from engtools.plots import runtime
 assert runtime._active.controller.app.palette.ACCENT==vm.selected_color
-key(k.BUTTON_F2)
+key(k.BUTTON_F3);key(k.BUTTON_DOWN);key(k.BUTTON_DOWN);key(k.BUTTON_CENTER)
 assert runtime._active.mode=='3d'
 assert runtime._active.engine.C_ACCENT==vm.selected_color
 vm.draw.screenshot('/private/tmp/gungos-nav-grapher.bmp')

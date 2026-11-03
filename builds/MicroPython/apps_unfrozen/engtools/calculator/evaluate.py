@@ -1,12 +1,13 @@
 """Small arithmetic parser: no Python eval, attribute access or arbitrary calls."""
 import math
 
-STAT_FUNCTIONS = ('mean', 'std', 'pstd', 'var', 'pvar', 'sum', 'sum2', 'n', 'median',
+STAT_FUNCTIONS = ('mean', 'std', 'pstd', 'var', 'pvar', 'sum', 'prod', 'sum2', 'n', 'median',
                   'q1', 'q3', 'iqr', 'range', 'cov', 'pcov', 'corr', 'slope', 'intercept', 'r2', 'predict')
 FUNCTIONS = ('sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
              'sqrt', 'ln', 'log', 'logb', 'exp', 'abs', 'floor', 'ceil', 'round',
              're', 'im', 'conj', 'int', 'min', 'max')+STAT_FUNCTIONS
 RESERVED = FUNCTIONS+('pi', 'e', 'i', 'ans', 'Ans', 'j', 'X', 'Y')
+REDUCTION_LIMIT = 1024
 
 
 def finite(value):
@@ -32,6 +33,8 @@ def tokens(text):
             try: value = float(text[start:i])
             except ValueError: raise ValueError('Invalid number')
             if not finite(value): raise ValueError('Number out of range')
+            if result and result[-1][0] == 'number':
+                raise ValueError('Separate numbers with an operator')
             result.append(('number', value))
         elif char.isalpha():
             start = i
@@ -199,6 +202,47 @@ class Evaluator:
         self.steps = 0
         self.statistics = statistics
 
+    def reduction(self, name, values):
+        """Bounded streaming reduction; Neumaier compensation for sums."""
+        total, correction = (0.0 if name == 'sum' else 1.0), 0.0
+        for count, value in enumerate(values):
+            if count >= REDUCTION_LIMIT: raise ValueError('Sum/product limit: 1024 terms')
+            self.steps += 1
+            if self.steps > 60000: raise ValueError('Calculation work limit')
+            if not finite(value): raise ValueError('Sum/product term out of range')
+            if name == 'sum':
+                updated = total+value
+                correction += (total-updated)+value if abs(total) >= abs(value) else (value-updated)+total
+            else:
+                updated = total*value
+                if updated == 0 and total != 0 and value != 0:
+                    raise ValueError('Product underflow; scale the terms')
+            if not finite(updated) or not finite(correction): raise ValueError('Sum/product out of range')
+            total = updated
+        value = total+correction
+        if not finite(value): raise ValueError('Sum/product out of range')
+        return value
+
+    def series(self, name, args, local):
+        # Four arguments beginning with a name bind an index, rather than
+        # evaluating it as a stored scalar. Other arities reduce scalar args.
+        if len(args) == 4 and args[0][0] == 'name':
+            index = args[0][1]
+            if index in RESERVED: raise ValueError('Sum/product index is reserved')
+            lower, upper = self.run(args[1], local), self.run(args[2], local)
+            for bound in (lower, upper):
+                if isinstance(bound, complex) or not finite(bound) or bound != int(bound) or abs(bound) > 16777216:
+                    raise ValueError('Sum/product bounds: exact integers within +/-16777216')
+            lower, upper = int(lower), int(upper)
+            if upper-lower+1 > REDUCTION_LIMIT: raise ValueError('Sum/product limit: 1024 terms')
+            scope = dict(local or {})
+            def terms():
+                for n in range(lower, upper+1):
+                    scope[index] = n
+                    yield self.run(args[3], scope)
+            return self.reduction(name, terms())
+        return self.reduction(name, (self.run(arg, local) for arg in args))
+
     def run(self, node, local=None):
         self.steps += 1
         if self.steps > 60000: raise ValueError('Calculation work limit')
@@ -236,6 +280,9 @@ class Evaluator:
             else: value = a**b
         else:
             name, args = node[1], node[2]
+            dataset_reduction = name in ('sum','prod') and len(args) == 1 and args[0] in (('name','X'),('name','Y'))
+            if name in ('sum','prod') and not dataset_reduction:
+                return self.series(name, args, local)
             column_call = name in ('min','max') and len(args) == 1 and args[0][0] == 'name' and args[0][1] in ('X','Y')
             if name in STAT_FUNCTIONS or column_call:
                 if self.statistics is None: raise ValueError('Choose a Statistics dataset first')
@@ -249,6 +296,8 @@ class Evaluator:
                 elif name == 'predict':
                     if len(args) != 1: raise ValueError('predict needs one X value')
                     value = self.statistics.predict(self.run(args[0],local))
+                elif name == 'prod':
+                    value = self.reduction('prod', self.statistics.observations(args[0][1]))
                 else:
                     if len(args) != 1 or args[0][0] != 'name' or args[0][1] not in ('X','Y'):
                         raise ValueError(name+' uses (X) or (Y)')
@@ -257,24 +306,35 @@ class Evaluator:
                 return value
             if name == 'int':
                 if len(args) != 3: raise ValueError('int(lower,upper,expression in x)')
-                if local is not None: raise ValueError('Nested integrals are not available yet')
-                lower, upper = self.run(args[0]), self.run(args[1])
+                if getattr(self, '_integrating', False): raise ValueError('Nested integrals are not available yet')
+                lower, upper = self.run(args[0], local), self.run(args[1], local)
                 if isinstance(lower, complex) or isinstance(upper, complex): raise ValueError('Integral bounds must be real')
                 # Numerical integration uses the selected native backend. Do not
                 # silently substitute an unvalidated solver on older firmware.
                 from engtools.numerics.backend import require
                 _, sp = require()
                 if lower == upper: return 0.0
-                native = None if self.complex_mode else native_function(args[2], self.variables, self.angle)
+                constants = dict(self.variables)
+                constants.update(local or {})
+                native = None if self.complex_mode else native_function(args[2], constants, self.angle)
                 if native is not None:
                     def integrand(x):
+                        self.steps += 1
+                        if self.steps > 60000: raise ValueError('Calculation work limit')
                         value = native(x)
                         if value is None: raise ValueError('Integrand undefined in the interval')
                         return value
                 else:
-                    integrand = lambda x: self.run(args[2], {'x':x})
-                coarse, coarse_error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=3)
-                value, error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=4)
+                    def integrand(x):
+                        scope = dict(local or {})
+                        scope['x'] = x
+                        return self.run(args[2], scope)
+                self._integrating = True
+                try:
+                    coarse, coarse_error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=3)
+                    value, error = sp.integrate.quad(integrand, lower, upper, eps=1e-5, order=4)
+                finally:
+                    self._integrating = False
                 if not all(finite(v) for v in (coarse, coarse_error, value, error)):
                     raise ValueError('Integral did not converge')
                 # Pinned ulab's raw estimate is not scaled by interval width.
@@ -290,7 +350,11 @@ class Evaluator:
             expected = 2 if name == 'logb' else 1
             if len(values) != expected: raise ValueError(name+' needs '+str(expected)+' argument(s)')
             a = values[0]
-            if name == 'logb': value = math.log(values[1])/math.log(a)
+            if name == 'logb':
+                if self.complex_mode and any(isinstance(v, complex) or v < 0 for v in values):
+                    import cmath
+                    value = cmath.log(values[1])/cmath.log(a)
+                else: value = math.log(values[1])/math.log(a)
             elif name == 'abs': value = abs(a)
             elif name == 're': value = a.real if isinstance(a, complex) else a
             elif name == 'im': value = a.imag if isinstance(a, complex) else 0
@@ -299,10 +363,15 @@ class Evaluator:
             else:
                 if name in ('sin', 'cos', 'tan') and self.angle == 'DEG': a *= math.pi/180
                 actual = {'ln':'log', 'log':'log10'}.get(name, name)
-                if isinstance(a, complex) or (self.complex_mode and name in ('sqrt', 'ln', 'log') and a < 0):
+                extend = self.complex_mode and not isinstance(a, complex) and ((name in ('sqrt', 'ln', 'log') and a < 0) or
+                                               (name in ('asin','acos') and abs(a) > 1))
+                if isinstance(a, complex) or extend:
                     import cmath
                     function = getattr(cmath, 'log' if name in ('ln', 'log') else actual, None)
-                    if function is None: raise ValueError('This function requires a real argument')
+                    if function is None:
+                        if name in ('asin','acos','atan'):
+                            raise ValueError('Complex inverse trig is not available yet')
+                        raise ValueError('This function requires a real argument')
                     value = function(a)
                     if name == 'log': value /= math.log(10)
                 else: value = getattr(math, actual)(a)
@@ -328,8 +397,8 @@ def calculate(text, variables, angle='DEG', complex_mode=False, statistics=None)
 
 def format_value(value, engineering=False):
     if isinstance(value, complex):
-        if abs(value.imag) < 1e-7: return format_value(value.real, engineering)
-        return '%s%s%si' % (format_value(value.real), '+' if value.imag >= 0 else '-', format_value(abs(value.imag)))
+        if value.imag == 0: return format_value(value.real, engineering)
+        return '%s%s%si' % (format_value(value.real, engineering), '+' if value.imag >= 0 else '-', format_value(abs(value.imag), engineering))
     if engineering and value:
         exponent = int(math.floor(math.log10(abs(value))/3))*3
         return '%.6ge%+d' % (value/(10**exponent), exponent)

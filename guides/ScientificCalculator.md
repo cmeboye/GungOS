@@ -1,5 +1,7 @@
 # PicoLAB scientific calculator preview
 
+Implementation status and remaining review items: [CalculatorReview.md](CalculatorReview.md).
+
 Open **PicoLAB → Tools → Scientific calculator**. The preview follows `test.png`:
 18 pixels reserved for system indicators, calculator status, a separate answer
 box and history above the `>>` prompt. **F9** opens scrollable help throughout the calculator, including its
@@ -44,6 +46,40 @@ Right exits that slot; Enter evaluates to 8. The other shorthands include
 each. Filled arguments also expand, for example `sqrt(9)` followed by Space.
 `log()` is base 10; `ln()` is natural log; `logb()` has base and argument slots.
 
+### Rendered sums and products
+
+Type **`sum()` then Space** to create a Sigma **Σ** template, or **`prod()` then
+Space** to create a Pi **Π** product template. Both draw the upper bound above
+the symbol and `k=lower` underneath, with the expression alongside. The index
+starts as `k`, and the cursor starts in the lower bound. Fill the lower bound,
+Tab to the upper bound, and Tab to the expression. Ctrl-Up/Tab and arrow keys
+also reach the index and nested mathematical slots. F7 offers both templates.
+Empty slots, history recall and widget rendering follow the integral editor.
+
+Examples (filled forms also expand when followed by Space):
+
+```text
+sum(k,1,10,k^2)     = 385
+prod(k,1,5,k)       = 120
+sum(1,2,3)         = 6
+prod(2,3,4)        = 24
+```
+
+Indexed bounds are inclusive integers within ±16777216. The step is +1; a
+reversed interval is empty (sum 0, product 1). Empty scalar calls have the same
+identities. Each reduction accepts at most 1024 terms and shares the evaluator's
+60000-operation budget, including nested reductions. Indices have local scope:
+stored variables are preserved and nested sums may use their own indices.
+Reserved function/constant names cannot be indices. Sums use compensated
+accumulation; products reject nonfinite results and detected underflow.
+Reductions are synchronous within these work bounds; Escape cancellation is a
+tracked follow-up, not part of this first pass.
+
+`sum(X)`/`sum(Y)` retain their Statistics meanings; `prod(X)`/`prod(Y)` multiply
+dataset observations, repeating them according to frequency when enabled. Dataset
+products have the same 1024-term limit. Dataset calls and scalar-argument calls
+stay ordinary text when Space is pressed; the indexed form uses the template.
+
 Type `2/` and press Space to turn 2 into the numerator of a stacked fraction,
 with the cursor in its empty denominator. Type 3 and Enter to calculate 2/3.
 The numerator captures the preceding multiplicative term: `1+2/` captures 2,
@@ -74,7 +110,10 @@ parentheses, implicit multiplication and factorial for integers 0..34.
 Functions include trig/inverse trig, hyperbolic trig, sqrt, logs, exp, abs,
 floor, ceil, round, min/max and real/imaginary/conjugate helpers. Complex mode
 accepts `i`, `j` and complex elementary functions supported by MicroPython's
-cmath. Errors retain the expression for correction and leave stored values
+cmath, including complex base logarithms. Nonzero imaginary parts remain visible
+even below 1e-7; float32 rounding artifacts may therefore also be visible. Native
+cmath does not supply inverse trig functions in this build; complex inverse trig
+remains a tracked follow-up. Errors retain the expression for correction and leave stored values
 unchanged.
 
 ## Current limits
@@ -139,12 +178,13 @@ Calculate mode only. F3 first enters widget focus; subsequent F3 opens its Optio
 
 ## Preview and deployment
 
-`builds/MicroPython/PicoLAB-update.zip` contains the compiled PicoLAB entry,
+After compiling, `builds/MicroPython/engineering-preview.zip` contains the compiled PicoLAB entry,
 Calculator Widget and complete shared `engtools` package for the calculator UI
 update. Merge its `picoware` folder onto the SD card and replace matching files,
 then restart GungOS to reload cached modules. Keep one `.py` or `.mpy` copy per
-module. This update needs no UF2 flash on GungOS v2.1. The existing v2.1 release
-directory remains the original firmware/source snapshot.
+module. On GungOS v1.34 firmware with the required native libraries, these
+calculator application changes need no UF2 flash. Earlier release snapshots and
+already generated ZIPs are not automatically updated by editing the source.
 
 ```sh
 sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w \
@@ -159,6 +199,7 @@ Basic calculator operations do not require a new UF2; integrals require ulab.
 
 ```sh
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_calculator.py
+builds/MicroPython/desktop/micropython -X heapsize=32M simulator/test_calculator_reductions.py
 ```
 
 The checks exercise nested templates, known arithmetic/integral answers,

@@ -16,7 +16,7 @@ gungos_version=$(python3 -c 'import os,runpy; print(runpy.run_path(os.environ["P
 # GUNGOS_BUILD_LABEL names a test build in its build string (os.uname().version).
 export MICROPY_GIT_TAG="v1.30.0-preview-gungos-v${gungos_version}${GUNGOS_BUILD_LABEL:+-$GUNGOS_BUILD_LABEL}"
 export MICROPY_GIT_HASH="424cb8d7a61bf4f7e37bd64bf3d7edc1897cc8b3"
-export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1792368000}"
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1793664000}"
 export MICROPY_MPYCROSS="$build_root/mpy-cross/mpy-cross"
 make -C "$micropython_root/mpy-cross" -j"$jobs" BUILD="$build_root/mpy-cross"
 # Build the host UF2 conversion tool from the bundled sources, avoiding SDK fetches.

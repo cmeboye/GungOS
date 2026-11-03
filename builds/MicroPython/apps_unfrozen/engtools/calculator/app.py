@@ -10,9 +10,10 @@ MODES = ('Calculate', 'Statistics', 'Solver', 'Complex', 'Base-N', 'Matrix')
 DETAILS = ('Scientific expressions', 'Data, summaries, linear fit', 'Equations and roots',
            'Real + imaginary', 'BIN / OCT / DEC / HEX', 'Arrays and operations')
 SUPPORTED = (0, 1, 2, 3, 4, 5)
-TEMPLATES = ('pow', 'sub', 'sqrt', 'frac', 'int', 'logb', 'sin', 'cos', 'tan', 'ln', 'pi')
+TEMPLATES = ('pow', 'sub', 'sqrt', 'frac', 'int', 'logb', 'sin', 'cos', 'tan', 'ln', 'pi', 'sum', 'prod')
 TEMPLATE_LABELS = ('Power', 'Subscript', 'Square root', 'Fraction', 'Integral (in x)',
-                   'Log with base', 'Sine', 'Cosine', 'Tangent', 'Natural log', 'Pi')
+                   'Log with base', 'Sine', 'Cosine', 'Tangent', 'Natural log', 'Pi',
+                   'Sum (Sigma)', 'Product (Pi)')
 HISTORY_LIMIT = 24
 HISTORY_ITEM_LIMIT = 1536
 
@@ -308,13 +309,17 @@ class Calculator:
                 'ESC cancels an edit or returns',
                 'F9 help preserves the draft and selection',
                 'UP/DOWN history in Calculate/Complex',
-                'Options:', 'Statistics tools: Data, Fit, CSV and distributions',
+                'Options:', 'Statistics tools: Data, Fit, frequency and CSV',
                 'Solver setup changes polynomial degree / system size',
                 'Matrix setup selects names and dimensions',
                 'Base-N setup changes base / width / signedness')
         details = (
             ('Expression entry:', 'Type 2^ SPACE to create an exponent slot',
              'sqrt(), frac(), int(), logb(): SPACE expands',
+             'sum(), prod(): SPACE creates Sigma / Pi',
+             'TAB: lower, upper, expression; k is the index',
+             'sum(k,1,10,k^2); prod(k,1,5,k)',
+             'Sum/product: inclusive integers, 1024 terms',
              'TAB steps fraction / integral / log slots',
              'Assignments: a=12; Ans keeps the last answer',
              'DEG/RAD and engineering format: Options'),
@@ -346,7 +351,7 @@ class Calculator:
         rows = [('Angle unit',self.angle), ('Number format','Engineering' if self.engineering else 'Normal'),
                 ('Mode',MODES[self.mode]), ('Variables','Insert a stored value'),
                 ('History','Recall a calculation'), ('Clear input','Erase the active draft')]
-        if self.mode == 1:rows += [('Data','Open the statistics table'),('Fit','Regression results'),('Statistics tools','Frequency, CSV, distributions')]
+        if self.mode == 1:rows += [('Data','Open the statistics table'),('Fit','Regression results'),('Statistics tools','Frequency and CSV')]
         elif self.mode in (2,4,5):rows += [('Mode setup','Degree / size' if self.mode==2 else 'Base / width / sign' if self.mode==4 else 'Matrix names / dimensions')]
         return rows
 

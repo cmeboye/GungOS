@@ -37,7 +37,10 @@ def write_book(path,title,chapters):
             '</manifest><spine>'+''.join(spine)+'</spine></package>')
 
 
-def main():
+def generate(destination):
+    """Write only the original release samples to the chosen library folder."""
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=True)
     books=[('Getting Started.epub','Getting Started with PicoReader',[
         ('Your pocket library',[
             'This is an original dummy document for trying PicoReader. The default reading text uses the extra-small system font.',
@@ -72,12 +75,15 @@ def main():
         'One: lanterns on the harbour wall.',
         'Two: a map folded along its creases.',
         'Three: the quiet path home.'])]
+    for filename,title,chapters in books:write_book(destination/filename,title,chapters)
+    for filename,paragraphs in texts:
+        (destination/filename).write_text(filename[:-4]+'\n\n'+'\n\n'.join(paragraphs)+'\n',encoding='utf-8')
+    print(f'Created {len(books)} sample EPUBs and {len(texts)} TXT book in {destination}')
+
+
+def main():
     for tree in ('simulator/sdcard','sd-card','SD contents'):
-        destination=ROOT/tree/'picoware/documents/picoreader'
-        for filename,title,chapters in books:write_book(destination/filename,title,chapters)
-        for filename,paragraphs in texts:
-            (destination/filename).write_text(filename[:-4]+'\n\n'+'\n\n'.join(paragraphs)+'\n',encoding='utf-8')
-        print(f'Created {len(books)} sample EPUBs and {len(texts)} TXT book in {destination}')
+        generate(ROOT/tree/'picoware/documents/picoreader')
 
 
 if __name__=='__main__':main()

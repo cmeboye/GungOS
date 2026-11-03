@@ -59,7 +59,7 @@ def verify_sd(root):
     entries={'Graph.mpy','Graph3D.mpy','PicoLAB.mpy'}
     if (source/'Grapher.py').exists(): entries.add('Grapher.mpy')
     if (source/'Eggcel.py').exists(): entries.add('Eggcel.mpy')
-    for name in ('Apps','PicoWord','PicoPaint','PicoDESK'):
+    for name in ('Apps','PicoWord','PicoPaint','PicoDESK','PicoDict','PicoReader'):
         if (source/(name+'.py')).exists():entries.add(name+'.mpy')
     assert {p.name for p in apps.glob('*.mpy')}==entries,'Unexpected top-level app'
     assert {p.name for p in (apps/'games').glob('*.mpy')}=={'Tetris.mpy'},'Unexpected game'
@@ -85,6 +85,24 @@ def verify_sd(root):
             assert (reader.getnchannels(),reader.getframerate(),reader.getsampwidth())==(1,22050,2),path
             assert reader.getnframes()>0,path
     assert len(list(apps.rglob('*.wav'))) in (0,10),'Optional audio must be absent or a complete ten-file set'
+    if (source/'PicoDict.py').exists():
+        data=root/'sd-card/picoware/dictionary'
+        manifest=json.loads((data/'manifest.json').read_text())
+        assert manifest['format']==1 and manifest['license']=='CC-BY-SA-4.0','Dictionary metadata'
+        assert 'CC' in (data/'NOTICE.txt').read_text() or 'Creative Commons' in (data/'NOTICE.txt').read_text(),'Dictionary attribution'
+        for direction in ('en-it','it-en'):
+            path=data/(direction+'.pdict');entry=manifest['dictionaries'][direction]
+            with path.open('rb') as reader:header=reader.read(12)
+            assert header[:8]==b'PDICT01\0' and struct.unpack_from('<I',header,8)[0]==entry['entries'],'Dictionary header'
+            assert path.stat().st_size==12+entry['entries']*128,'Dictionary record count'
+            assert sha256(path)==entry['data_sha256'],'Dictionary data checksum'
+    if (source/'PicoReader.py').exists():
+        library=root/'sd-card/picoware/documents/picoreader'
+        assert {p.name for p in library.iterdir()}=={'Getting Started.epub','The Lantern Walk.epub','Field Notes.epub','Pocket Notes.txt'},'Release samples only'
+        for path in library.glob('*.epub'):
+            with zipfile.ZipFile(path) as book:assert book.testzip() is None,'Corrupt sample EPUB'
+    for name in ('LICENSE.txt','THIRD_PARTY_NOTICES.md','Spleen-LICENSE.txt'):
+        assert (root/'sd-card'/name).is_file(),'Missing SD notice: '+name
     with zipfile.ZipFile(root/('GungOS-v'+VERSION+'-SD.zip')) as archive:
         assert archive.testzip() is None,'Damaged SD archive'
         files={p.relative_to(root/'sd-card').as_posix():p for p in (root/'sd-card').rglob('*') if p.is_file()}

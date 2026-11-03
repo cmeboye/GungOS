@@ -5,6 +5,8 @@ MAX_DEPTH = 10
 SLOTS = {
     'pow': ('exponent',), 'sub': ('subscript',), 'sqrt': ('radicand',),
     'frac': ('numerator', 'denominator'), 'int': ('lower bound', 'upper bound', 'expression in x'),
+    'sum': ('index variable', 'lower bound', 'upper bound', 'summand'),
+    'prod': ('index variable', 'lower bound', 'upper bound', 'factor'),
     'logb': ('base', 'argument'), 'log': ('argument',),
     'sin': ('argument',), 'cos': ('argument',), 'tan': ('argument',),
     'ln': ('argument',), 'exp': ('argument',), 'abs': ('argument',),
@@ -81,7 +83,10 @@ class Editor:
         self.index += 1
 
     def template(self, kind, rows=None):
-        self._replace(self.index, self.index, kind, rows)
+        if kind in ('sum','prod') and rows is None:
+            self._replace(self.index, self.index, kind, [list('k'), [], [], []], focus=1)
+        else:
+            self._replace(self.index, self.index, kind, rows)
 
     def _replace(self, begin, end, kind, rows=None, focus=0):
         """Validate a replacement before changing any text or cursor path."""
@@ -187,6 +192,16 @@ class Editor:
                         if item == ',' and depth == 0: rows.append([])
                         else: rows[-1].append(item)
                     if base is not None: rows.insert(0, base)
+                    if name in ('sum','prod'):
+                        # Only the empty shorthand and indexed four-argument
+                        # form are templates. Keep scalar/dataset calls as text.
+                        if len(rows) == 1 and not rows[0]:
+                            self._replace(begin, self.index, name, [list('k'), [], [], []], focus=1)
+                            return True
+                        if len(rows) != 4: return False
+                        index = ''.join(rows[0]).strip() if all(isinstance(item, str) for item in rows[0]) else ''
+                        if not index or not index[0].isalpha() or not all(c.isalpha() or c.isdigit() or c == '_' for c in index):
+                            return False
                     if len(rows) > len(SLOTS[name]):
                         raise ValueError('Too many template arguments')
                     rows += [[] for _ in range(len(SLOTS[name])-len(rows))]

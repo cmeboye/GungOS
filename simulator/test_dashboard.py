@@ -153,16 +153,16 @@ assert calculator._active.answer==5
 assert calculator._active.compact and not calculator._active.history
 assert home.widget.draw.width==238 and home.widget.draw.height==238
 assert vm.current_view.name=='desktop_view' and vm._view_count==1
-assert not calculator._active.show_hints
+assert not calculator._active.help_open
 key(k.BUTTON_2)
 from engtools.calculator.editor import source
 draft=source(calculator._active.editor.root,False)
 key(k.BUTTON_F9)
-assert calculator._active.show_hints and home.focus=='widget'
+assert calculator._active.help_open and home.focus=='widget'
 assert source(calculator._active.editor.root,False)==draft
 vm.draw.screenshot('/private/tmp/picoware-dashboard-calculator-help.bmp')
 key(k.BUTTON_F9)
-assert not calculator._active.show_hints
+assert not calculator._active.help_open
 old_color=vm.selected_color
 vm.selected_color=0xFD20
 assert calculator._active.accent==0xFD20

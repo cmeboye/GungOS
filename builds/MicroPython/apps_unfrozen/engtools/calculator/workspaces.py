@@ -297,9 +297,19 @@ class MatrixWorkspace(Workspace):
         name,node=parser.parse()
         if name and name not in self.NAMES: raise ValueError('Assign only MatA, MatB, MatC or MatD')
         steps=[0]
+        dataset=self.calc.statistics.dataset if self.calc.statistics else None
+        scalar=Evaluator(self.calc.variables,self.calc.angle,statistics=dataset)
+        def contains_matrix(node):
+            if node[0]=='name': return node[1] in self.NAMES+('MatAns',)
+            if node[0]=='binary': return contains_matrix(node[2]) or contains_matrix(node[3])
+            if node[0]=='call': return node[1] in ('det','inv','trn','transpose','trace','identity') or any(contains_matrix(arg) for arg in node[2])
+            if node[0]=='unary': return contains_matrix(node[2])
+            if node[0]=='factorial': return contains_matrix(node[1])
+            return False
         def run(node):
             steps[0]+=1
             if steps[0]>512: raise ValueError('Matrix operation limit')
+            if not contains_matrix(node): return scalar.run(node)
             kind=node[0]
             if kind=='name':
                 key=node[1]

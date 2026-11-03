@@ -173,7 +173,7 @@ key(vm.input_manager._key_esc)
 key(vm.input_manager._key_esc)
 assert vm.current_view.name=='parent'
 vm.add(View('lab',lab.run,lab.start,lab.stop));vm.switch_to('lab')
-lab._enter('tools');lab._selected=2;key(k.BUTTON_CENTER)
+lab._enter('tools');lab._selected=next(i for i,row in enumerate(lab.MENUS['tools']) if row[0]=='calculator');key(k.BUTTON_CENTER)
 assert vm.current_view.name=='eng_calculator'
 key(vm.input_manager._key_esc)
 assert vm.current_view.name=='lab'

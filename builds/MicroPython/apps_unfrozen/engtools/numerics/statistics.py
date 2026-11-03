@@ -228,6 +228,16 @@ class Dataset:
             raise ValueError('Statistic out of range; scale the data')
         return value
 
+    def observations(self, column):
+        """Validated observations, with frequency as repetition, streamed."""
+        if column not in ('X','Y') or (column == 'Y' and not self.paired):
+            raise ValueError('Column unavailable: '+column)
+        xs, ys, _, _, weights = self._collect()
+        values = xs if column == 'X' else ys
+        for row, value in enumerate(values):
+            for _ in range(weights[row]):
+                yield value
+
     def to_csv(self):
         lines = ['# Picoware statistics v1; frequency=%d' % self.frequency,
                  'X,Y,Freq' if self.paired else 'X,Freq']

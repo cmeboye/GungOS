@@ -1,6 +1,6 @@
 # Working on GungOS
 
-This is the GungOS v1.34 source tree with the matching firmware and SD application updates.
+This is the GungOS v1.35 source tree with the matching firmware and SD application updates.
 Use this checkout as the project root. The source and pinned dependencies do
 not require another GungOS copy or a sibling MicroPython checkout.
 

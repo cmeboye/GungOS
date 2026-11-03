@@ -61,6 +61,7 @@ q1(X)
 q3(X)
 iqr(X)
 sum(X)
+prod(X)
 sum2(X)
 n(X)
 min(X)
@@ -76,6 +77,12 @@ predict(4)
 
 `std` and `var` are **sample** values (n−1); `pstd` and `pvar` are population
 values (n). Sample values require at least two effective observations.
+
+`prod(X)`/`prod(Y)` multiply observations, with frequencies acting as repetitions
+when enabled; zero-frequency rows are excluded. Products are streamed and limited
+to 1024 effective observations per call, with overflow and detected underflow
+reported as errors. The existing dataset `sum` is unchanged. Scalar and indexed
+sums/products are described in [ScientificCalculator.md](ScientificCalculator.md).
 
 Quartiles use **Type 7 linear interpolation**: position `(n−1)*p` in the
 ordered observations, with interpolation between adjacent values. Frequencies
@@ -132,9 +139,9 @@ roughly seven-digit precision; input rounding cannot be recovered afterwards.
 Undefined/out-of-range statistics are identified instead of shown as valid numbers.
 
 Statistics requires the selected native ulab build **with numpy.sort**. The
-desktop interpreter is rebuilt for this feature. On-device support arrives with
-the planned custom UF2; updating only the SD package cannot install native ulab.
-The current device UF2 has not been rebuilt as part of this preview.
+desktop interpreter supports this feature. Device firmware must also provide
+that native build; updating only the SD package cannot install native ulab.
+Physical device qualification remains separate from host simulator checks.
 
 ```sh
 builds/MicroPython/desktop/micropython -X heapsize=16M simulator/test_statistics.py

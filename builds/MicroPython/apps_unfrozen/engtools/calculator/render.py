@@ -72,6 +72,19 @@ class Renderer:
             self.line(cx-1, y+3, cx-2, y+h-4, color)
             self.line(cx-2, y+h-4, cx-4, y+h-1, color)
             self.line(cx-4, y+h-1, cx-6, y+h-2, color)
+        elif kind == 'sum':
+            self.line(x+w-1, y+2, x+w-1, y, color)
+            self.line(x+w-1, y, x, y, color)
+            self.line(x, y, x+w//2, y+h//2, color)
+            self.line(x+w//2, y+h//2, x, y+h-1, color)
+            self.line(x, y+h-1, x+w-1, y+h-1, color)
+            self.line(x+w-1, y+h-1, x+w-1, y+h-3, color)
+        elif kind == 'prod':
+            self.line(x, y, x+w-1, y, color)
+            self.line(x+3, y, x+3, y+h-1, color)
+            self.line(x+w-4, y, x+w-4, y+h-1, color)
+            self.line(x+1, y+h-1, x+5, y+h-1, color)
+            self.line(x+w-6, y+h-1, x+w-2, y+h-1, color)
 
     def layout(self, row, font=FONT_MEDIUM):
         cw, ch = self.metrics[font]
@@ -103,6 +116,29 @@ class Renderer:
                 boundw, h = max(a.w, b.w)+4, max(44, expr.h+8, a.h+b.h+18)
                 box = Box('int', 15+boundw+expr.w+3+2*cw, h, (h-expr.h)//2+expr.base, font,
                           children=[(a, 14, h-a.h), (b, 14, 0), (expr, 15+boundw, (h-expr.h)//2)])
+            elif item.kind in ('sum','prod'):
+                index, lower, upper = [self.layout(r, FONT_XTRA_SMALL) for r in item.rows[:3]]
+                expr = self.layout(item.rows[3], font)
+                tinyw = self.metrics[FONT_XTRA_SMALL][0]
+                lowerw = index.w+tinyw+lower.w
+                lowerbase = max(index.base, lower.base)
+                lowerh = lowerbase+max(index.h-index.base, lower.h-lower.base)
+                symbolw, symbolh = 20, max(24, ch+8)
+                leftw = max(symbolw+4, lowerw+2, upper.w+2)
+                top = upper.h+3
+                base = top+(symbolh-ch)//2+ch
+                # Move the whole operator down if a tall operand needs extra ascent.
+                offset = max(0, expr.base-base)
+                top, base = top+offset, base+offset
+                lowery = top+symbolh+3
+                h = max(lowery+lowerh, base+expr.h-expr.base)
+                box = Box(item.kind, leftw+6+expr.w, h, base, font,
+                          value=((leftw-symbolw)//2, top, symbolw, symbolh,
+                                 (leftw-lowerw)//2+index.w, lowery+lowerbase-8),
+                          children=[(index, (leftw-lowerw)//2, lowery+lowerbase-index.base),
+                                    (lower, (leftw-lowerw)//2+index.w+tinyw, lowery+lowerbase-lower.base),
+                                    (upper, (leftw-upper.w)//2, offset),
+                                    (expr, leftw+6, base-expr.base)])
             elif item.kind == 'logb':
                 base, arg = self.layout(item.rows[0], script), self.layout(item.rows[1], font)
                 h = max(arg.h, ch+base.h//2)+4
@@ -144,6 +180,10 @@ class Renderer:
         elif kind == 'int':
             self.glyph('int', x+1, y+4, 12, box.h-8, color)
             self.text(x+box.w-2*cw, y+box.base-ch, 'dx', self.palette.MUTED, box.font)
+        elif kind in ('sum','prod'):
+            sx, sy, sw, sh, ex, ey = box.value
+            self.glyph(kind, x+sx, y+sy, sw, sh, color)
+            self.text(x+ex, y+ey, '=', color, FONT_XTRA_SMALL)
         elif kind == 'logb':
             self.text(x, y+box.base-ch, 'log', color, box.font)
             arg, ax, ay = box.children[1]

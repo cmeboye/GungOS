@@ -18,16 +18,24 @@ app.show(vm)
 calc=app._active
 for mode in range(6):
     calc.choose_mode(mode)
-    assert not calc.show_hints
+    assert not calc.help_open
     vm.input_manager._last_button=k.BUTTON_F9;vm.run()
-    assert calc.show_hints
+    assert calc.help_open
     vm.input_manager._last_button=k.BUTTON_F9;vm.run()
-    assert not calc.show_hints
+    assert not calc.help_open
 calc.choose_mode(0)
 for char in '2+3':
     vm.input_manager._last_button=vm.input_manager._key_to_button(ord(char));vm.run()
 vm.input_manager._last_button=k.BUTTON_CENTER;vm.run()
 assert calc.answer==5
+for char in 'sum() ':
+    vm.input_manager._last_button=vm.input_manager._key_to_button(ord(char));vm.run()
+assert calc.editor.root[0].kind=='sum' and calc.editor.parents[-1][2]==1
+for button in (k.BUTTON_1,k.BUTTON_TAB,k.BUTTON_3,k.BUTTON_TAB,k.BUTTON_K):
+    vm.input_manager._last_button=button;vm.run()
+assert source(calc.editor.root)=='sum(k,1,3,k)'
+vm.input_manager._last_button=k.BUTTON_F6;vm.run()
+assert calc.answer==6
 vm.selected_color=0xFD20;calc.draw()
 assert calc.accent==0xFD20
 vm.draw.screenshot('/private/tmp/picolab-calculator-theme.bmp')
@@ -35,9 +43,9 @@ vm.back()
 from picoware.gui.widget import WidgetHost
 host=WidgetHost(vm,(132,114,184,184));host.load('Calculator Widget')
 assert host.module is not None,host.error
-assert app._active.compact and not app._active.show_hints
+assert app._active.compact and not app._active.help_open
 host.context.input_manager._last_button=k.BUTTON_F9
 host.module.run(host.context)
-assert app._active.show_hints
+assert app._active.help_open
 host.stop()
-print('PASS: compiled SD modules, six-mode F9 toggle, arithmetic, theme and native widget')
+print('PASS: compiled SD modules, six-mode F9 help, Sigma slots/evaluation, arithmetic, theme and native widget')

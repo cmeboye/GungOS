@@ -7,10 +7,11 @@ By Cem Gungor, based on [Picoware by jblanked](https://github.com/jblanked/Picow
 
 *Simulator preview with the current logo and Lorenz widget; status and resource figures are simulated.*
 
-GungOS v1.34 combines a customizable desktop, a calculator widget, themed menus and
+GungOS v1.35 combines a customizable desktop, a calculator widget, themed menus and
 keyboard-driven applications on a 320 × 320 display.
 
-- **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint drawing.
+- **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint drawing, PicoDict English/Italian lookup,
+  and PicoReader EPUB/TXT reading.
 - **PicoLAB:** scientific calculator, statistics, solvers, complex/Base-N/matrix modes,
   Graph and Graph3D, direct-geometry PicoCAD, BeamView for beams/plane frames,
   Mohr circles, Shrink Fit, Heat transfer 2D and the PicoSpice circuit simulator, backed by
@@ -21,7 +22,9 @@ keyboard-driven applications on a 320 × 320 display.
 
 The latest Eggcel sources include Range→Go, fill down/right, one-step undo,
 formula-to-value conversion, XY/column/pie charts and local error recovery.
-Firmware and SD application updates ship together as v1.34.
+Firmware and SD application updates ship together as v1.35, with Spleen fonts
+and rendered Sigma/Pi calculator templates. Full SD packages include dictionary
+data and original reader samples. Device qualification is pending user testing.
 System → Settings → Appearance customizes the accent, canvas and dark/light
 surface text colours with a live preview. Further engineering disciplines remain drafts.
 
@@ -31,7 +34,7 @@ alerts in 7 instead of 48, and text formatting is 5× faster. It also fixes SD
 directory corruption from the FAT32 driver.
 It retains the v1.31 fix that returns closed apps' memory: SD app code unloads at the menus.
 It fixes the v1.3 performance issue (heap kept climbing after closing apps);
-use v1.34, not v1.3.
+use v1.35, not v1.3.
 Version 1.3 added Beam view (beams, plane frames, section editor), a shared
 PicoLAB interface for Beam view, Graph and Graph3D, and Graph3D ranges and heat
 maps; the firmware adds plane frames to picosolve. Version 1.2 introduced native graphics, SRAM/PSRAM
@@ -51,7 +54,7 @@ After building:
 1. Back up the SD card. For a fresh card, copy `sd-card/` onto writable FAT32.
    For an upgrade, merge the app files while retaining existing settings and documents.
 2. Put the **Pico 2 W** into BOOTSEL mode and copy
-   `firmware/GungOS-v1.34-PicoCalc-Pico2W.uf2` onto its bootloader drive.
+   `firmware/GungOS-v1.35-PicoCalc-Pico2W.uf2` onto its bootloader drive.
 3. Insert the SD and reboot. Configure Wi-Fi under Comms → Wi-Fi → Scan.
 
 This source tree targets only PicoCalc with Pico 2 W. Subsequent

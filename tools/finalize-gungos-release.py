@@ -34,6 +34,20 @@ def main():
                 assert '..' not in Path(name).parts
                 package.extract(name,card)
     for name in ('settings','wifi','engineering'):(card/'picoware'/name).mkdir()
+    # Full SD releases carry their optional-app data, never a personal SD tree.
+    if (ROOT/'builds/MicroPython/apps_unfrozen/PicoDict.py').exists():
+        data_package=ROOT/'builds/MicroPython/PicoDict-data.zip'
+        expected={'picoware/dictionary/'+name for name in ('en-it.pdict','it-en.pdict','NOTICE.txt','manifest.json')}
+        with zipfile.ZipFile(data_package) as package:
+            assert set(package.namelist())==expected,'Unexpected dictionary data archive contents'
+            for name in sorted(expected):package.extract(name,card)
+    if (ROOT/'builds/MicroPython/apps_unfrozen/PicoReader.py').exists():
+        samples_spec=importlib.util.spec_from_file_location('reader_samples',ROOT/'tools/build-reader-samples.py')
+        samples=importlib.util.module_from_spec(samples_spec);samples_spec.loader.exec_module(samples)
+        samples.generate(card/'picoware/documents/picoreader')
+    for source,target in (('LICENSE','LICENSE.txt'),('THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md'),
+                          ('assets/fonts/spleen/LICENSE','Spleen-LICENSE.txt')):
+        shutil.copy2(ROOT/source,card/target)
     defaults={'screen_brightness':100,'theme_color':31,'background_color':0,
               'text_on_dark':65535,'text_on_light':0,'debug':False,
               'gmt_offset':0,'onscreen_keyboard':False,
@@ -59,19 +73,26 @@ def main():
         build_info['source_revision']='source archive (Git metadata unavailable)'
     report=ROOT/'verification/simulator-tests.json'
     if report.exists():
-        suites=json.loads(report.read_text())['tests']
+        data=json.loads(report.read_text())
+        assert data['version']==verify.VERSION,'Simulator report belongs to another release'
+        suites=data['tests']
         assert suites and all(s['exit_code']==0 for s in suites),'Simulator regression failure'
         build_info['validation']['simulator_suites_passed']=len(suites)
     compiled_report=ROOT/'verification/compiled-sd-tests.json'
     if compiled_report.exists():
-        suites=json.loads(compiled_report.read_text())['tests']
+        data=json.loads(compiled_report.read_text())
+        assert data['version']==verify.VERSION,'Compiled SD report belongs to another release'
+        suites=data['tests']
         assert suites and all(s['exit_code']==0 for s in suites),'Compiled SD regression failure'
         build_info['validation']['compiled_sd_suites_passed']=len(suites)
     (ROOT/'verification/build-info.json').write_text(json.dumps(build_info,indent=2)+'\n')
     (ROOT/'verification/package-check.json').write_text(json.dumps(image,indent=2)+'\n')
-    package_roots=('firmware','sd-card','verification')
-    paths=sorted(p for name in package_roots for p in (ROOT/name).rglob('*') if p.is_file() and '.build' not in p.relative_to(ROOT).parts
-                 and p.name not in ('SHA256SUMS.txt','.DS_Store') and '__pycache__' not in p.parts)
+    # The manifest describes this release, not earlier UF2s/reports in a checkout.
+    reports=('build-info.json','package-check.json','simulator-tests.json','compiled-sd-tests.json',
+             'firmware.elf','firmware.elf.map','frozen_content.c','mpversion.h')
+    paths=[firmware]+[ROOT/'verification'/name for name in reports if (ROOT/'verification'/name).is_file()]
+    paths+=list(p for p in card.rglob('*') if p.is_file() and p.name!='.DS_Store')
+    paths=sorted(paths)
     (ROOT/'SHA256SUMS.txt').write_text(''.join(verify.sha256(p)+'  '+p.relative_to(ROOT).as_posix()+'\n' for p in paths))
     print('GungOS release ready:',ROOT)
     print('UF2:',firmware)
