@@ -1,11 +1,48 @@
-# Public repository review — 2026-10-18
+# Public repository review — 6 November 2026
+
+The current publication preparation follows the dated
+[Picoware comparison audit](../guides/RepositoryAudit-2026-11-06.md) and the
+[publication readiness record](../guides/PublicationReadiness.md).
+The working source is unreleased **1.36-dev**; v1.35 remains a fixed historical
+device-test tag. Host validation is separate from physical-device qualification.
+
+Run the same source checks as GitHub Actions:
+
+```sh
+python3 tools/check-source.py --build
+```
+
+This checks current Git candidates, builds the matching host tools, compiles the
+SD apps, runs the canonical self-check and the additional fixture-driven and
+standalone tests. Logs and the step summary stay under `.build/source-checks/`.
+The workflow currently uses macOS; it does not certify every platform or asset.
+
+## History scan and source boundaries
+
+The 6 November audit read 17,827 unique blobs (328,712,083 bytes) across the 62
+local commits reachable at its pinned baseline. Its two historical test literal
+matches were manually confirmed as synthetic fixtures; no unresolved findings
+or private/generated source paths remained. See that audit for exact scope and
+limits. Cleanup additions are checked as current Git candidates before commit.
+The source checker does not itself re-audit history.
+
+Build outputs, source/release ZIPs, device state, local backups and optional
+recordings remain ignored. Use Git contents or reviewed release artifacts for
+publication. Keep component notices and source revisions with distributed builds.
+The earlier GungOS project has a separate legacy branch/tag and backup; it is not
+relicensed by the current Picoware-derived source's root license.
+
+## Historical review — 18 October 2026
+
+The following is preserved as a dated record, including its original 26-commit
+scope and old release references. It is not a statement about the current branch.
 
 This pass reviewed the local Git source repository and the history reachable
 from its local refs. It did not add a remote, publish a release, rewrite history
 or push anything. Generated device packages under `releases/` remain separate,
 ignored build snapshots; the current source includes newer menu artwork.
 
-## Source and repository layout
+### Source and repository layout
 
 - Firmware/native source lives in `src/MicroPython/`; editable SD apps live in
   `builds/MicroPython/apps_unfrozen/`. Pinned dependencies and notices remain in
@@ -22,7 +59,7 @@ ignored build snapshots; the current source includes newer menu artwork.
 - Setup, simulator and installation guides describe v1.2 and the custom native
   desktop interpreter. A stock MicroPython executable is insufficient.
 
-## Credential and history findings
+### Credential and history findings
 
 The current Git-candidate scan found no unresolved common credential signatures.
 A separate scan checked all **26 commits** reachable from local branches/tags
@@ -42,7 +79,7 @@ an automatic guarantee for subsequent commits. Git reflogs, unreachable objects,
 remote-only refs and secret formats outside the checked signatures were not
 covered. Ignored private files remain on disk and were not scanned for publishing.
 
-## Validation
+### Validation
 
 From the repository root:
 
@@ -62,7 +99,7 @@ were not rebuilt. Review new release artifacts separately and keep their matchin
 source revision and notices. Do not upload an unfiltered ZIP of the local working
 directory: ignored backups, personal data and local media are still present.
 
-## Licenses and optional media
+### Licenses and optional media
 
 The Picoware-derived software remains GPLv3; component-specific licenses and
 notices are retained in `LICENSE`, `CREDITS.md` and `THIRD_PARTY_NOTICES.md`.

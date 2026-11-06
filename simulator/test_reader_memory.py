@@ -13,8 +13,7 @@ import tempfile
 ROOT=Path(__file__).resolve().parents[1]
 compiler=os.getenv('MPY_CROSS')
 if not compiler:
-    compiler=next((str(ROOT/p) for p in ('.build/v1.35/mpy-cross/mpy-cross',
-                                        '.build/mpy-cross/mpy-cross') if (ROOT/p).is_file()),None)
+    compiler=next((str(ROOT/p) for p in ('.build/mpy-cross/mpy-cross',) if (ROOT/p).is_file()),None)
 if not compiler:raise SystemExit('Set MPY_CROSS to the matching MicroPython bytecode compiler')
 spec=importlib.util.spec_from_file_location('reader_samples',ROOT/'tools/build-reader-samples.py')
 samples=importlib.util.module_from_spec(spec);spec.loader.exec_module(samples)
@@ -33,6 +32,8 @@ for name in names:
     for cycle in range(20):
         width=50 if sys.argv[2]=='lantern' else (50,38,25)[cycle%3]
         for chapter in range(len(book.chapters)):
+            # Release the previous whole-chapter result before the next read.
+            lines=[];gc.collect()
             lines=wrap(book.chapter(chapter),width)
             assert lines and all(len(line)<=width for line in lines)
             gc.collect()

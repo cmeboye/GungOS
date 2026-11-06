@@ -88,6 +88,6 @@ with tempfile.TemporaryDirectory(prefix='gungos-extra-functions-') as temp:
                     text=(mantissa+'e%+d'%exponent).encode();f.write(bytes([len(text)]));f.write(text)
     binary=str(ROOT/'builds/MicroPython/desktop/micropython')
     subprocess.run([binary,'-X','heapsize=16M','simulator/test_calculator_functions.py',str(path)],cwd=ROOT,check=True)
-    staging=ROOT/'.build/calculator-functions-2026-11-03/sd-app-staging'
+    staging=ROOT/'.build/sd-app-staging'
     if staging.is_dir():subprocess.run([binary,'-X','heapsize=16M','simulator/test_calculator_functions.py',str(path),str(staging.relative_to(ROOT))],cwd=ROOT,check=True)
 print('PASS:',len(cases),'additional function references from math/cmath and exact Decimal rounding')

@@ -1,141 +1,132 @@
-# Building GungOS v1.35
+# Building GungOS
 
-The full SD build also requires `builds/MicroPython/PicoDict-data.zip`; create
-it from the supplied WikDict sources using [PicoDict.md](guides/PicoDict.md).
-Reader samples are generated from original text during packaging.
-
-The release vendors its source dependencies. Building does not fetch from the
-network. Use the pinned sources in `vendor/`; no `git submodule update` is needed.
+This branch builds **1.36-dev**, an unreleased development version. The existing
+v1.35 tag and its [device-test notes](guides/Release-v1.35.md) describe an earlier
+snapshot. Current native/image changes require rebuilding firmware as well as
+the SD apps. Physical qualification of the resulting set remains pending.
 
 ## Host requirements
 
-- Python 3, Make, CMake, a host C/C++ compiler and **Arm GNU Toolchain**
+- Python 3, Make, CMake, a host C/C++ compiler and Arm GNU Toolchain
   (`arm-none-eabi-gcc`, `arm-none-eabi-g++`, binutils).
-- The shipped build was made on Apple Silicon with Arm GNU Toolchain 15.3.Rel2
-  (GCC 15.3.1) and CMake 4.4.4. The toolchain itself is installed separately.
-- Optional: SDL2 to show the simulator and hear sound; ffmpeg to reconvert the
-  original sound recordings. Neither is required for the firmware build.
+- The historical v1.35 build used Apple Silicon, Arm GNU Toolchain 15.3.Rel2
+  (GCC 15.3.1) and CMake 4.4.4. Install the toolchain separately and put its
+  `bin` directory on PATH.
+- SDL2 for simulator viewer/audio and the full host check suite; Pillow for
+  artwork checks and generated image test fixtures. Firmware compilation does
+  not require them. ffmpeg is only needed to prepare optional local recordings.
+- Clang for `tools/check-device-syntax.sh` (type checking against real SDK headers).
 
-## Firmware and SD build
+## 1. Prepare dictionary data for a full SD package
 
-Add your Arm toolchain's `bin` directory to PATH, open a terminal at this
-directory, and run:
+The source includes PicoDict code but not its generated dictionary data or raw
+SQLite inputs. Obtain the two WikDict developer databases and follow
+[PicoDict.md](guides/PicoDict.md), including its attribution and license terms:
+
+```sh
+python3 tools/build-dictionary.py --en-it /path/en-it.sqlite3 --it-en /path/it-en.sqlite3
+python3 tools/check-build-inputs.py
+```
+
+This creates the ignored `builds/MicroPython/PicoDict-data.zip`. The input hashes,
+converted-data hashes and CC BY-SA 4.0 attribution are retained in its manifest
+and notice. Once prepared, compilation and packaging use local files and do not
+fetch dependencies. Original reader samples are generated during packaging.
+The full build validates dictionary contents before compiling; direct packaging
+validates them before replacing any generated SD output.
+
+## 2. Build firmware and the clean SD package
 
 ```sh
 sh tools/build-gungos-release.sh
-```
-
-The script builds a matching `mpy-cross`, host picotool and the RP2350 firmware,
-compiles the shipped applications, regenerates clean SD contents and records
-checksums. Output:
-
-- `firmware/GungOS-v1.35-PicoCalc-Pico2W.uf2`
-- `sd-card/` and `GungOS-v1.35-SD.zip`
-- `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
-
-Intermediate files live in `.build/` and can be deleted after building. To place
-them elsewhere, set `GUNGOS_BUILD_DIR` to an absolute directory. Build parallelism
-defaults to eight jobs; set `PICOWARE_BUILD_JOBS` to change it.
-
-The RP2350 flash layout reserves 2,048,000 bytes for the internal MicroPython
-filesystem within the Pico 2 W's 4 MiB flash. Application MPY files and optional licensed Tetris
-WAVs live on SD. The selected native ulab uses float32 and the dedicated PCM
-module drives PicoCalc speakers with PWM/DMA.
-
-`vendor/revisions.json` identifies upstream revisions. Any local MicroPython
-adaptation is recorded in `vendor/micropython-local.patch` and already applied
-to the vendored source. Firmware build date defaults to 2026-11-03 UTC through
-`SOURCE_DATE_EPOCH`; toolchain changes can change the firmware checksum.
-
-The PicoCalc CMake adapter keeps GCC 15's array-bounds diagnostic for the
-upstream Mbed TLS fixed-length XOR tail as a warning for `aes.c` and `gcm.c` only.
-The library source is unchanged; other firmware warnings retain `-Werror`.
-
-## Public and local audio
-
-The default build omits audio recordings. Tetris remains playable without sound;
-new clean SD settings disable sound when no WAV assets are packaged. Local audio
-files and host executables are not part of a Git clone. See
-[optional audio](guides/TetrisAudio.md) for an explicit audio-enabled app build.
-
-## Verification
-
-```sh
 python3 tools/verify-gungos-release.py
 ```
 
-To build and check the host simulator using the same vendored MicroPython:
+Outputs for the current development identity:
+
+- `firmware/GungOS-v1.36-dev-PicoCalc-Pico2W.uf2`
+- `sd-card/` and `GungOS-v1.36-dev-SD.zip`
+- `verification/build-info.json`, firmware ELF/map and `SHA256SUMS.txt`
+
+The RP2350 build targets Pico 2 W's 4 MiB flash and reserves 2,048,000 bytes for
+the internal filesystem. Editable applications compile to SD `.mpy` files.
+Intermediates live in `.build/`; set `GUNGOS_BUILD_DIR` to an absolute path for
+a separate build and `PICOWARE_BUILD_JOBS` to control parallelism (default eight).
+
+For a firmware-only build that does not require dictionary data:
+
+```sh
+GUNGOS_SKIP_PACKAGE=1 sh tools/build-gungos-release.sh
+```
+
+That stops after the native build; its UF2 is under `.build/rp2/firmware.uf2`
+(or the selected build directory). It does not produce a clean SD package.
+
+Pinned source identities are in `vendor/revisions.json`; the recorded MicroPython
+patch is already applied in `vendor/micropython-local.patch`. No submodule fetch
+is needed. `SOURCE_DATE_EPOCH` defaults to 3 November 2026 UTC for reproducible
+build timestamps; compiler/toolchain changes can still change checksums.
+The adapter keeps a known GCC 15 Mbed TLS array-bounds diagnostic as a warning
+for `aes.c`/`gcm.c` only; it does not relax firmware-wide `-Werror`.
+
+## 3. Build and run the simulator
 
 ```sh
 mkdir -p .build
 MICROPYTHON_DIR="$PWD/vendor/micropython" \
 PICOWARE_DESKTOP_SOURCE_ALIAS="$PWD/.build/desktop-source" \
   sh tools/micropython-desktop.sh
-sh tools/run-micropython-desktop.sh --sim-check --network offline --audio silent
 sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w
 ```
 
-The simulator's initial SD tree uses synthetic network/settings fixtures. It is
-for development and should never be copied to a device instead of `sd-card/`.
+Use the bundled source and this custom interpreter; stock MicroPython lacks the
+native modules. The simulator's SD/flash data is synthetic development state and
+is not a deployment package. The simulator build is separate from an Arm UF2.
 
-The source tree is checked separately with:
+## 4. Validate source before publishing
+
+Install SDL2 and Pillow in the host environment, then run:
+
+```sh
+python3 tools/check-source.py --build
+```
+
+The same command runs in GitHub Actions on macOS. It builds a fresh matching
+compiler and simulator, compiles every shipped application, checks publication
+candidates/artwork/native code, runs the canonical simulator self-check and
+dispatches the additional calculator/reader tests through their fixture drivers.
+The tests include source and compiled application paths. Each step is logged
+under `.build/source-checks/`; a failing step stops the run. Dictionary data,
+personal books and original audio recordings are not needed for source checks.
+Some legacy test outputs use `/private/tmp`, so the complete suite currently
+expects the macOS temporary-directory layout. Firmware/simulator builds also
+support Linux; a Linux CI job is not claimed by this workflow.
+
+The quick publication checks remain:
 
 ```sh
 python3 tools/check-public-repo.py
 python3 tools/tests/test_public_repo.py
 ```
 
-To verify packed artwork against the PNG sources, install Pillow in your host
-Python environment and run `python3 tools/convert-dashboard-assets.py --check`.
-The firmware consumes the committed packed modules and does not require Pillow
-or a PNG decoder.
+These inspect current Git candidates, not all history. See the dated
+[publication audit](guides/RepositoryAudit-2026-11-06.md) and
+[current validation record](guides/PublicationReadiness.md).
 
-Native code has host tests, and device-only C can be type-checked against the
-real pico-sdk headers without the Arm toolchain:
+## Application edits, release files and device checks
 
-```sh
-sh src/MicroPython/gfx/tests/run-tests.sh
-sh src/MicroPython/picosolve/tests/run-tests.sh
-sh src/MicroPython/sd/tests/run-tests.sh
-sh tools/check-device-syntax.sh
-```
+Edit `builds/MicroPython/apps_unfrozen/`, then compile with the matching
+`.build/mpy-cross/mpy-cross`. Replace changed `.mpy` files and shared dependencies
+on the SD card; preserve documents/settings. Firmware Python, native and font
+changes need a new UF2. Default packages omit optional Tetris recordings; see
+[audio setup](guides/TetrisAudio.md) for preparation of suitably licensed files.
 
-Release checksum generation covers `firmware/`, `sd-card/` and `verification/`;
-it excludes local backups, personal SD trees and the Git database. Build from
-a clean source revision when preparing a public release. Preserve earlier
-release folders; rebuilding the source does not refresh an existing snapshot
-under `releases/`. Keep each UF2 with its matching SD package and source revision.
+Publish reviewed artifacts with their source revision, notices and checksums.
+Existing ignored `releases/` snapshots do not update when source changes. Keep
+the v1.35 tag fixed and choose a final new release identity before qualification.
+Host validation does not replace testing that exact firmware/SD set on PicoCalc.
 
-## Editing applications
-
-Edit `builds/MicroPython/apps_unfrozen/`, then rerun the build script or compile
-with the matching `.build/mpy-cross/mpy-cross`. Copy changed `.mpy` files and
-their shared dependencies to the SD card. Firmware Python/native changes require
-a new UF2. Ordinary app edits can be tested in the simulator first.
-
-## v1.2 performance validation
-
-The working source combines the final released v1.1 dashboard (238 × 238
-widget canvas, centered logo and theme/status features) with native gfx,
-SRAM/PSRAM image storage and dirty-row DMA presentation. The release version is 1.2;
-previous v1.1 packages remain available for rollback.
-
-Use a fresh absolute build directory for this integration:
-
-```sh
-GUNGOS_BUILD_DIR="$PWD/.build/performance" sh tools/build-gungos-release.sh
-python3 tools/verify-gungos-release.py
-```
-
-The build uses the bundled MicroPython/Pico SDK and picotool sources, an
-installed Arm GNU compiler for the Pico 2 W, and a matching host mpy-cross for
-SD apps. The macOS simulator is a separate native host build. A simulator
-binary cannot be converted to the device UF2.
-
-Default panel transfers remain 16-bit. The Benchmark SD app can temporarily
-try 12-bit transfers and asks for a colour verdict. Device results are written
-to `picoware/benchmark.txt`. Open the EngTool render benchmark and
-press F4 for that baseline suite, or F6 for the core benchmark. The default engineering run writes
-`picoware/engtool-render-benchmark.txt`; see [its hardware guide](guides/EngToolBenchmark.md).
-The picosolve C kernel and MicroPython binding are linked into this firmware;
-Beam, Formula and geometry entry points are available to the SD apps.
+Historical rendering/core benchmarks and the optional 12-bit display experiment
+are described in [Performance.md](guides/Performance.md) and
+[EngToolBenchmark.md](guides/EngToolBenchmark.md). They are not new measurements
+of this development build; default panel transfers remain 16-bit.

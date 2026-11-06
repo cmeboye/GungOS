@@ -35,7 +35,7 @@ def exit_child():
 assert lab._page=='root' and [r[1] for r in lab.MENUS['root']]==['Checks','Tools','Modules']
 path();shot('root')
 pick('Checks');path('checks')
-assert [r[1] for r in lab.MENUS['checks']]==['Numerics check','Plot previews']
+assert [r[1] for r in lab.MENUS['checks']]==['Numerics check','Plot previews','Calculator check']
 pick('Numerics check');path('checks','Numerics check')
 for _ in range(200):
     key(k.BUTTON_NONE)
@@ -48,6 +48,9 @@ key(k.BUTTON_CENTER);assert vm.current_view.name=='eng_plot2d'
 path('checks','Plot previews')
 key(k.BUTTON_ESCAPE);assert lab._page=='gallery'
 key(k.BUTTON_ESCAPE);assert lab._page=='checks' and lab._selected==1
+pick('Calculator check');assert vm.current_view.name=='calculator_check'
+path('checks','Calculator check')
+exit_child();assert lab._page=='checks' and lab._selected==2
 key(k.BUTTON_ESCAPE);assert lab._page=='root' and lab._selected==0
 pick('Tools');path('tools');shot('tools')
 assert [r[1] for r in lab.MENUS['tools']]==['Grapher','Scientific calculator','UnitConverter']
@@ -166,7 +169,7 @@ key(k.BUTTON_HOME)
 assert vm.current_view.name=='parent' and not breadcrumbs._paths
 assert lab._page=='root' and not lab._resume and not lab._suspended
 # Full and legacy simulator routes resolve through the new folders.
-for route in ('PicoLAB/checks/Numerics check','PicoLAB/checks/Plot previews',
+for route in ('PicoLAB/checks/Numerics check','PicoLAB/checks/Plot previews','PicoLAB/checks/Calculator check',
               'PicoLAB/tools/Grapher','PicoLAB/tools/Graph','PicoLAB/tools/Graph3D','PicoLAB/tools/Scientific calculator','PicoLAB/tools/UnitConverter',
               'PicoLAB/modules/structural/BeamView','PicoLAB/modules/thermal',
               'PicoLAB/modules/Machine design','PicoLAB/modules/Machine design/PicoCAD',

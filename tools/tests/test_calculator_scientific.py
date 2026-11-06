@@ -21,9 +21,7 @@ with tempfile.TemporaryDirectory(prefix='gungos-calc-inverse-') as tmp:
                 out.write('%s\t%r\t%r\t%.17g\t%.17g\n'%(name,x,y,value.real,value.imag));count+=1
     binary=str(ROOT/'builds/MicroPython/desktop/micropython')
     subprocess.run([binary,'-X','heapsize=32M','simulator/test_calculator_scientific.py',str(path)],cwd=ROOT,check=True)
-    staging=ROOT/'.build/calculator-functions-2026-11-03/sd-app-staging'
-    if not staging.is_dir():staging=ROOT/'.build/calculator-numerics-2026-11-03/sd-app-staging'
-    if not staging.is_dir():staging=ROOT/'.build/calculator-followup-2026-11-03/sd-app-staging'
+    staging=ROOT/'.build/sd-app-staging'
     if staging.is_dir():
         subprocess.run([binary,'-X','heapsize=32M','simulator/test_calculator_scientific.py',str(path),str(staging.relative_to(ROOT))],cwd=ROOT,check=True)
 print('PASS:',count,'complex function references from CPython cmath on float32 inputs')

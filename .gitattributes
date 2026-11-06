@@ -36,3 +36,14 @@
 *.dump binary
 *.pex binary
 *.FLM binary
+
+# Imported sources and committed tables: keep GitHub's code view useful.
+vendor/** linguist-vendored
+src/MicroPython/JPEGDEC/** linguist-vendored
+src/MicroPython/ulab/upstream/** linguist-vendored
+src/MicroPython/png/upstream/** linguist-vendored
+assets/fonts/spleen/*.bdf linguist-vendored
+src/MicroPython/font/font[0-9]*.c linguist-generated
+src/MicroPython/picoware/assets/logos.py linguist-generated
+src/MicroPython/picoware/assets/dashboard_logo.py linguist-generated
+src/MicroPython/picoware/assets/status_icons.py linguist-generated

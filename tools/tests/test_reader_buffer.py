@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory(prefix='gungos-reader-buffer-') as tmp:
     native=ROOT/'builds/MicroPython/desktop/micropython'
     for heap in ('384K',):
         subprocess.run([str(native),'-X','heapsize='+heap,'simulator/test_reader_buffer.py',str(large)],cwd=ROOT,check=True)
-    compiler=ROOT/'.build/v1.35/mpy-cross/mpy-cross';stage=folder/'compiled/desktopapps/reader';stage.mkdir(parents=True)
+    compiler=ROOT/'.build/mpy-cross/mpy-cross';stage=folder/'compiled/desktopapps/reader';stage.mkdir(parents=True)
     for name in ('__init__','epub','pager'):
         source=ROOT/'builds/MicroPython/apps_unfrozen/desktopapps/reader'/(name+'.py')
         subprocess.run([str(compiler),'-o',str(stage/(name+'.mpy')),str(source)],check=True)

@@ -1,0 +1,30 @@
+name: Source checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install host check dependencies
+        run: |
+          brew list sdl2 >/dev/null 2>&1 || brew install sdl2
+          python3 -m venv .build/check-env
+          .build/check-env/bin/python -m pip install Pillow
+          echo "$GITHUB_WORKSPACE/.build/check-env/bin" >> "$GITHUB_PATH"
+      - name: Build and check the source
+        env:
+          PICOWARE_BUILD_JOBS: '4'
+        run: python3 tools/check-source.py --build

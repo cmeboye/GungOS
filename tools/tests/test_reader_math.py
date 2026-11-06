@@ -24,14 +24,16 @@ with tempfile.TemporaryDirectory(prefix='reader-math-') as temp:
     book=Book(str(epub));actual=[reader_signature(e[1]) for e in equations(book,0) if e is not None];book.close()
     assert actual==reference
     native=ROOT/'builds/MicroPython/desktop/micropython';compiler=ROOT/'.build/mpy-cross/mpy-cross'
-    subprocess.run([str(native),'-X','heapsize=8M','simulator/test_reader_math.py',str(epub)],cwd=ROOT,check=True)
+    for test in ('test_reader_math.py','test_reader_inline.py'):
+        subprocess.run([str(native),'-X','heapsize=8M','simulator/'+test,str(epub)],cwd=ROOT,check=True)
     # A private compilation stage avoids treating an earlier release as tested.
     stage=folder/'apps';stage.mkdir()
     source=ROOT/'builds/MicroPython/apps_unfrozen'
     for src in list((source/'desktopapps').rglob('*.py'))+list((source/'engtools').rglob('*.py')):
         output=stage/src.relative_to(source).with_suffix('.mpy');output.parent.mkdir(parents=True,exist_ok=True)
         subprocess.run([str(compiler),'-o',str(output),str(src)],check=True)
-    subprocess.run([str(native),'-X','heapsize=8M','simulator/test_reader_math.py',str(epub),str(stage)],cwd=ROOT,check=True)
+    for test in ('test_reader_math.py','test_reader_inline.py'):
+        subprocess.run([str(native),'-X','heapsize=8M','simulator/'+test,str(epub),str(stage)],cwd=ROOT,check=True)
     probe=folder/'core.py';probe.write_text('''import sys,gc
 sys.path.insert(0,sys.argv[2]);sys.path.insert(0,'src/MicroPython');sys.path.insert(0,'simulator/hardware')
 from desktopapps.reader.epub import Book

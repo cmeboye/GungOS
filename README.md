@@ -1,99 +1,107 @@
 # GungOS
 
+[![Source checks](https://github.com/cmeboye/GungOS/actions/workflows/source-checks.yml/badge.svg?branch=main)](https://github.com/cmeboye/GungOS/actions/workflows/source-checks.yml)
+
 A handheld engineering computer for **PicoCalc with Raspberry Pi Pico 2 W**.
 By Cem Gungor, based on [Picoware by jblanked](https://github.com/jblanked/Picoware).
 
 ![GungOS desktop in the simulator](assets/screenshots/desktop.png)
 
-*Simulator preview with the current logo and Lorenz widget; status and resource figures are simulated.*
+*Simulator preview; status and resource figures are simulated.*
 
-GungOS v1.35 combines a customizable desktop, a calculator widget, themed menus and
-keyboard-driven applications on a 320 × 320 display.
+## Development status
 
-- **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint drawing, PicoDict English/Italian lookup,
-  and PicoReader EPUB/TXT reading.
-- **PicoLAB:** scientific calculator, statistics, solvers, complex/Base-N/matrix modes,
-  Graph and Graph3D, direct-geometry PicoCAD, BeamView for beams/plane frames,
-  Mohr circles, Shrink Fit, Heat transfer 2D and the PicoSpice circuit simulator, backed by
-  float32 ulab and the picosolve solver.
-- **Games and Misc:** Tetris, Lorenz and Lenia screensavers, a calculator widget,
-  and an [engineering render stress benchmark](guides/EngToolBenchmark.md).
-- **System and connectivity:** SD file manager, PicoIDE, Wi-Fi, Bluetooth and USB.
+The current source is **1.36-dev**, an unreleased development version. It includes
+reader, image-decoding and calculator changes beyond the tagged
+[v1.35 device-test release](guides/Release-v1.35.md). Physical qualification of a
+new matching firmware/SD build is pending. See the [changelog](CHANGELOG.md) for
+changes and the [publication record](guides/PublicationReadiness.md) for validation.
 
-The latest Eggcel sources include Range→Go, fill down/right, one-step undo,
-formula-to-value conversion, XY/column/pie charts and local error recovery.
-Firmware and SD application updates ship together as v1.35, with Spleen fonts
-and rendered Sigma/Pi calculator templates. Full SD packages include dictionary
-data and original reader samples. Device qualification is pending user testing.
-System → Settings → Appearance customizes the accent, canvas and dark/light
-surface text colours with a live preview. Further engineering disciplines remain drafts.
+## What it includes
 
-Version 1.33 makes the core faster, measured on the device with the new core
-benchmark (F6 in the render benchmark): menus draw in 13 ms instead of 35,
-alerts in 7 instead of 48, and text formatting is 5× faster. It also fixes SD
-directory corruption from the FAT32 driver.
-It retains the v1.31 fix that returns closed apps' memory: SD app code unloads at the menus.
-It fixes the v1.3 performance issue (heap kept climbing after closing apps);
-use v1.35, not v1.3.
-Version 1.3 added Beam view (beams, plane frames, section editor), a shared
-PicoLAB interface for Beam view, Graph and Graph3D, and Graph3D ranges and heat
-maps; the firmware adds plane frames to picosolve. Version 1.2 introduced native graphics, SRAM/PSRAM
-image modes, changed-row DMA transfers, cached built-in imports and native
-numerical acceleration. See [performance testing](guides/Performance.md) for
-the build workflow and on-device benchmark instructions.
+- **PicoLAB:** a scientific calculator with statistics, solvers, complex/Base-N/matrix
+  modes, 2D/3D Grapher, PicoCAD, BeamView, Mohr circles, shrink fit, stress/strain,
+  buckling, section properties, Heat transfer 2D and PicoSpice. Native picosolve
+  and float32 ulab support the numerical tools. Dynamics and Fluids are planned.
+- **PicoDESK:** Eggcel spreadsheets and charts, PicoWord notes/equations, PicoPaint,
+  offline English/Italian PicoDict and EPUB/TXT PicoReader. Reader image, MathML
+  and navigation support has documented limits in the [reader guide](guides/PicoReader.md).
+- **Desktop and system:** themes, resource indicators, a calculator widget,
+  Lorenz/Lenia screensavers, Tetris, SD file management, PicoIDE, Wi-Fi, Bluetooth
+  and USB tools.
+
+This source profile targets PicoCalc with **Pico 2 W**. Other Picoware boards,
+its app store/OTA updater and several other upstream features are outside this
+profile; arbitrary upstream applications are not guaranteed compatible.
 
 ## Build and install
 
-This is the **source repository**. Generated UF2/MPY files, SD ZIPs and local
-backups are kept outside Git. [BUILD.md](BUILD.md) describes building the firmware
-and clean SD package using the included pinned dependencies; normal host tools
-and an Arm compiler are required. See [START-HERE.md](START-HERE.md) for the local workflow.
+Start with [BUILD.md](BUILD.md). It covers host requirements, the optional-data
+preparation step, firmware/SD builds and source checks. [START-HERE.md](START-HERE.md)
+explains the source layout and application workflow.
 
-After building:
+Build dependencies are pinned and bundled in `vendor/` so compilation works
+offline. They account for most repository size and retain their upstream notices.
+The full SD package also needs separately prepared PicoDict data; the build
+checks for it before compiling. Generated UF2/MPY files, SD ZIPs and local backups
+are excluded from Git. Reviewed binaries belong in GitHub Releases with their
+matching source revision.
 
-1. Back up the SD card. For a fresh card, copy `sd-card/` onto writable FAT32.
-   For an upgrade, merge the app files while retaining existing settings and documents.
-2. Put the **Pico 2 W** into BOOTSEL mode and copy
-   `firmware/GungOS-v1.35-PicoCalc-Pico2W.uf2` onto its bootloader drive.
+After building a matching firmware/SD set:
+
+1. Back up the SD card. Copy the generated `sd-card/` contents onto a fresh
+   writable FAT32 card, or merge updated app files while retaining user data.
+2. Put the **Pico 2 W** into BOOTSEL mode and copy the generated
+   `firmware/GungOS-v1.36-dev-PicoCalc-Pico2W.uf2` onto its bootloader drive.
 3. Insert the SD and reboot. Configure Wi-Fi under Comms → Wi-Fi → Scan.
 
-This source tree targets only PicoCalc with Pico 2 W. Subsequent
-app edits normally need only SD `.mpy` replacements. Firmware/native/font changes
-need a new UF2. Build outputs belong in GitHub Releases with their matching
-source revision, rather than the source history. Local `releases/` packages
-are snapshots and must be rebuilt to include later source changes.
+Ordinary SD app changes can use matching `.mpy` replacements. Native code,
+firmware Python and font changes require a new UF2.
 
-## Simulator
+## Simulator and checks
 
-Build the host simulator as described in [BUILD.md](BUILD.md), then run:
+Build the custom host interpreter as described in [BUILD.md](BUILD.md), then run:
 
 ```sh
 sh tools/run-micropython-desktop.sh --viewer --board picocalc-pico2w
 ```
 
-`Start Simulator.command` is a convenience launcher on macOS. Locally cached
-executables are not part of the repository. SDL2 enables the viewer/audio;
-headless checks use `--headless --network offline --audio silent`.
+`Start Simulator.command` is a macOS convenience launcher. SDL2 enables viewer
+and audio support; tests run offline with silent/dummy audio. The GitHub source
+workflow uses the same entry point as local validation:
 
-## Controls and documentation
+```sh
+python3 tools/check-source.py --build
+```
 
-Escape returns/cancels. Back and Del erase before the cursor. F6–F10 use
-Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot from any screen. Menus and app chrome follow the system accent.
+Host checks do not establish physical-device speed, available heap or keyboard behavior.
 
-[Desktop](guides/Desktop.md) · [Screens and controls](guides/UI.md) · [Menu headers](guides/MenuHeaders.md) · [Themes](guides/Themes.md) · [Lorenz](guides/Lorenz.md) · [Lenia](guides/Lenia.md) · [Eggcel](guides/Eggcel.md) ·
-[PicoLAB](guides/PicoLAB.md) · [PicoLAB keys](guides/Keys.md) · [PicoCAD](guides/PicoCAD.md) · [Calculator](guides/ScientificCalculator.md) · [Graph](guides/Graph.md) ·
-[Graph3D](guides/Graph3D.md) · [Tetris](guides/Tetris.md) · [Audio](guides/TetrisAudio.md) ·
-[Connectivity review](guides/Connectivity.md) · [Comms](guides/Comms.md)
+## Controls and guides
 
-## License and media
+Escape closes the innermost help/edit/view. Back and Del erase before the cursor.
+F6–F10 use Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot.
 
-The Picoware-derived software is **GPLv3**. Preserve [LICENSE](LICENSE),
-[CREDITS.md](CREDITS.md), source notices and [third-party licenses](THIRD_PARTY_NOTICES.md).
-Pinned third-party source stays in `vendor/` for offline builds.
+[Desktop](guides/Desktop.md) · [Controls](guides/Keys.md) · [Themes](guides/Themes.md) ·
+[PicoLAB](guides/PicoLAB.md) · [Calculator](guides/ScientificCalculator.md) ·
+[Grapher](guides/Grapher.md) · [PicoCAD](guides/PicoCAD.md) ·
+[PicoDESK](guides/DesktopApps.md) · [Eggcel](guides/Eggcel.md) ·
+[PicoReader](guides/PicoReader.md) · [PicoDict](guides/PicoDict.md) ·
+[Tetris](guides/Tetris.md) · [Comms](guides/Comms.md) ·
+[Performance testing](guides/Performance.md)
 
-The original Game Boy Tetris recordings are **not included in the public source
-or default generated packages**. There is no recorded redistribution grant for
-those supplied files. Tetris runs without them; optional sound requires your own
-licensed assets. See [audio setup](guides/TetrisAudio.md).
+## Origins, license and legacy
 
-[Contributing](CONTRIBUTING.md) · [Public repository checks](verification/public-review.md)
+The current firmware is based on **Picoware by jblanked** and retains its **GPLv3**
+license and source notices. See [credits](CREDITS.md), [LICENSE](LICENSE) and
+[third-party notices](THIRD_PARTY_NOTICES.md). The exact initial Picoware import
+commit was not recorded; the [comparison audit](guides/RepositoryAudit-2026-11-06.md)
+identifies verified reference snapshots and explains the uncertainty.
+
+The earlier GungOS project was based on [LofiFren/PicoCalc](https://github.com/LofiFren/PicoCalc).
+It is preserved separately on the [legacy branch](https://github.com/cmeboye/GungOS/tree/legacy/lofifren).
+
+Original Game Boy Tetris recordings are excluded from public source and default
+packages. Tetris works without them; optional sound requires suitably licensed
+assets. See [audio setup](guides/TetrisAudio.md).
+
+[Contributing](CONTRIBUTING.md) · [Public repository review](verification/public-review.md)

@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased — calculator reliability and buffered reader
+## Unreleased — 1.36-dev
+
+### Repository publication preparation
+
+- Distinguish development builds from the existing v1.35 device-test release.
+- Refresh the public quick start, build/data preparation and project lineage;
+  index PNGdec/zlib provenance and classify imported/generated code for GitHub.
+- Align dashboard-help and PicoLAB-menu checks with current behavior; provide
+  one source-check command and a GitHub workflow, including fixture-driven
+  source/compiled reader and calculator checks from a fresh checkout.
+- Validate dictionary inputs before compilation or replacement of SD outputs.
+  Keep local firmware checksum sidecars with ignored generated artifacts.
+- Release optional reader RAM pages before replaying a compressed chapter;
+  retain the visible page and SD cache while reopening the inflate window.
+  The existing source/compiled small-heap replay check retains its memory limit.
+
+### Calculator reliability and buffered reader
 
 ### PicoReader chapter navigation
 

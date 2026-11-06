@@ -17,5 +17,6 @@ with tempfile.TemporaryDirectory(prefix='reader-navigation-') as tmp:
   subprocess.run(cmd,cwd=ROOT,check=True)
   if len(sys.argv)>1:subprocess.run(cmd+[str(Path(sys.argv[1]).resolve())],cwd=ROOT,check=True)
 # Persist only our original fixture for device retesting.
-build(ROOT/'.build/reader-navigation-2026-11-03/PicoReader-Navigation-Check.epub',True)
+output=ROOT/'.build/reader-navigation';output.mkdir(parents=True,exist_ok=True)
+build(output/'PicoReader-Navigation-Check.epub',True)
 print('PASS: EPUB2 NCX and EPUB3 nav chapter labels and keyboard workflows')

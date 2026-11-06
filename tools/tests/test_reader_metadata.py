@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='reader-metadata-') as temp:
     compiler=ROOT/'.build/mpy-cross/mpy-cross'
     if native.exists():
         probe=folder/'probe.py'
-        probe.write_text("import sys,gc\nsys.path.insert(0,sys.argv[2])\nfrom desktopapps.reader.epub import Book\ngc.collect();base=gc.mem_alloc()\nfor _ in range(5):\n b=Book(sys.argv[1]);assert list(b.chapters)==['OPS/a.xhtml','OPS/b.xhtml'];assert b.title=='Large & café';b.close();b=None;gc.collect()\nassert gc.mem_alloc()-base<2048\nprint('PASS: large manifest, constrained heap, repeated cleanup')\n")
+        probe.write_text("import sys,gc\nsys.path.insert(0,sys.argv[2])\nfrom desktopapps.reader.epub import Book\n# Warm lazy MPY/qstr initialization before measuring retained growth.\nb=Book(sys.argv[1]);b.close();b=None;gc.collect();base=gc.mem_alloc()\nfor _ in range(5):\n b=Book(sys.argv[1]);assert list(b.chapters)==['OPS/a.xhtml','OPS/b.xhtml'];assert b.title=='Large & café';b.close();b=None;gc.collect()\nassert gc.mem_alloc()-base<2048\nprint('PASS: large manifest, constrained heap, repeated cleanup')\n")
         for compiled in (False,True):
             source=ROOT/'builds/MicroPython/apps_unfrozen'
             if compiled:

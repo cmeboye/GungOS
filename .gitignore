@@ -14,6 +14,7 @@
 /builds/MicroPython/desktop/
 /builds/MicroPython/*.zip
 /firmware/*.uf2
+/firmware/*.sha256
 /updates/
 /*.zip
 /*.zip.sha256

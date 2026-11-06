@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as folder:
     fixture(path,chapter='<p>'+'A sentence for paging. '*300+'</p>')
     subprocess.run([root+'/builds/MicroPython/desktop/micropython','-X','heapsize=16M',
                     root+'/simulator/test_reader_ui.py',path],check=True)
-    stage=root+'/.build/reader-buffer-2026-11-03/sd-app-staging'
+    stage=root+'/.build/sd-app-staging'
     if os.path.isdir(stage):
         subprocess.run([root+'/builds/MicroPython/desktop/micropython','-X','heapsize=16M',
                         root+'/simulator/test_reader_ui.py',path,stage],check=True)

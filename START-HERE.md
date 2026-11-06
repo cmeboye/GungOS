@@ -1,6 +1,7 @@
 # Working on GungOS
 
-This is the GungOS v1.35 source tree with the matching firmware and SD application updates.
+This is the unreleased GungOS 1.36-dev source tree. The v1.35 tag records an earlier
+firmware/SD device-test snapshot; current native changes need a matching new build.
 Use this checkout as the project root. The source and pinned dependencies do
 not require another GungOS copy or a sibling MicroPython checkout.
 
@@ -45,6 +46,11 @@ explain preparation. Firmware, native modules, fonts and global menus require
 [rebuilding the UF2](BUILD.md).
 
 ## Before publishing
+
+Run `python3 tools/check-source.py --build` for the complete source validation
+used by GitHub Actions. See [BUILD.md](BUILD.md) for host dependencies and
+[PublicationReadiness.md](guides/PublicationReadiness.md) for the current record.
+
 
 Run `python3 tools/check-public-repo.py`. It checks the Git candidate files, not
 just whether local files exist. It also checks tracked files if a repository has

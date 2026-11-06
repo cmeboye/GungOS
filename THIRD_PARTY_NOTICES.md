@@ -15,6 +15,7 @@ GPL notice does not override a component's own license.
 | TinyUSB, lwIP, BTstack, CYW43, Mbed TLS | Notices in their `vendor/micropython/lib/` directories |
 | micropython-lib and Berkeley DB | Notices in their `vendor/micropython/lib/` directories |
 | JPEGDEC | `src/MicroPython/JPEGDEC/LICENSE` and source headers |
+| PNGdec inflater fork / zlib | `src/MicroPython/png/upstream/SOURCE.md` pins PNGdec 1.1.7 and describes the local change; preserve its `LICENSE` (Apache 2.0) and the separate zlib notices in `zlib.h` and source headers |
 | Spleen bitmap fonts | Frederic Cambus; BSD 2-Clause; `assets/fonts/spleen/LICENSE`, pinned BDF sources and `source.json`; generated tables in `src/MicroPython/font/font*.c` |
 
 Some dependencies, including BTstack and the CYW43 wireless firmware, have
@@ -48,3 +49,12 @@ using Wiktionary contributor data via DBnary, under CC BY-SA 4.0. Its generated
 NOTICE.txt describes the conversion and attribution; manifest.json records input
 and output hashes. See guides/PicoDict.md for sources and build instructions.
 This data retains its own license, separate from GungOS application code.
+
+## Project lineage
+
+The current firmware is derived from [Picoware by jblanked](https://github.com/jblanked/Picoware).
+Its exact original import commit was not recorded. The dated comparison in
+`guides/RepositoryAudit-2026-11-06.md` is a reference snapshot, not a claimed fork point.
+The earlier GungOS project was based on [LofiFren/PicoCalc](https://github.com/LofiFren/PicoCalc)
+and is preserved separately as legacy; its notices and rights are not replaced
+by this project's root GPL license.

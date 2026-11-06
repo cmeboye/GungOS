@@ -66,7 +66,8 @@ def verify_sd(root):
     screens=apps/('misc/screensavers' if (source/'misc/screensavers').exists() else 'screensavers')
     assert {p.name for p in screens.glob('*.mpy')}=={'Calculator Widget.mpy','Lorenz.mpy','Lenia.mpy'},'Unexpected screensaver'
     assert (screens/'Lenia-LICENSE.txt').read_text()==(root/'guides/Lenia-LICENSE.txt').read_text(),'Missing Lenia preset notice'
-    assert {p.name for p in (apps/'misc').glob('*.mpy')} == {'Benchmark.mpy'}, 'Missing or unexpected miscellaneous app'
+    expected_misc={p.stem+'.mpy' for p in (source/'misc').glob('*.py')}
+    assert {p.name for p in (apps/'misc').glob('*.mpy')} == expected_misc, 'Missing or unexpected miscellaneous app'
     expected={p.relative_to(source).with_suffix('.mpy') for p in source.rglob('*.py')
               if 'tools' not in p.relative_to(source).parts}
     actual={p.relative_to(apps) for p in apps.rglob('*.mpy')}

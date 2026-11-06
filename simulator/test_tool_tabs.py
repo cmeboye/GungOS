@@ -91,7 +91,8 @@ key(k.BUTTON_LEFT); assert a.rows()[a.row][4] == ('section', 'd')
 key(k.BUTTON_RIGHT); assert a.rows()[a.row][4] == ('material', 'E')
 key(k.BUTTON_ESCAPE); assert a.page == 'model' and a.tabs.label == 'Section'
 rich_help(a, 'stress-section')
-key(k.BUTTON_F1); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
+# Analysis is a field on the Analysis tab, not the retired F1 shortcut.
+key(k.BUTTON_LEFT); key(k.BUTTON_CENTER); key(k.BUTTON_DOWN); key(k.BUTTON_CENTER)
 assert a.state['mode'] == 'constitutive' and a.tabs.label == 'Analysis'
 key(k.BUTTON_RIGHT); assert a.tabs.label == 'Inputs'
 key(k.BUTTON_DOWN); assert a.rows()[a.row][4] == ('stress', 1)

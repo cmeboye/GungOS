@@ -196,7 +196,11 @@ class Session:
         self.seek(chapter,page)
 
     def start_source(self,chapter):
-        self.stop_source();self.source=paginate(self.book,chapter,self.width,self.rows)
+        self.stop_source()
+        # A cache miss reopens the inflater's contiguous 32 KiB window. Drop
+        # optional RAM pages first; the visible page and SD cache stay intact.
+        self.cache.ram=[];self.cache.bytes=0
+        self.source=paginate(self.book,chapter,self.width,self.rows)
         self.source_chapter=chapter;self.produced=0
 
     def step(self):

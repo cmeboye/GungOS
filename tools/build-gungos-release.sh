@@ -5,6 +5,9 @@ release_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 micropython_root=${MICROPYTHON_DIR:-"$release_root/vendor/micropython"}
 build_root=${GUNGOS_BUILD_DIR:-"$release_root/.build"}
 jobs=${PICOWARE_BUILD_JOBS:-8}
+if [ "${GUNGOS_SKIP_PACKAGE:-0}" != "1" ]; then
+    python3 "$release_root/tools/check-build-inputs.py"
+fi
 for executable in python3 cmake make arm-none-eabi-gcc; do
     command -v "$executable" >/dev/null || { echo "Missing build tool: $executable" >&2; exit 1; }
 done

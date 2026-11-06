@@ -118,7 +118,9 @@ for button in (k.BUTTON_2,k.BUTTON_PLUS,k.BUTTON_3,k.BUTTON_CENTER):key(button)
 from engtools.calculator import app as calc
 assert calc._active.answer==5 and not calc._active.history
 snap('calculator')
-key(k.BUTTON_F9);snap('calculator-help')
+key(k.BUTTON_F9);assert calc._active.help_open;snap('calculator-help')
+key(k.BUTTON_ESCAPE)
+assert not calc._active.help_open and home.focus=='widget' and calc._active.answer==5
 key(k.BUTTON_ESCAPE);assert home.focus=='menu'
 vm.selected_color=0xFFE0;home.draw();snap('bright-accent')
 assert fb.pixel(1,43)==0xFFE0

@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='gungos-reader-images-') as tmp:
         # Force the ZIP comment scan across blocks without a 64 KiB allocation.
         z.comment=b'x'*60000
     subprocess.run([str(ROOT/'builds/MicroPython/desktop/micropython'),'-X','heapsize=8M','simulator/test_reader_images.py',str(epub)],cwd=ROOT,check=True)
-    staging=ROOT/'.build/reader-buffer-2026-11-03/sd-app-staging'
+    staging=ROOT/'.build/sd-app-staging'
     if staging.is_dir():
         subprocess.run([str(ROOT/'builds/MicroPython/desktop/micropython'),'-X','heapsize=8M','simulator/test_reader_images.py',str(epub),str(staging.relative_to(ROOT))],cwd=ROOT,check=True)
 print('PASS: original illustrated EPUB integration')

@@ -15,6 +15,8 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build-dir',type=Path,required=True)
     args=parser.parse_args()
+    # Validate external data before copying firmware or replacing the SD tree.
+    subprocess.run(['python3',str(ROOT/'tools/check-build-inputs.py')],check=True)
     spec=importlib.util.spec_from_file_location('release_verify',ROOT/'tools/verify-gungos-release.py')
     verify=importlib.util.module_from_spec(spec);spec.loader.exec_module(verify)
     firmware=ROOT/'firmware'/verify.FIRMWARE

@@ -84,5 +84,18 @@
       "code/utils/utils.c": "103c3e07e30605fa4de7ae4cf8e116bd3f1d3c3cb9ba986cdefbb3f35bb26e9b",
       "code/utils/utils.h": "c75dedc21e011694c857c9374e13833c678bdf0af9953400955dd275de083cf3"
     }
+  },
+  "pngdec": {
+    "repository": "https://github.com/bitbank2/PNGdec",
+    "commit": "2855e785bc1a80763c89a2afd808faf6156d35c6",
+    "version": "1.1.7",
+    "source": "src/MicroPython/png/upstream/SOURCE.md",
+    "local_changes": [
+      "inflate.c disables ALLOWS_UNALIGNED; use bounded byte-copy fallback"
+    ],
+    "notices": [
+      "src/MicroPython/png/upstream/LICENSE",
+      "src/MicroPython/png/upstream/zlib.h"
+    ]
   }
 }

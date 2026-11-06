@@ -58,8 +58,7 @@ with tempfile.TemporaryDirectory(prefix='gungos-calc-numerics-') as temp:
             file.write(struct.pack('<%df'%(2*len(want)),*[part for z in want for part in (complex(z).real,complex(z).imag)]))
     binary=str(ROOT/'builds/MicroPython/desktop/micropython')
     subprocess.run([binary,'-X','heapsize=8M','simulator/test_calculator_numerics.py',str(fixture)],cwd=ROOT,check=True)
-    staging=ROOT/'.build/calculator-functions-2026-11-03/sd-app-staging'
-    if not staging.is_dir():staging=ROOT/'.build/calculator-numerics-2026-11-03/sd-app-staging'
+    staging=ROOT/'.build/sd-app-staging'
     if staging.is_dir():
         subprocess.run([binary,'-X','heapsize=8M','simulator/test_calculator_numerics.py',str(fixture),str(staging.relative_to(ROOT))],cwd=ROOT,check=True)
         subprocess.run([binary,'-X','heapsize=128K','simulator/check_calculator_heap.py',str(staging)],cwd=ROOT,check=True)
