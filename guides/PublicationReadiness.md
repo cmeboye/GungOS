@@ -21,6 +21,8 @@ baseline; its failing-check results describe the pre-cleanup source.
   160 KiB compiled-reader test: release optional RAM pages before reopening the
   inflater. The displayed page and SD cache remain intact; the heap limit was
   not raised. The standalone source/compiled replay check passes after the fix.
+- Reuse the displayed reader page for an anchor within it instead of reopening
+  the chapter. A regression rejects any attempted replay for that case.
 - Keep the legacy whole-chapter sample test at its 128/256 KiB heaps while
   releasing the preceding caller-owned text result before loading another one.
   Measure metadata retention after one warm-up load so compiled-module lazy

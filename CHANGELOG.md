@@ -15,6 +15,8 @@
 - Release optional reader RAM pages before replaying a compressed chapter;
   retain the visible page and SD cache while reopening the inflate window.
   The existing source/compiled small-heap replay check retains its memory limit.
+- Reuse the current reader page when returning to an anchor it already contains,
+  avoiding an unnecessary inflater allocation; assert that no replay occurs.
 
 ### Calculator reliability and buffered reader
 

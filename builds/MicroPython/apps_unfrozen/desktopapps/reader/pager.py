@@ -169,6 +169,8 @@ class Session:
 
     def seek(self,chapter,page=0,offset=-1,word=-1):
         self.pending=(chapter,page,offset,word);self.queue=0;self.error='';self.ended=False;self.failed=False
+        if self.current and self.matches(self.current,self.pending):
+            self.accept(self.current);return
         found=self.cache.get(chapter,page) if page>=0 else None
         if found and self.matches(found,self.pending):self.accept(found)
         elif offset>=0 or word>=0:self.stop_source()

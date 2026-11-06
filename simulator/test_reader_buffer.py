@@ -43,6 +43,12 @@ for i in range(320):
 assert max(base[5:])-min(base[5:])<8192,base
 assert os.stat(cache)[6]<=DISK_PAGES*STRIDE
 for i in range(75):session.turn(-1);settle();assert session.current[1]==319-i
-anchor=session.current[4];session.seek(0,offset=anchor);settle();assert session.current[4]==anchor
+# Returning to the displayed passage must not reopen its compressed chapter.
+anchor=session.current[4];read=book.stream
+def unexpected_replay(index):raise AssertionError('Current-page anchor replayed the chapter')
+book.stream=unexpected_replay
+try:
+    session.seek(0,offset=anchor);settle();assert session.current[4]==anchor
+finally:book.stream=read
 session.close();book.close();gc.collect()
 print('PASS: native 320 forward / 75 back, cache payload',RAM_BYTES,'heap plateau',min(base[5:]),max(base[5:]),'cached flip ms max',slowest,'compiled',len(sys.argv)>2)
