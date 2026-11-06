@@ -7,6 +7,14 @@
 
 static int checks, failures;
 
+/* Compare with the platform's runtime math call. Constant-folded atan2f(0,-1)
+ * can differ by one ULP from libm on some hosts; signed-zero parity stays exact. */
+static float runtime_atan2(float y, float x)
+{
+    float (*volatile function)(float, float) = atan2f;
+    return function(y, x);
+}
+
 static float number(const char *text, int length, bool integer, void *context)
 {
     (void)integer;
@@ -158,10 +166,10 @@ int main(void)
     same("1/(x*x*x*1e30)", 1e10f, 0, 0.0f); /* 1/inf = 0, no error */
 
     /* Whole numbers have no negative zero: atan2 shows the sign. */
-    same("atan2(ceil(x), -1)", -0.5f, 0, atan2f(0.0f, -1.0f));
-    same("atan2(-0.0, -1)", 0, 0, atan2f(-0.0f, -1.0f));
-    same("atan2(0*-1, -1)", 0, 0, atan2f(0.0f, -1.0f));
-    same("atan2(0.0*-1, -1)", 0, 0, atan2f(-0.0f, -1.0f));
+    same("atan2(ceil(x), -1)", -0.5f, 0, runtime_atan2(0.0f, -1.0f));
+    same("atan2(-0.0, -1)", 0, 0, runtime_atan2(-0.0f, -1.0f));
+    same("atan2(0*-1, -1)", 0, 0, runtime_atan2(0.0f, -1.0f));
+    same("atan2(0.0*-1, -1)", 0, 0, runtime_atan2(-0.0f, -1.0f));
 
     /* min/max keep Python's first-wins chain, including NaN. */
     same("max(x, y, 3)", 1, 2, 3.0f);
@@ -204,8 +212,8 @@ int main(void)
     refused("abs(x**y)", PSF_ERR_UNSUPPORTED);
     refused("atan2(-max(x, 0), -1)", PSF_ERR_UNSUPPORTED);
     refused("atan2(y, 2*min(x, 0)+0.0)", PSF_ERR_UNSUPPORTED);
-    same("atan2(-max(x, 0.0), -1)", -1, 0, atan2f(-0.0f, -1.0f));
-    same("atan2(-max(x, 0)%5.0, -1)", -1, 0, atan2f(0.0f, -1.0f));
+    same("atan2(-max(x, 0.0), -1)", -1, 0, runtime_atan2(-0.0f, -1.0f));
+    same("atan2(-max(x, 0)%5.0, -1)", -1, 0, runtime_atan2(0.0f, -1.0f));
     refused("x(2)", PSF_ERR_NAME);
     refused("sin", PSF_ERR_NAME);
     refused("foo(x)", PSF_ERR_NAME);
