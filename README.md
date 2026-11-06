@@ -5,9 +5,10 @@
 A handheld engineering computer for **PicoCalc with Raspberry Pi Pico 2 W**.
 By Cem Gungor, based on [Picoware by jblanked](https://github.com/jblanked/Picoware).
 
-![GungOS desktop in the simulator](assets/screenshots/desktop.png)
+![Current GungOS desktop with the Lorenz widget](assets/screenshots/desktop.png)
 
-*Simulator preview; status and resource figures are simulated.*
+*Current 1.36-dev desktop with the Lorenz widget, captured from the simulator.
+Status and resource figures are simulated.*
 
 ## Development status
 
@@ -33,6 +34,24 @@ changes and the [publication record](guides/PublicationReadiness.md) for validat
 This source profile targets PicoCalc with **Pico 2 W**. Other Picoware boards,
 its app store/OTA updater and several other upstream features are outside this
 profile; arbitrary upstream applications are not guaranteed compatible.
+
+## picosolve: the numerical engine
+
+picosolve is the C module built into GungOS for selected engineering and plotting
+calculations. Python applications describe a model or expression, call the native
+module, and present its results.
+
+| Used by | What it supplies |
+|---|---|
+| BeamView | Beam and 2D frame solutions, reactions, forces and deflection diagrams |
+| PicoSpice | Circuit operating points, DC sweeps and transient analysis |
+| Grapher / Graph / Graph3D | Supported formula evaluation, contours and surface geometry |
+| Scientific calculator | Supported real expression evaluation inside integration and equation solving |
+
+The structural solver sizes memory before solving and supports progress,
+cancellation and precision selection. The [brief picosolve guide](guides/PicoSolve.md)
+includes an example, units and current limits; the
+[developer reference](src/MicroPython/picosolve/README.md) describes the API and algorithms.
 
 ## Build and install
 
@@ -74,6 +93,9 @@ workflow uses the same entry point as local validation:
 python3 tools/check-source.py --build
 ```
 
+To refresh the Lorenz desktop image after building the simulator, run
+`python3 tools/capture-desktop-preview.py`. It uses a separate temporary SD tree.
+
 Host checks do not establish physical-device speed, available heap or keyboard behavior.
 
 ## Controls and guides
@@ -82,7 +104,7 @@ Escape closes the innermost help/edit/view. Back and Del erase before the cursor
 F6–F10 use Shift+F1–F5 on PicoCalc. Alt+S saves a screenshot.
 
 [Desktop](guides/Desktop.md) · [Controls](guides/Keys.md) · [Themes](guides/Themes.md) ·
-[PicoLAB](guides/PicoLAB.md) · [Calculator](guides/ScientificCalculator.md) ·
+[PicoLAB](guides/PicoLAB.md) · [picosolve](guides/PicoSolve.md) · [Calculator](guides/ScientificCalculator.md) ·
 [Grapher](guides/Grapher.md) · [PicoCAD](guides/PicoCAD.md) ·
 [PicoDESK](guides/DesktopApps.md) · [Eggcel](guides/Eggcel.md) ·
 [PicoReader](guides/PicoReader.md) · [PicoDict](guides/PicoDict.md) ·

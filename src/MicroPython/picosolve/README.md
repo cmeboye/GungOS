@@ -1,8 +1,12 @@
 # picosolve
 
-picosolve is the small built-in solver kernel behind the picoLAB engineering
-suites. Python describes a model and reads back results. All the arithmetic
-in between runs here, in C and in double precision.
+picosolve is the built-in C solver module used by selected PicoLAB tools.
+Python describes a model or expression and reads back the results. It provides
+beam/frame solving, circuit analysis, formula evaluation and plot geometry.
+Precision depends on the component; see [Precision](#precision) and [Circuits](#circuits).
+
+Start with the [brief picosolve guide](../../../guides/PicoSolve.md) for an
+overview and a runnable beam example. This page is the detailed developer reference.
 
 It is a solver, not a matrix library. Models go in and results come out:
 displacements, reactions, end forces and the internal-force and deflection
@@ -16,7 +20,7 @@ curves. Stiffness matrices are never exposed.
 | First suite | Structural, starting with beams. |
 | Beam theory | Euler–Bernoulli. Timoshenko may follow. |
 | Units | SI everywhere: m, N, N·m, Pa, m⁴, N/m. The kernel does no unit conversion. |
-| Precision | Python inputs are float32 (MicroPython's float), which is ample for material and geometry data, and the model stores them as float32. Everything derived from them is double: lengths, EI, element matrices, assembly, factorization, displacements, reactions, end forces and diagrams. |
+| Precision | Structural inputs are float32. Derived element calculations, residuals and stored displacements use double; factorization can use double or single with refinement, as described below. Results returned as MicroPython floats are float32. Formula and circuit precision are described in their own sections. |
 | Size limits | Not fixed. Before allocating, `prepare` reports the memory this model needs, so the hardware decides. |
 
 ## Layout
